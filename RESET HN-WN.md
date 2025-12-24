@@ -121,11 +121,12 @@ On **each worker**:
 source /opt/rayenv/bin/activate
 
 ray start \
-  --address=<HEAD_IP>:6379 \
+  --address=192.168.196.250:6380 \
   --node-ip-address=$(hostname -I | awk '{print $1}') \
   --num-cpus=12 \
-  --memory=24e9 \
-  --object-store-memory=6e9
+  --memory=8589934592 \
+  --object-store-memory=6442450944
+
 ```
 
 Verify from **HEAD**:
