@@ -1,33 +1,13 @@
-## 🏗️ Correct Architecture
+# 1️⃣ Shared Folder Setup (One-Time)
 
-```
-Head node (NFS server)
- └── /ray_shared   (on /dev/sda2)
-
-Workers (NFS clients)
- └── /ray_shared   (mounted path, same location)
-```
-
-From Ray’s point of view:
-
-* `/ray_shared` exists on **every node**
-* Same path
-* Same data
-
----
-
-## 🧱 STEP-BY-STEP (PRODUCTION SAFE)
-
-### 1️⃣ Create shared directory on HEAD node
+## 🔹 Head node (192.168.196.250)
 
 ```bash
 mkdir -p /ray_shared
 chmod 777 /ray_shared
 ```
 
----
-
-### 2️⃣ Install NFS server on HEAD node
+### Install & configure NFS
 
 ```bash
 apt update
@@ -55,37 +35,15 @@ systemctl restart nfs-kernel-server
 
 ---
 
-### 3️⃣ Install NFS client on ALL WORKERS
-
-On `.90`, `.91`, `.92`:
+## 🔹 ALL worker nodes (.90, .91, .92)
 
 ```bash
 apt install -y nfs-common
-```
-
-Create mount point:
-
-```bash
 mkdir -p /ray_shared
-```
-
-Mount it:
-
-```bash
 mount 192.168.196.250:/ray_shared /ray_shared
 ```
 
-Verify:
-
-```bash
-df -h | grep ray_shared
-```
-
----
-
-### 4️⃣ Make it PERMANENT (important)
-
-Edit `/etc/fstab` on **ALL workers**:
+### Make it permanent
 
 ```bash
 nano /etc/fstab
@@ -97,76 +55,186 @@ Add:
 192.168.196.250:/ray_shared /ray_shared nfs defaults,_netdev 0 0
 ```
 
-Now it survives reboot ✅
+Verify:
 
----
-
-## ✅ What you should store in `/ray_shared`
-
-This directory is now **permanent and cluster-wide**.
-
-Use it for:
-
-| Use case          | Recommended |
-| ----------------- | ----------- |
-| Trained ML models | ✅           |
-| Datasets          | ✅           |
-| Logs              | ✅           |
-| Job outputs       | ✅           |
-| Checkpoints       | ✅           |
-
-❌ **Do NOT** use it for Ray internal temp (`--temp-dir`)
-Ray temp must be **node-local** (for performance).
-
----
-
-## ⚠️ Important distinction (DO NOT mix these)
-
-| Purpose                 | Correct Location        |
-| ----------------------- | ----------------------- |
-| Ray temp (`--temp-dir`) | Local disk on each node |
-| Shared job outputs      | NFS (`/ray_shared`)     |
-| runtime_env cache       | Local disk              |
-| Models / artifacts      | NFS                     |
-
----
-
-## 🔧 How to use it in your scripts
-
-Example: save trained model
-
-```python
-import joblib
-
-joblib.dump(model, "/ray_shared/models/spam_model.joblib")
+```bash
+df -h | grep ray_shared
 ```
 
-This works **from any worker**.
+✔ Now `/ray_shared` is **permanent + cluster-wide**
 
 ---
 
-## 🧠 Best practice for your cluster (recommended setup)
+# 2️⃣ What `/ray_shared` is used for (IMPORTANT)
 
-### ✔ Node-local (fast)
+✅ Trained models
+✅ Logs
+✅ Job outputs
+✅ Artifacts
 
-* `/mnt/ray_tmp` → Ray temp dir
+❌ NOT for Ray temp
+❌ NOT for runtime_env cache
 
-### ✔ Shared (persistent)
-
-* `/ray_shared` → NFS from head node
-
-This is exactly how **enterprise Ray clusters** are set up.
+Ray temp should still be **node-local**.
 
 ---
 
-## 🏁 Final Answer (Clear Verdict)
+# 3️⃣ Updated `ray_runner.py` (FINAL, CLEAN)
 
-| Question                                | Answer |
-| --------------------------------------- | ------ |
-| Can I use head node disk directly?      | ❌ No   |
-| Can I create a permanent shared folder? | ✅ Yes  |
-| Does it need to exist on all nodes?     | ✅ Yes  |
-| Best method                             | ✅ NFS  |
-| Should Ray temp use this folder?        | ❌ No   |
+This version:
+
+* Ships code via `runtime_env`
+* Installs dependencies automatically
+* Writes outputs to `/ray_shared`
+* Single user
+* CPU & memory aware
+* Safe for production
+
+---
+
+## 📄 `ray_runner.py`
+
+```python
+import ray
+import importlib
+from pathlib import Path
+import json
+import time
+import os
+
+# --------------------------------------------------
+# Job-level runtime environment
+# --------------------------------------------------
+PROJECT_DIR = str(Path(__file__).parent.resolve())
+SHARED_DIR = "/ray_shared"
+
+os.makedirs(SHARED_DIR, exist_ok=True)
+
+ray.init(
+    address="auto",
+    runtime_env={
+        "working_dir": PROJECT_DIR,
+        "pip": [
+            "scikit-learn==1.7.2",
+            "numpy",
+            "scipy",
+            "joblib",
+            "threadpoolctl",
+        ],
+    },
+)
+
+# --------------------------------------------------
+# Ray task
+# --------------------------------------------------
+@ray.remote
+def run_script(module_name: str, cpu: int, mem_gb: int):
+    start = time.time()
+
+    print(f"[Ray] Running {module_name}")
+    importlib.import_module(module_name)
+
+    result = {
+        "script": module_name,
+        "status": "completed",
+        "cpu": cpu,
+        "memory_gb": mem_gb,
+        "finished_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "duration_sec": round(time.time() - start, 2),
+    }
+
+    # Persist result to shared storage
+    output_file = f"{SHARED_DIR}/{module_name}_result.json"
+    with open(output_file, "w") as f:
+        json.dump(result, f, indent=2)
+
+    print(f"[Ray] {module_name} finished → {output_file}")
+    return result
+
+
+def submit_script(module_name, cpu, mem_gb, run_on_head=False):
+    opts = {
+        "num_cpus": cpu,
+        "memory": mem_gb * 1024**3,
+    }
+
+    if run_on_head:
+        opts["resources"] = {"node:ray-head": 1}
+
+    return run_script.options(**opts).remote(
+        module_name, cpu, mem_gb
+    )
+
+
+# --------------------------------------------------
+# MAIN
+# --------------------------------------------------
+if __name__ == "__main__":
+    jobs = [
+        submit_script("spam_detection_example", 2, 2),
+        submit_script("ticket_categorization_example", 2, 2),
+        submit_script("document_labeling_example", 4, 4),
+        submit_script("multi_label_document_example", 6, 6, run_on_head=True),
+    ]
+
+    results = ray.get(jobs)
+
+    print("\n=== JOB RESULTS ===")
+    for r in results:
+        print(r)
+```
+
+---
+
+# 4️⃣ What you’ll see after running
+
+```bash
+python3 ray_runner.py
+```
+
+### In Ray dashboard
+
+```
+http://192.168.196.250:8265
+```
+
+* Tasks distributed across workers
+* CPU & memory enforced
+* No `/tmp` warnings (after temp-dir fix)
+
+### In shared storage
+
+```bash
+ls /ray_shared
+```
+
+Example:
+
+```text
+spam_detection_example_result.json
+ticket_categorization_example_result.json
+document_labeling_example_result.json
+multi_label_document_example_result.json
+```
+
+These files are:
+
+* Written by **workers**
+* Readable from **head**
+* Persistent across restarts
+
+---
+
+# 5️⃣ Final Architecture (Correct & Scalable)
+
+| Component        | Location            |
+| ---------------- | ------------------- |
+| Ray temp         | Local disk per node |
+| Code shipping    | Ray runtime_env     |
+| Dependencies     | runtime_env pip     |
+| Outputs / models | `/ray_shared` (NFS) |
+| Scheduling       | Ray                 |
+
+This is **exactly how real Ray platforms are built**.
 
 ---
