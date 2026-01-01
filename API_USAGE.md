@@ -1,46 +1,41 @@
-# 🚀 API Usage Guide & Curl Commands (Updated)
+# 🚀 API Usage Guide & Curl Commands (Explicit Files)
 
 **Base URL**: `http://localhost:8000/api/v1`
 
 ---
 
-## 1️⃣ Submit a Job (Zip Upload)
+## 1️⃣ Submit a Job (Explicit Files)
 **Endpoint**: `POST /jobs`
 **Content-Type**: `multipart/form-data`
 **Response**: Streamed Plain Text Logs.
 
-### Prepare Project Folder
-```bash
-# Create a folder with your script and dependencies
-mkdir my_project
-echo "print('Hello SLURM')" > my_project/main.py
-echo "requests" > my_project/requirements.txt
-zip -r my_project.zip my_project
-```
+### Required Fields:
+*   `user_id`: ID of the user (e.g., "user_123")
+*   `username`: Name of the user (e.g., "john_doe")
+*   `main_script`: The Python script (`.py`) to execute.
+
+### Optional Fields:
+*   `requirements_file`: A `requirements.txt` file for dependencies.
+*   `dependency_zip`: A `.zip` file containing extra inputs/modules (will be extracted to job dir).
 
 ### Curl Command
 ```bash
+# Create dummy files
+echo "print('Hello SLURM')" > main.py
+echo "requests" > requirements.txt
+# Create a dummy dependency zip
+mkdir data_folder
+touch data_folder/input.csv
+zip -r data.zip data_folder
+
+# Submit
 curl -X POST "http://localhost:8000/api/v1/jobs" \
   -F "user_id=user_123" \
-  -F "project_folder=@my_project.zip" \
+  -F "username=john_doe" \
+  -F "main_script=@main.py" \
+  -F "requirements_file=@requirements.txt" \
+  -F "dependency_zip=@data.zip" \
   --no-buffer
-```
-
-### Expected Output (Streamed Plain Text)
-```text
-Status: Starting Submission...
-Status: Validating User Quota...
-Status: Job Record Created (ID: 1)
-Status: Setting up User Environment...
-Status: extracting project files to /var/lib/job-exec/users/user_123/jobs/1...
-Status: Discovering dependencies and scripts...
-Status: Discovered entry script: main.py
-Status: Installing dependencies...
-Status: Generating SLURM script...
-Status: Submitting to SLURM Cluster...
-Status: Submitted Successfully! SLURM Job ID: 1001
-Status: Enforcing Cgroup I/O Limits...
-Status: Job 1 Fully Accepted and Running.
 ```
 
 ---
@@ -51,17 +46,6 @@ Status: Job 1 Fully Accepted and Running.
 ### Curl Command
 ```bash
 curl "http://localhost:8000/api/v1/jobs/1"
-```
-
-### Expected Output
-```json
-{
-  "id": 1,
-  "user_id": "user_123",
-  "slurm_job_id": 1001,
-  "status": "RUNNING",
-  "script_path": "main.py"
-}
 ```
 
 ---

@@ -30,127 +30,117 @@ cgroup_service = CgroupService()
 @router.post("/jobs", response_class=StreamingResponse)
 async def submit_job(
     user_id: str = Form(...),
-    project_folder: UploadFile = File(..., description="Project folder as a Zip file"),
+    username: str = Form(...),
+    main_script: UploadFile = File(..., description="Main Python script to execute"),
+    requirements_file: UploadFile = File(None, description="Optional requirements.txt"),
+    dependency_zip: UploadFile = File(None, description="Optional Zip file containing data or modules"),
     db: Session = Depends(get_db)
 ):
     """
-    Submit a job with Streaming Response (Plain Text Logs).
-    Accepts a Zip file in 'project_folder' field.
+    Submit a Job:
+    - user_id, username
+    - main_script: The .py file to run.
+    - requirements_file: Dependencies to install.
+    - dependency_zip: Input data or helper modules (unzipped to job dir).
     """
     db_service = DatabaseService(db)
     
-    # Validation: Check if it is a zip
-    if not project_folder.filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="Only .zip files are accepted for project_folder")
+    # Basic Validation
+    if not main_script.filename.endswith(".py"):
+        raise HTTPException(status_code=400, detail="Main script must be a .py file")
+    
+    if dependency_zip and not dependency_zip.filename.endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Dependency file must be a .zip")
 
     async def submission_generator():
         job_id = None
         slurm_id = None
         
         try:
-            yield "Status: Starting Submission...\n"
+            yield f"Status: Starting Submission for User: {username} ({user_id})\n"
             
-            # 2. Quota Check (DB)
-            yield "Status: Validating User Quota & Concurrency...\n"
+            # 1. Quota Check
+            yield "Status: Validating User Quota...\n"
             quota = db_service.get_user_quota(user_id)
             db_service.check_concurrent_limit(user_id)
             
-            # 3. Create Job Record
-            # We don't know the script name yet, will update later or assume default
-            job = db_service.create_job_record(user_id, script_path="Main.py (Pending Discovery)")
+            # 2. Create Job Record
+            # We explicitly know the script name now
+            job = db_service.create_job_record(user_id, script_path=main_script.filename)
             job_id = job.id
             yield f"Status: Job Record Created (ID: {job_id})\n"
 
-            # 4. Environment Setup
+            # 3. Environment Setup
             yield "Status: Setting up User Environment...\n"
             env_service.ensure_user_environment(user_id)
             
-            # 5. Job Directory & File Extraction
-            # Check Disk Quota Phase 1 (Pre-Alloc)
-            yield "Status: Verifying Disk Quota (Phase 1)...\n"
+            # 4. Job Directory Creation
+            # Check Disk Quota Phase 1
+            yield "Status: Check Disk Quota (Phase 1)...\n"
             current_usage = await asyncio.to_thread(env_service.get_current_disk_usage_mb, user_id)
             if current_usage >= quota.disk_quota_mb:
-                 raise ResourceQuotaExceededError(f"Disk quota exceeded (Used: {current_usage}MB, Limit: {quota.disk_quota_mb}MB)")
+                 raise ResourceQuotaExceededError(f"Disk quota exceeded (Used: {current_usage}MB)")
 
             job_dir = env_service.create_job_directory(user_id, str(job_id))
-            yield f"Status: extracting project files to {job_dir}...\n"
             
-            # Save Zip temporarily
-            zip_path = job_dir / "project.zip"
-            content = await project_folder.read()
-            with open(zip_path, "wb") as f:
+            # 5. Handle File Uploads
+            yield f"Status: Writing files to {job_dir}...\n"
+            
+            # A. Main Script
+            script_path = job_dir / main_script.filename
+            with open(script_path, "wb") as f:
+                content = await main_script.read()
                 f.write(content)
-                
-            # Extract Zip
-            import zipfile
-            import os
-            try:
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(job_dir)
-                os.remove(zip_path) # Clean up zip
-            except zipfile.BadZipFile:
-                raise JobExecutionError("Invalid Zip file provided")
-                
-            # 6. Discovery: Find requirements.txt and main script
-            # Simple heuristic: Look provided requirements.txt in root or first found
-            yield "Status: Discovering dependencies and scripts...\n"
             
-            # Recurse to find files
-            script_name = None
-            found_reqs = False
-            
-            for root, dirs, files in os.walk(job_dir):
-                for file in files:
-                    # Look for python script to run? 
-                    # If multiple, this is ambiguous. SRS implies "Uploaded scripts".
-                    # Let's default to searching for 'main.py' or 'run.py', else take the first .py
-                    if not script_name and file.endswith(".py"):
-                        script_name = os.path.relpath(os.path.join(root, file), job_dir)
+            # B. Requirements File (Optional)
+            if requirements_file:
+                req_path = job_dir / "requirements.txt"
+                with open(req_path, "wb") as f:
+                    content = await requirements_file.read()
+                    f.write(content)
                     
-                    if file == "requirements.txt":
-                       found_reqs = True
-
-            if not script_name:
-                raise JobExecutionError("No Python script (.py) found in project folder")
+            # C. Dependency Zip (Optional)
+            if dependency_zip:
+                yield "Status: Extracting dependency zip...\n"
+                zip_path = job_dir / dependency_zip.filename
+                with open(zip_path, "wb") as f:
+                   content = await dependency_zip.read()
+                   f.write(content)
                 
-            # Update DB with discovered script path
-            # We need to create a new session or use existing? 
-            # Existing session 'db' is bound in outer scope, we are in generator.
-            # Generator runs async, 'db' session use might be tricky if not careful with threading 
-            # but usually fine if sync logic is blocking.
-            # Ideally we use db_service again.
-            # db_service.update_job_script(job_id, script_name) # Method not implemented yet, skipping for now or adding todo.
-            
-            yield f"Status: Discovered entry script: {script_name}\n"
+                import zipfile
+                import os # Added import for os
+                try:
+                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        zip_ref.extractall(job_dir)
+                    os.remove(zip_path) # Cleanup zip to save space
+                except zipfile.BadZipFile:
+                    raise JobExecutionError("Invalid Dependency Zip file")
 
-            # 6. Dependency Install
-            if found_reqs:
-                yield "Status: Installing dependencies (this may take a moment)...\n"
+            # 6. Dependency Installation
+            if requirements_file:
+                yield "Status: Installing dependencies from requirements.txt...\n"
                 await asyncio.to_thread(
                     dep_service.install_dependencies, 
                     user_id, str(job_id), env_service
                 )
                 
-                # 7. Disk Quota Phase 2 (Post-Install)
-                yield "Status: Verifying Disk Quota (Phase 2)...\n"
+                # Check Disk Quota Phase 2
+                yield "Status: Check Disk Quota (Phase 2)...\n"
                 current_usage = await asyncio.to_thread(env_service.get_current_disk_usage_mb, user_id)
                 if current_usage > quota.disk_quota_mb:
-                    # Cleanup job if quota exceeded by install
                     env_service.cleanup_job_directory(user_id, str(job_id))
-                    raise ResourceQuotaExceededError(
-                        f"Disk quota exceeded after installation (Used: {current_usage}MB, Limit: {quota.disk_quota_mb}MB)"
-                    )
+                    raise ResourceQuotaExceededError(f"Disk quota exceeded after install (Used: {current_usage}MB)")
             else:
-                 yield "Status: No requirements.txt found, skipping install.\n"
+                 yield "Status: No requirements.txt provided, skipping install.\n"
             
-            # 8. Sbatch Generation
+            # 7. Sbatch Generation
             yield "Status: Generating SLURM script...\n"
             venv_python = env_service.get_python_path(user_id)
             slurm_service.generate_sbatch_script(
-                str(job_id), user_id, job_dir, venv_python, script_name, quota
+                str(job_id), user_id, job_dir, venv_python, main_script.filename, quota
             )
 
-            # 9. Submission
+            # 8. Submission
             yield "Status: Submitting to SLURM Cluster...\n"
             slurm_id = await asyncio.to_thread(slurm_service.submit_job, job_dir)
             
@@ -160,7 +150,7 @@ async def submit_job(
             
             yield f"Status: Submitted Successfully! SLURM Job ID: {slurm_id}\n"
 
-            # 10. Cgroup Enforcement
+            # 9. Cgroup Enforcement
             yield "Status: Enforcing Cgroup I/O Limits...\n"
             await asyncio.to_thread(
                 cgroup_service.enforce_limits,
@@ -175,13 +165,12 @@ async def submit_job(
             logger.error(f"Job Submission Failed: {e}")
             yield f"Error: {str(e)}\n"
             
-            # Cleanup / Cancel
             if job_id:
                 try:
                     db_service.update_job_status(job_id, JobStatus.FAILED)
                     if slurm_id and not isinstance(e, JobExecutionError):
                          slurm_service.cancel_job(slurm_id)
-                except:
+                except Exception:
                     pass
 
     return StreamingResponse(submission_generator(), media_type="text/plain")
