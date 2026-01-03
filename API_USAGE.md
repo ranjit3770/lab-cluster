@@ -1,6 +1,6 @@
-# 🚀 API Usage Guide & Curl Commands (Explicit Files)
+# 🚀 SLURM Job Submission API - Usage Guide
 
-**Base URL**: `http://localhost:8000/api/v1`
+**Base URL**: `http://localhost:9000/slurm-job/v1`
 
 ---
 
@@ -16,25 +16,21 @@
 
 ### Optional Fields:
 *   `requirements_file`: A `requirements.txt` file for dependencies.
-*   `dependency_zip`: A `.zip` file containing extra inputs/modules (will be extracted to job dir).
+*   `dependency_path`: A direct server path containing extra inputs/modules (will be copied to job dir).
 
 ### Curl Command
 ```bash
 # Create dummy files
 echo "print('Hello SLURM')" > main.py
 echo "requests" > requirements.txt
-# Create a dummy dependency zip
-mkdir data_folder
-touch data_folder/input.csv
-zip -r data.zip data_folder
 
 # Submit
-curl -X POST "http://localhost:8000/api/v1/jobs" \
+curl -X POST "http://localhost:9000/slurm-job/v1/jobs" \
   -F "user_id=user_123" \
   -F "username=john_doe" \
   -F "main_script=@main.py" \
   -F "requirements_file=@requirements.txt" \
-  -F "dependency_zip=@data.zip" \
+  -F "dependency_path=/path/to/server/data" \
   --no-buffer
 ```
 
@@ -45,7 +41,7 @@ curl -X POST "http://localhost:8000/api/v1/jobs" \
 
 ### Curl Command
 ```bash
-curl "http://localhost:8000/api/v1/jobs/1"
+curl "http://localhost:9000/slurm-job/v1/jobs/1"
 ```
 
 ---
@@ -55,7 +51,7 @@ curl "http://localhost:8000/api/v1/jobs/1"
 
 ### Curl Command
 ```bash
-curl -N "http://localhost:8000/api/v1/jobs/1/logs"
+curl -N "http://localhost:9000/slurm-job/v1/jobs/1/logs"
 ```
 
 ---
@@ -65,5 +61,5 @@ curl -N "http://localhost:8000/api/v1/jobs/1/logs"
 
 ### Curl Command
 ```bash
-curl -X DELETE "http://localhost:8000/api/v1/jobs/1?user_id=user_123"
+curl -X DELETE "http://localhost:9000/slurm-job/v1/jobs/1?user_id=user_123"
 ```

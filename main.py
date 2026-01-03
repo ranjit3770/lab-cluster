@@ -16,4 +16,4 @@ def root():
     return {"message": "FastAPI Job Execution API is running. Access via Internal Portal only."}
 
 from app.api.v1.jobs import router as jobs_router
-app.include_router(jobs_router, prefix="/api/v1", tags=["jobs"])
+app.include_router(jobs_router, prefix=settings.API_V1_STR, tags=["jobs"])

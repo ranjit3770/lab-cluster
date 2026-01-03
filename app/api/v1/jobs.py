@@ -33,7 +33,7 @@ async def submit_job(
     username: str = Form(...),
     main_script: UploadFile = File(..., description="Main Python script to execute"),
     requirements_file: UploadFile = File(None, description="Optional requirements.txt"),
-    dependency_zip: UploadFile = File(None, description="Optional Zip file containing data or modules"),
+    dependency_path: str = Form(None, description="Optional server path containing data or modules"),
     db: Session = Depends(get_db)
 ):
     """
@@ -41,16 +41,13 @@ async def submit_job(
     - user_id, username
     - main_script: The .py file to run.
     - requirements_file: Dependencies to install.
-    - dependency_zip: Input data or helper modules (unzipped to job dir).
+    - dependency_path: Direct server path to copy data or helper modules from.
     """
     db_service = DatabaseService(db)
     
     # Basic Validation
     if not main_script.filename.endswith(".py"):
         raise HTTPException(status_code=400, detail="Main script must be a .py file")
-    
-    if dependency_zip and not dependency_zip.filename.endswith(".zip"):
-        raise HTTPException(status_code=400, detail="Dependency file must be a .zip")
 
     async def submission_generator():
         job_id = None
@@ -99,22 +96,30 @@ async def submit_job(
                     content = await requirements_file.read()
                     f.write(content)
                     
-            # C. Dependency Zip (Optional)
-            if dependency_zip:
-                yield "Status: Extracting dependency zip...\n"
-                zip_path = job_dir / dependency_zip.filename
-                with open(zip_path, "wb") as f:
-                   content = await dependency_zip.read()
-                   f.write(content)
+            # C. Dependency Path (Optional - Server Side Copy)
+            if dependency_path:
+                yield f"Status: Copying dependencies from {dependency_path}...\n"
+                import shutil
+                from pathlib import Path as LibPath
                 
-                import zipfile
-                import os # Added import for os
+                src_path = LibPath(dependency_path)
+                if not src_path.exists():
+                    raise JobExecutionError(f"Dependency path {dependency_path} does not exist on server")
+                
                 try:
-                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                        zip_ref.extractall(job_dir)
-                    os.remove(zip_path) # Cleanup zip to save space
-                except zipfile.BadZipFile:
-                    raise JobExecutionError("Invalid Dependency Zip file")
+                    if src_path.is_dir():
+                        # Copy contents of directory to job_dir
+                        for item in src_path.iterdir():
+                            dest = job_dir / item.name
+                            if item.is_dir():
+                                shutil.copytree(item, dest, dirs_exist_ok=True)
+                            else:
+                                shutil.copy2(item, dest)
+                    else:
+                        # Copy single file
+                        shutil.copy2(src_path, job_dir / src_path.name)
+                except Exception as e:
+                    raise JobExecutionError(f"Failed to copy dependencies: {str(e)}")
 
             # 6. Dependency Installation
             if requirements_file:

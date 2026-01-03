@@ -8,7 +8,8 @@ class Settings(BaseSettings):
     VERSION: str = "1.1"
     
     # API Configuration
-    API_V1_STR: str = "/api/v1"
+    API_V1_STR: str = "/slurm-job/v1"
+    APP_PORT: int = 9000
     
     # Database Configuration (MySQL)
     # Defaulting to localhost for dev, but should be set via env vars

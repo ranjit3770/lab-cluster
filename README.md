@@ -100,7 +100,7 @@ python troubleshooting.py
 
 ### 5. Start the Service
 ```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn main:app --host 0.0.0.0 --port 9000
 ```
 *(Note: access restricted to internal network only)*
 
