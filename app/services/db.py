@@ -29,7 +29,7 @@ class DatabaseService:
             disk_quota_mb: int
             cpus_per_job: int
             mem_mb_per_cpu: int
-            max_concurrent_jobs: int = 10
+            max_concurrent_jobs: int = 9999
             read_limit_mb_s: int = 50
             write_limit_mb_s: int = 50
             read_iops: int = 500

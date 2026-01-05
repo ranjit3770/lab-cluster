@@ -66,7 +66,7 @@ async def submit_job(
             # 1. Quota Check & User Discovery
             yield f"Status: Validating User {user_id}...\n"
             quota = db_service.get_user_quota(user_id)
-            db_service.check_concurrent_limit(user_id)
+            # db_service.check_concurrent_limit(user_id)  # Restriction removed by user request
             
             # Use the resolved username for all path-based logic
             resolved_username = quota.username
