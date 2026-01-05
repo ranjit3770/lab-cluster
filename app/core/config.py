@@ -17,7 +17,8 @@ class Settings(BaseSettings):
     DB_PORT: int = Field(default=3306, description="MySQL Port")
     DB_USER: str = Field(default="job_exec_user", description="MySQL User")
     DB_PASSWORD: str = Field(default="Amrita@123", description="MySQL Password") # Should be SecretStr in prod, keeping str for simple URL const
-    DB_NAME: str = Field(default="slurm_job_db", description="MySQL Database Name")
+    DB_NAME: str = Field(default="slurm_jobs_db", description="MySQL Database Name")
+    PORTAL_DB_NAME: str = Field(default="strach_portal", description="Portal Database Name for User Quotas")
     
     @property
     def DATABASE_URL(self) -> str:

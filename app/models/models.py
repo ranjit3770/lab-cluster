@@ -11,22 +11,8 @@ class JobStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
     REJECTED = "REJECTED" # If quota exceeded
 
-class UserQuota(Base):
-    __tablename__ = "user_quotas"
-
-    user_id = Column(String(255), primary_key=True, index=True)
-    
-    # Resource Limits
-    disk_quota_mb = Column(Integer, default=1000)
-    cpus_per_job = Column(Integer, default=1)
-    mem_mb_per_cpu = Column(Integer, default=1024)
-    max_concurrent_jobs = Column(Integer, default=5)
-    
-    # I/O Throttling (Cgroups v2)
-    read_limit_mb_s = Column(Integer, default=50)
-    write_limit_mb_s = Column(Integer, default=50)
-    read_iops = Column(Integer, default=500)
-    write_iops = Column(Integer, default=500)
+# UserQuota table is no longer required in slurm_jobs_db.
+# Quota information is now fetched directly from the portal's 'users' table.
 
 class Job(Base):
     __tablename__ = "jobs"

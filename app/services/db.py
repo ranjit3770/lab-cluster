@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
 from datetime import datetime
 
-from app.models.models import Job, UserQuota, JobStatus
+from app.models.models import Job, JobStatus
 from app.core.errors import ResourceQuotaExceededError, JobNotFoundError, InvalidJobStateError
 
 logger = logging.getLogger(__name__)
@@ -13,29 +13,45 @@ class DatabaseService:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_user_quota(self, user_id: str) -> UserQuota:
+    def get_user_quota(self, user_id: str):
         """
-        Fetch resource quotas for a specific user.
-        If no specific quota exists, could return default or raise error.
-        Checklist requires strict enforcement, so we assume a record MUST exist 
-        or we fall back to a safe default if strictness allows (but SRS implies admin-defined).
+        Fetch resource quotas from the Portal's 'users' table in {settings.PORTAL_DB_NAME}.
+        Maps Portal columns to Job Execution API quota fields.
+        """
+        from sqlalchemy import text
+        from app.core.config import settings
+        from dataclasses import dataclass
+
+        @dataclass
+        class Quota:
+            user_id: str
+            disk_quota_mb: int
+            cpus_per_job: int
+            mem_mb_per_cpu: int
+            max_concurrent_jobs: int = 10  # Default if not in portal
+            read_limit_mb_s: int = 50      # System Default
+            write_limit_mb_s: int = 50     # System Default
+            read_iops: int = 500           # System Default
+            write_iops: int = 500          # System Default
+
+        query = text(f"SELECT username, cpu_limit, memory_limit_mb, storage_limit_gb FROM {settings.PORTAL_DB_NAME}.users WHERE username = :u")
+        result = self.db.execute(query, {"u": user_id}).fetchone()
+
+        if not result:
+            logger.warning(f"User {user_id} not found in portal. Returning minimal safe defaults.")
+            return Quota(user_id=user_id, disk_quota_mb=100, cpus_per_job=1, mem_mb_per_cpu=512)
+
+        # Mapping: 0 in portal usually means unlimited or not set. We use safe minimums.
+        cpu = result.cpu_limit if result.cpu_limit > 0 else 1
+        mem = result.memory_limit_mb if result.memory_limit_mb > 0 else 1024
+        storage = result.storage_limit_gb if result.storage_limit_gb > 0 else 1 # 1GB default
         
-        For this implementation: We will attempt to find the user. 
-        If not found, we will create a default quota record (or raise error depending on policy).
-        Given SRS 'Fetch quotas & resource limits from MySQL', let's create a default entry on first access 
-        to ensure system usability, or just return it.
-        """
-        quota = self.db.query(UserQuota).filter(UserQuota.user_id == user_id).first()
-        if not quota:
-            # Auto-create default quota for new users as per 'New user -> env auto-created' flow implication?
-            # SRS doesn't explicitly say we auto-create quota, but we need it. 
-            # Let's create with defaults defined in the model.
-            logger.info(f"No quota found for user {user_id}. Creating default quota.")
-            quota = UserQuota(user_id=user_id)
-            self.db.add(quota)
-            self.db.commit()
-            self.db.refresh(quota)
-        return quota
+        return Quota(
+            user_id=user_id,
+            disk_quota_mb=storage * 1024,
+            cpus_per_job=cpu,
+            mem_mb_per_cpu=mem
+        )
 
     def get_active_job_count(self, user_id: str) -> int:
         """

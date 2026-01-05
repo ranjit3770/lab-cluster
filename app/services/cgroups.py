@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 from app.core.config import settings
 from app.core.errors import JobExecutionError
-from app.models.models import UserQuota
 from app.services.slurm import SlurmService
 
 logger = logging.getLogger(__name__)
@@ -37,7 +36,7 @@ class CgroupService:
         slurm_job_id: int, 
         uid: int, 
         job_dir: Path, 
-        quota: UserQuota, 
+        quota, 
         slurm_service: SlurmService
     ):
         """

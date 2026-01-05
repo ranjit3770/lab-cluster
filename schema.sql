@@ -1,29 +1,10 @@
 -- Database Schema for FastAPI Job Execution API
 -- Target DB: MySQL 5.7+ / 8.0
--- Version 1.1
+-- This file only contains the 'jobs' table. 
+-- User quotas are fetched from the portal database.
 
-CREATE DATABASE IF NOT EXISTS slurm_job_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE slurm_job_db;
-
--- -----------------------------------------------------
--- Table `user_quotas`
--- Admins define policies here per user.
--- -----------------------------------------------------
-CREATE TABLE IF NOT EXISTS `user_quotas` (
-  `user_id` VARCHAR(255) NOT NULL,
-  `disk_quota_mb` INT NOT NULL DEFAULT 1000 COMMENT 'Max disk usage in MB',
-  `cpus_per_job` INT NOT NULL DEFAULT 1 COMMENT 'Force CPUS per task',
-  `mem_mb_per_cpu` INT NOT NULL DEFAULT 1024 COMMENT 'Force Mem per CPU in MB',
-  `max_concurrent_jobs` INT NOT NULL DEFAULT 5 COMMENT 'Max PENDING+RUNNING jobs',
-  
-  -- Cgroups v2 I/O Limits
-  `read_limit_mb_s` INT NOT NULL DEFAULT 50 COMMENT 'Read BW in MB/s',
-  `write_limit_mb_s` INT NOT NULL DEFAULT 50 COMMENT 'Write BW in MB/s',
-  `read_iops` INT NOT NULL DEFAULT 500 COMMENT 'Read IOPS',
-  `write_iops` INT NOT NULL DEFAULT 500 COMMENT 'Write IOPS',
-  
-  PRIMARY KEY (`user_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE DATABASE IF NOT EXISTS slurm_jobs_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE slurm_jobs_db;
 
 -- -----------------------------------------------------
 -- Table `jobs`
@@ -45,24 +26,9 @@ CREATE TABLE IF NOT EXISTS `jobs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -----------------------------------------------------
--- Default Policy Example
+-- User Setup (Run as Root)
 -- -----------------------------------------------------
-INSERT IGNORE INTO `user_quotas` 
-(`user_id`, `disk_quota_mb`, `cpus_per_job`, `mem_mb_per_cpu`, `max_concurrent_jobs`) 
-VALUES 
-('default_user', 5000, 2, 2048, 10);
-
-
-
-
--- Create the database if it doesn't exist
-CREATE DATABASE IF NOT EXISTS slurm_job_db;
-
--- Create the user with the expected password
-CREATE USER 'job_exec_user'@'localhost' IDENTIFIED BY 'Amrita@123';
-
--- Grant all privileges on the database to this user
-GRANT ALL PRIVILEGES ON slurm_job_db.* TO 'job_exec_user'@'localhost';
-
--- Refresh privileges
-FLUSH PRIVILEGES;
+-- CREATE USER IF NOT EXISTS 'job_exec_user'@'localhost' IDENTIFIED BY 'Amrita@123';
+-- GRANT ALL PRIVILEGES ON slurm_jobs_db.* TO 'job_exec_user'@'localhost';
+-- GRANT SELECT ON strach_portal.users TO 'job_exec_user'@'localhost'; -- Required to read quotas
+-- FLUSH PRIVILEGES;

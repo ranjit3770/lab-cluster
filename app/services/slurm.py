@@ -7,7 +7,7 @@ from typing import Optional, Dict
 
 from app.core.config import settings
 from app.core.errors import JobExecutionError
-from app.models.models import UserQuota, JobStatus
+from app.models.models import JobStatus
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class SlurmService:
         job_dir: Path, 
         venv_python_path: str, 
         user_script_path: str, 
-        quota: UserQuota
+        quota
     ) -> Path:
         """
         Generates the 'run.sbatch' file with strict admin-defined resource limits.
