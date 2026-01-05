@@ -16,10 +16,11 @@ class SlurmError(JobExecutionError):
 
 class SlurmService:
     def __init__(self):
-        self.sbatch_bin = os.path.join(settings.SLURM_BIN_PATH, "sbatch")
-        self.scancel_bin = os.path.join(settings.SLURM_BIN_PATH, "scancel")
-        self.squeue_bin = os.path.join(settings.SLURM_BIN_PATH, "squeue")
-        self.sacct_bin = os.path.join(settings.SLURM_BIN_PATH, "sacct")
+        import shutil
+        self.sbatch_bin = shutil.which("sbatch") or os.path.join(settings.SLURM_BIN_PATH, "sbatch")
+        self.scancel_bin = shutil.which("scancel") or os.path.join(settings.SLURM_BIN_PATH, "scancel")
+        self.squeue_bin = shutil.which("squeue") or os.path.join(settings.SLURM_BIN_PATH, "squeue")
+        self.sacct_bin = shutil.which("sacct") or os.path.join(settings.SLURM_BIN_PATH, "sacct")
 
     def generate_sbatch_script(
         self, 
