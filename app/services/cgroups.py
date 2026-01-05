@@ -43,9 +43,14 @@ class CgroupService:
         Enforce Strict I/O limits via Cgroups v2.
         Fails-Closed: If enforcement fails, the job IS CANCELLED.
         """
-        # 0. Check if we are on Windows (Dev mode shortcut)
+        # 0. Check if enforcement is enabled
+        if not settings.ENABLE_CGROUP_ENFORCEMENT:
+            logger.warning(f"Cgroup Enforcement is DISABLED in config. Skipping for Job {job_id}.")
+            return
+
+        # Check if we are on Windows (Dev mode shortcut)
         if os.name == 'nt':
-            logger.warning("Windows System detected: Skipping Cgroup enforcement (Mock Compliance).")
+            logger.warning("Windows System detected: Skipping Cgroup enforcement.")
             return
 
         logger.info(f"Starting Cgroup enforcement for Job {job_id} (SLURM {slurm_job_id})")
@@ -81,11 +86,12 @@ class CgroupService:
             found_path = None
             
             while time.time() - start_time < self.CGROUP_WAIT_TIMEOUT:
-                # Search recursively for the job directory
-                # Pattern: **/job_{slurm_job_id}
-                matches = list(cgroup_root.glob(f"**/job_{slurm_job_id}"))
+                # Search recursively for any directory containing the job ID
+                # Pattern: **/*job_{slurm_job_id}*
+                matches = list(cgroup_root.glob(f"**/*job_{slurm_job_id}*"))
                 if matches:
-                    found_path = matches[0]
+                    # Pick the deepest match (most specific)
+                    found_path = max(matches, key=lambda p: len(p.parts))
                     io_max_file = found_path / "io.max"
                     if io_max_file.exists():
                         break

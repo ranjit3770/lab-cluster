@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     
     # Cgroups Configuration
     CGROUP_ROOT: str = Field(default="/sys/fs/cgroup", description="Root of SLURM cgroups v2")
+    ENABLE_CGROUP_ENFORCEMENT: bool = Field(default=True, description="Enable mandatory I/O throttling")
     
     # Security
     INTERNAL_API_KEY: SecretStr = Field(default="change-me-in-production", description="API Key for internal service auth")
