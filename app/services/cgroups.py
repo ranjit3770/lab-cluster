@@ -96,7 +96,8 @@ class CgroupService:
                 existing = [str(p.name) for p in cgroup_root.iterdir() if p.is_dir()]
                 raise CgroupError(
                     f"Cgroup 'io.max' not found for SLURM {slurm_job_id} after {self.CGROUP_WAIT_TIMEOUT}s. "
-                    f"Checked root: {cgroup_root}. Found folders: {existing}"
+                    f"Checked root: {cgroup_root}. Found folders: {existing}. "
+                    "Note: If this is a multi-node cluster, ensure the API is running on the same node as the job."
                 )
             
             logger.info(f"Found Cgroup at {found_path}")
