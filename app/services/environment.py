@@ -48,6 +48,14 @@ class EnvironmentService:
             if not venv_dir.exists():
                 logger.info(f"Creating venv for user {username}: {venv_dir}")
                 self._create_venv(venv_dir)
+            
+            # Ensure ownership on Linux
+            if os.name != 'nt':
+                shutil.chown(base_dir, user=username)
+                # Ensure existing contents (like venv) are also owned by the user
+                for root, dirs, files in os.walk(base_dir):
+                    for d in dirs: shutil.chown(os.path.join(root, d), user=username)
+                    for f in files: shutil.chown(os.path.join(root, f), user=username)
 
         except OSError as e:
             logger.error(f"Failed to setup environment for user {username}: {e}")
@@ -96,6 +104,11 @@ class EnvironmentService:
             logger.info(f"Creating job directory: {job_dir}")
             job_dir.mkdir(parents=True, exist_ok=True)
             os.chmod(job_dir, 0o700)
+            
+            # Crucial: Allow user to write logs here
+            if os.name != 'nt':
+                shutil.chown(job_dir, user=username)
+                
             return job_dir
         except OSError as e:
             logger.error(f"Failed to create job directory {job_dir}: {e}")

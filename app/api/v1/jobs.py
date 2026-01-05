@@ -181,6 +181,53 @@ async def submit_job(
             )
             
             yield f"Status: Job {job_id} Fully Accepted and Running.\n"
+            yield f"--- Transitioning to Live Logs ---\n"
+
+            # 10. Integrated Log Streaming
+            stdout_path = job_dir / f"{job_id}.o"
+            stderr_path = job_dir / f"{job_id}.e"
+            last_pos_out = 0
+            last_pos_err = 0
+            
+            while True:
+                # Sync with SLURM for real-time status
+                updated_job = db_service.get_job(job_id)
+                if slurm_id:
+                    try:
+                        current_slurm_state = slurm_service.get_job_state(slurm_id)
+                        if current_slurm_state != updated_job.status:
+                            updated_job = db_service.update_job_status(job_id, current_slurm_state)
+                    except Exception: pass
+
+                active = updated_job.status in [JobStatus.PENDING, JobStatus.RUNNING]
+                chunk_found = False
+
+                # Stream Stdout
+                if stdout_path.exists():
+                    with open(stdout_path, "r") as f:
+                        f.seek(last_pos_out)
+                        chunk = f.read()
+                        if chunk:
+                            yield chunk
+                            last_pos_out = f.tell()
+                            chunk_found = True
+
+                # Stream Stderr
+                if stderr_path.exists():
+                    with open(stderr_path, "r") as f:
+                        f.seek(last_pos_err)
+                        chunk = f.read()
+                        if chunk:
+                            if last_pos_err == 0: yield "\n--- STDERR ---\n"
+                            yield chunk
+                            last_pos_err = f.tell()
+                            chunk_found = True
+
+                if not active and not chunk_found:
+                    yield f"\n--- Job Completed (Status: {updated_job.status.value}) ---\n"
+                    break
+                
+                await asyncio.sleep(0.5)
 
         except Exception as e:
             logger.error(f"Job Submission Failed: {e}")
