@@ -43,27 +43,34 @@ class SlurmService:
         if not script_path.exists():
             raise SlurmError(f"User script not found at {script_path}")
 
+        # Standardizing Sbatch Content
         sbatch_content = [
             "#!/bin/bash",
             f"#SBATCH --job-name={job_id}",
-            f"#SBATCH --output={job_id}.o", # Standard Out
-            f"#SBATCH --error={job_id}.e",  # Standard Error
-            f"#SBATCH --cpus-per-task={quota.cpus_per_job}", # Admin defined
-            f"#SBATCH --mem-per-cpu={quota.mem_mb_per_cpu}M", # Admin defined
-            
-            # Strict Environment execution
-            f"{venv_python_path} {user_script_path}"
+            f"#SBATCH --chdir={job_dir}",
+            f"#SBATCH --output={job_id}.o",
+            f"#SBATCH --error={job_id}.e",
+            f"#SBATCH --cpus-per-task={quota.cpus_per_job}",
+            f"#SBATCH --mem-per-cpu={quota.mem_mb_per_cpu}M",
+            "", # Standard separator
+            "echo '--- Job Started ---'",
+            f"exec {venv_python_path} {user_script_path}",
+            "echo '--- Job Finished ---'"
         ]
 
         # Write to file
         sbatch_file = job_dir / "run.sbatch"
         try:
+            content = "\n".join(sbatch_content)
             with open(sbatch_file, 'w', encoding='utf-8') as f:
-                f.write("\n".join(sbatch_content))
+                f.write(content)
             
-            # Make executable (optional for sbatch but good practice)
-            os.chmod(sbatch_file, 0o700)
+            # Log the content to terminal for user reference
+            print(f"\n--- Generated Sbatch Content (Job {job_id}) ---")
+            print(content)
+            print(f"--------------------------------------------------\n")
             
+            os.chmod(sbatch_file, 0o755)
             return sbatch_file
         except IOError as e:
             raise SlurmError(f"Failed to write sbatch file: {e}")
