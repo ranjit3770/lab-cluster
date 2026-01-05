@@ -37,3 +37,7 @@ CREATE TABLE IF NOT EXISTS `jobs` (
 -- Grant select access to the portal's users table
 GRANT SELECT ON strach_portal.users TO 'job_exec_user'@'localhost';
 FLUSH PRIVILEGES;
+
+
+USE slurm_jobs_db;
+ALTER TABLE jobs ADD COLUMN failure_reason TEXT DEFAULT NULL AFTER script_path;
