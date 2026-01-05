@@ -32,3 +32,7 @@ CREATE TABLE IF NOT EXISTS `jobs` (
 -- GRANT ALL PRIVILEGES ON slurm_jobs_db.* TO 'job_exec_user'@'localhost';
 -- GRANT SELECT ON strach_portal.users TO 'job_exec_user'@'localhost'; -- Required to read quotas
 -- FLUSH PRIVILEGES;
+
+-- Grant select access to the portal's users table
+GRANT SELECT ON strach_portal.users TO 'job_exec_user'@'localhost';
+FLUSH PRIVILEGES;
