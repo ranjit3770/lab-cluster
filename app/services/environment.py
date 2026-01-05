@@ -158,3 +158,18 @@ class EnvironmentService:
         except (subprocess.CalledProcessError, ValueError, IndexError) as e:
             logger.error(f"Failed to calculate disk usage: {e}")
             return 0
+
+    def get_system_uid(self, username: str) -> int:
+        """
+        Get the system UID for a given username on Linux.
+        """
+        if os.name == 'nt':
+            return 1000
+            
+        try:
+            cmd = ["id", "-u", username]
+            output = subprocess.check_output(cmd, text=True).strip()
+            return int(output)
+        except Exception as e:
+            logger.warning(f"Could not find UID for user {username}: {e}. Falling back to 1000.")
+            return 1000

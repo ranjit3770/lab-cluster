@@ -13,7 +13,7 @@ class CgroupError(JobExecutionError):
 
 class CgroupService:
     # Timeout waiting for SLURM to create the cgroup (Seconds)
-    CGROUP_WAIT_TIMEOUT = 5
+    CGROUP_WAIT_TIMEOUT = 10
     CGROUP_POLL_INTERVAL = 0.5
 
     def _get_device_maj_min(self, path: Path) -> str:

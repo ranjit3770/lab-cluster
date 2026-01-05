@@ -172,10 +172,11 @@ async def submit_job(
 
             # 9. Cgroup Enforcement
             yield "Status: Enforcing Cgroup I/O Limits...\n"
+            system_uid = env_service.get_system_uid(resolved_username)
             await asyncio.to_thread(
                 cgroup_service.enforce_limits,
                 str(job_id), slurm_id, 
-                1000, 
+                system_uid, 
                 job_dir, quota, slurm_service
             )
             
