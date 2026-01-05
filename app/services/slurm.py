@@ -54,7 +54,7 @@ class SlurmService:
             f"#SBATCH --mem-per-cpu={quota.mem_mb_per_cpu}M",
             "", # Standard separator
             "echo '--- Job Started ---'",
-            f"exec {venv_python_path} {user_script_path}",
+            f"exec {venv_python_path} {script_path}",
             "echo '--- Job Finished ---'"
         ]
 
