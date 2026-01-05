@@ -15,43 +15,42 @@ class EnvironmentError(JobExecutionError):
 
 class EnvironmentService:
     @staticmethod
-    def _get_user_base_dir(user_id: str) -> Path:
-        # Use simple string concatenation or Path but ensure user_id is clean
-        # Basic sanitization of user_id is assumed from callers/auth
-        return Path(settings.BASE_JOB_DIR) / user_id
+    def _get_user_base_dir(username: str) -> Path:
+        # User path: /data_storage/{username}/
+        return Path(settings.BASE_JOB_DIR) / username
     
     @staticmethod
-    def _get_user_venv_dir(user_id: str) -> Path:
-        return EnvironmentService._get_user_base_dir(user_id) / "venv"
+    def _get_user_venv_dir(username: str) -> Path:
+        return EnvironmentService._get_user_base_dir(username) / "venv"
 
     @staticmethod
-    def get_job_dir(user_id: str, job_id: str) -> Path:
-        return EnvironmentService._get_user_base_dir(user_id) / "jobs" / str(job_id)
+    def get_job_dir(username: str, job_id: str) -> Path:
+        return EnvironmentService._get_user_base_dir(username) / "jobs" / str(job_id)
 
-    def ensure_user_environment(self, user_id: str):
+    def ensure_user_environment(self, username: str):
         """
         Ensures the user workspace exists:
-        1. Base Directory: /var/lib/job-exec/users/{user_id}/ (700)
-        2. Venv: /var/lib/job-exec/users/{user_id}/venv
+        1. Base Directory: /data_storage/{username}/ (700)
+        2. Venv: /data_storage/{username}/venv
         """
-        base_dir = self._get_user_base_dir(user_id)
+        base_dir = self._get_user_base_dir(username)
         
         try:
             # 1. Create Base Directory
             if not base_dir.exists():
-                logger.info(f"Creating base directory for user {user_id}: {base_dir}")
+                logger.info(f"Creating base directory for user {username}: {base_dir}")
                 base_dir.mkdir(parents=True, exist_ok=True)
                 # Strict permissions: rwx------ (Owner only)
                 os.chmod(base_dir, 0o700)
 
             # 2. Check/Create Virtualenv
-            venv_dir = self._get_user_venv_dir(user_id)
+            venv_dir = self._get_user_venv_dir(username)
             if not venv_dir.exists():
-                logger.info(f"Creating venv for user {user_id}: {venv_dir}")
+                logger.info(f"Creating venv for user {username}: {venv_dir}")
                 self._create_venv(venv_dir)
 
         except OSError as e:
-            logger.error(f"Failed to setup environment for user {user_id}: {e}")
+            logger.error(f"Failed to setup environment for user {username}: {e}")
             raise EnvironmentError(f"Failed to create user environment: {str(e)}")
 
     def _create_venv(self, venv_path: Path):
@@ -79,15 +78,15 @@ class EnvironmentService:
             logger.error(f"Venv creation failed: {e.stderr}")
             raise EnvironmentError(f"Virtualenv creation failed: {e.stderr.strip()}")
 
-    def create_job_directory(self, user_id: str, job_id: str) -> Path:
+    def create_job_directory(self, username: str, job_id: str) -> Path:
         """
         Create the job-specific directory. 
-        /var/lib/job-exec/users/{user_id}/jobs/{job_id}/
+        /data_storage/{username}/jobs/{job_id}/
         
         This assumes 'ensure_user_environment' has been called once previously, 
         but we can rely on parents=True just in case.
         """
-        job_dir = self.get_job_dir(user_id, job_id)
+        job_dir = self.get_job_dir(username, job_id)
         
         if job_dir.exists():
             # Should technically never happen if UUID is unique
@@ -102,12 +101,12 @@ class EnvironmentService:
             logger.error(f"Failed to create job directory {job_dir}: {e}")
             raise EnvironmentError(f"Failed to create job workspace: {str(e)}")
 
-    def cleanup_job_directory(self, user_id: str, job_id: str):
+    def cleanup_job_directory(self, username: str, job_id: str):
         """
         Clean up job directory on failure or completion (if policy dictates).
         For now, useful for rollback.
         """
-        job_dir = self.get_job_dir(user_id, job_id)
+        job_dir = self.get_job_dir(username, job_id)
         if job_dir.exists():
             try:
                 shutil.rmtree(job_dir)
@@ -116,11 +115,11 @@ class EnvironmentService:
                 logger.error(f"Failed to cleanup job directory {job_dir}: {e}")
                 # Don't raise, just log. Cleanup failures shouldn't crash the request logic usually.
 
-    def get_python_path(self, user_id: str) -> str:
+    def get_python_path(self, username: str) -> str:
         """
         Get absolute path to the user's venv python executable.
         """
-        venv_dir = self._get_user_venv_dir(user_id)
+        venv_dir = self._get_user_venv_dir(username)
         # Linux/Unix standard path
         python_bin = venv_dir / "bin" / "python"
         
@@ -130,12 +129,12 @@ class EnvironmentService:
             
         return str(python_bin)
 
-    def get_current_disk_usage_mb(self, user_id: str) -> int:
+    def get_current_disk_usage_mb(self, username: str) -> int:
         """
         Calculate total disk usage for a user in MB.
         Uses 'du -sm' for speed and efficient summary.
         """
-        user_dir = self._get_user_base_dir(user_id)
+        user_dir = self._get_user_base_dir(username)
         if not user_dir.exists():
             return 0
             

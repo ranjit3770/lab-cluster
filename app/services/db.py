@@ -15,8 +15,8 @@ class DatabaseService:
 
     def get_user_quota(self, user_id: str):
         """
-        Fetch resource quotas from the Portal's 'users' table in {settings.PORTAL_DB_NAME}.
-        Maps Portal columns to Job Execution API quota fields.
+        Fetch resource quotas from the Portal's 'users' table.
+        Supports lookup by numeric ID (e.g. '6') or username (e.g. 'test').
         """
         from sqlalchemy import text
         from app.core.config import settings
@@ -25,29 +25,36 @@ class DatabaseService:
         @dataclass
         class Quota:
             user_id: str
+            username: str  # Added for path management
             disk_quota_mb: int
             cpus_per_job: int
             mem_mb_per_cpu: int
-            max_concurrent_jobs: int = 10  # Default if not in portal
-            read_limit_mb_s: int = 50      # System Default
-            write_limit_mb_s: int = 50     # System Default
-            read_iops: int = 500           # System Default
-            write_iops: int = 500          # System Default
+            max_concurrent_jobs: int = 10
+            read_limit_mb_s: int = 50
+            write_limit_mb_s: int = 50
+            read_iops: int = 500
+            write_iops: int = 500
 
-        query = text(f"SELECT username, cpu_limit, memory_limit_mb, storage_limit_gb FROM {settings.PORTAL_DB_NAME}.users WHERE username = :u")
+        # Determine if we should query by ID or Username
+        if user_id.isdigit():
+            query = text(f"SELECT id, username, cpu_limit, memory_limit_mb, storage_limit_gb FROM {settings.PORTAL_DB_NAME}.users WHERE id = :u")
+        else:
+            query = text(f"SELECT id, username, cpu_limit, memory_limit_mb, storage_limit_gb FROM {settings.PORTAL_DB_NAME}.users WHERE username = :u")
+            
         result = self.db.execute(query, {"u": user_id}).fetchone()
 
         if not result:
-            logger.warning(f"User {user_id} not found in portal. Returning minimal safe defaults.")
-            return Quota(user_id=user_id, disk_quota_mb=100, cpus_per_job=1, mem_mb_per_cpu=512)
+            logger.warning(f"User {user_id} not found in portal database. Returning minimal safe defaults.")
+            return Quota(user_id=user_id, username=user_id, disk_quota_mb=100, cpus_per_job=1, mem_mb_per_cpu=512)
 
         # Mapping: 0 in portal usually means unlimited or not set. We use safe minimums.
-        cpu = result.cpu_limit if result.cpu_limit > 0 else 1
-        mem = result.memory_limit_mb if result.memory_limit_mb > 0 else 1024
-        storage = result.storage_limit_gb if result.storage_limit_gb > 0 else 1 # 1GB default
+        cpu = result.cpu_limit if result.cpu_limit and result.cpu_limit > 0 else 1
+        mem = result.memory_limit_mb if result.memory_limit_mb and result.memory_limit_mb > 0 else 1024
+        storage = result.storage_limit_gb if result.storage_limit_gb and result.storage_limit_gb > 0 else 1
         
         return Quota(
-            user_id=user_id,
+            user_id=str(result.id),
+            username=result.username,
             disk_quota_mb=storage * 1024,
             cpus_per_job=cpu,
             mem_mb_per_cpu=mem

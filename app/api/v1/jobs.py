@@ -54,31 +54,32 @@ async def submit_job(
         slurm_id = None
         
         try:
-            yield f"Status: Starting Submission for User: {username} ({user_id})\n"
-            
-            # 1. Quota Check
-            yield "Status: Validating User Quota...\n"
+            # 1. Quota Check & User Discovery
+            yield f"Status: Validating User {user_id}...\n"
             quota = db_service.get_user_quota(user_id)
             db_service.check_concurrent_limit(user_id)
             
+            # Use the resolved username for all path-based logic
+            resolved_username = quota.username
+            yield f"Status: Resolved Username: {resolved_username}\n"
+
             # 2. Create Job Record
-            # We explicitly know the script name now
             job = db_service.create_job_record(user_id, script_path=main_script.filename)
             job_id = job.id
             yield f"Status: Job Record Created (ID: {job_id})\n"
 
             # 3. Environment Setup
             yield "Status: Setting up User Environment...\n"
-            env_service.ensure_user_environment(user_id)
+            env_service.ensure_user_environment(resolved_username)
             
             # 4. Job Directory Creation
             # Check Disk Quota Phase 1
             yield "Status: Check Disk Quota (Phase 1)...\n"
-            current_usage = await asyncio.to_thread(env_service.get_current_disk_usage_mb, user_id)
+            current_usage = await asyncio.to_thread(env_service.get_current_disk_usage_mb, resolved_username)
             if current_usage >= quota.disk_quota_mb:
                  raise ResourceQuotaExceededError(f"Disk quota exceeded (Used: {current_usage}MB)")
 
-            job_dir = env_service.create_job_directory(user_id, str(job_id))
+            job_dir = env_service.create_job_directory(resolved_username, str(job_id))
             
             # 5. Handle File Uploads
             yield f"Status: Writing files to {job_dir}...\n"
@@ -108,7 +109,6 @@ async def submit_job(
                 
                 try:
                     if src_path.is_dir():
-                        # Copy contents of directory to job_dir
                         for item in src_path.iterdir():
                             dest = job_dir / item.name
                             if item.is_dir():
@@ -116,7 +116,6 @@ async def submit_job(
                             else:
                                 shutil.copy2(item, dest)
                     else:
-                        # Copy single file
                         shutil.copy2(src_path, job_dir / src_path.name)
                 except Exception as e:
                     raise JobExecutionError(f"Failed to copy dependencies: {str(e)}")
@@ -126,23 +125,23 @@ async def submit_job(
                 yield "Status: Installing dependencies from requirements.txt...\n"
                 await asyncio.to_thread(
                     dep_service.install_dependencies, 
-                    user_id, str(job_id), env_service
+                    resolved_username, str(job_id), env_service
                 )
                 
                 # Check Disk Quota Phase 2
                 yield "Status: Check Disk Quota (Phase 2)...\n"
-                current_usage = await asyncio.to_thread(env_service.get_current_disk_usage_mb, user_id)
+                current_usage = await asyncio.to_thread(env_service.get_current_disk_usage_mb, resolved_username)
                 if current_usage > quota.disk_quota_mb:
-                    env_service.cleanup_job_directory(user_id, str(job_id))
+                    env_service.cleanup_job_directory(resolved_username, str(job_id))
                     raise ResourceQuotaExceededError(f"Disk quota exceeded after install (Used: {current_usage}MB)")
             else:
                  yield "Status: No requirements.txt provided, skipping install.\n"
             
             # 7. Sbatch Generation
             yield "Status: Generating SLURM script...\n"
-            venv_python = env_service.get_python_path(user_id)
+            venv_python = env_service.get_python_path(resolved_username)
             slurm_service.generate_sbatch_script(
-                str(job_id), user_id, job_dir, venv_python, main_script.filename, quota
+                str(job_id), resolved_username, job_dir, venv_python, main_script.filename, quota
             )
 
             # 8. Submission

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
         return f"mysql+pymysql://{self.DB_USER}:{encoded_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Filesystem Configuration
-    BASE_JOB_DIR: str = Field(default="/var/lib/job-exec/users", description="Base path for user job workspaces")
+    BASE_JOB_DIR: str = Field(default="/data_storage", description="Base path for user job workspaces")
     
     # SLURM Configuration
     SLURM_BIN_PATH: str = Field(default="/usr/bin", description="Path to SLURM binaries (sbatch, squeue, etc)")
