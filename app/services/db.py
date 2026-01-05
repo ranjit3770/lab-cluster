@@ -115,6 +115,17 @@ class DatabaseService:
         logger.info(f"Mapped Job {job_id} to SLURM ID {slurm_id}")
         return job
 
+    def update_job_failure(self, job_id: int, reason: str):
+        """
+        Mark a job as FAILED and store the reason.
+        """
+        job = self.db.query(Job).filter(Job.id == job_id).first()
+        if job:
+            job.status = JobStatus.FAILED
+            job.failure_reason = reason
+            self.db.commit()
+            logger.info(f"Recorded failure for Job {job_id}: {reason}")
+
     def update_job_status(self, job_id: int, status: JobStatus, enforce_valid_transitions: bool = False):
         """
         Update job status.

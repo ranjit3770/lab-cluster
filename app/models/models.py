@@ -23,6 +23,7 @@ class Job(Base):
     status = Column(Enum(JobStatus), default=JobStatus.PENDING, index=True)
     
     script_path = Column(String(1024))
+    failure_reason = Column(String(2048), nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())

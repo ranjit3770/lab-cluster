@@ -188,7 +188,7 @@ async def submit_job(
             
             if job_id:
                 try:
-                    db_service.update_job_status(job_id, JobStatus.FAILED)
+                    db_service.update_job_failure(job_id, str(e))
                     if slurm_id and not isinstance(e, JobExecutionError):
                          slurm_service.cancel_job(slurm_id)
                 except Exception:
@@ -264,7 +264,10 @@ async def stream_logs(job_id: int, db: Session = Depends(get_db)):
             # If job failed early and no logs exist, provide context
             if not active and not stdout_exists and not stderr_exists:
                 yield f"--- Job Finished (Status: {updated_job.status.value}) ---\n"
-                yield "Notice: No SLURM log files found. The job likely failed during the setup/enforcement phase (e.g., Cgroups, Quota, or sbatch rejection).\n"
+                if updated_job.failure_reason:
+                    yield f"Failure Reason: {updated_job.failure_reason}\n"
+                else:
+                    yield "Notice: No SLURM log files found. The job likely failed during the setup/enforcement phase.\n"
                 break
 
             # Tail Stdout
