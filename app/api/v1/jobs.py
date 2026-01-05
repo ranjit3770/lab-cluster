@@ -43,6 +43,15 @@ async def submit_job(
     - requirements_file: Dependencies to install.
     - dependency_path: Direct server path to copy data or helper modules from.
     """
+    # Basic Payload Logging for Reference
+    print(f"\n--- Incoming Job Submission Payload ---")
+    print(f"User ID: {user_id}")
+    print(f"Username: {username}")
+    print(f"Main Script: {main_script.filename if main_script else 'N/A'}")
+    print(f"Requirements: {requirements_file.filename if requirements_file else 'None'}")
+    print(f"Dependency Path: {dependency_path if dependency_path else 'None'}")
+    print(f"----------------------------------------\n")
+
     db_service = DatabaseService(db)
     
     # Basic Validation
@@ -99,13 +108,20 @@ async def submit_job(
                     
             # C. Dependency Path (Optional - Server Side Copy)
             if dependency_path:
-                yield f"Status: Copying dependencies from {dependency_path}...\n"
                 import shutil
                 from pathlib import Path as LibPath
                 
+                # Resolve Path: Support absolute paths OR paths relative to user's base directory
+                user_base_dir = env_service._get_user_base_dir(resolved_username)
                 src_path = LibPath(dependency_path)
+                
+                if not src_path.is_absolute():
+                    src_path = user_base_dir / dependency_path
+                
+                yield f"Status: Copying dependencies from {src_path}...\n"
+                
                 if not src_path.exists():
-                    raise JobExecutionError(f"Dependency path {dependency_path} does not exist on server")
+                    raise JobExecutionError(f"Dependency path {src_path} does not exist on server")
                 
                 try:
                     if src_path.is_dir():
@@ -118,7 +134,7 @@ async def submit_job(
                     else:
                         shutil.copy2(src_path, job_dir / src_path.name)
                 except Exception as e:
-                    raise JobExecutionError(f"Failed to copy dependencies: {str(e)}")
+                    raise JobExecutionError(f"Failed to copy dependencies from {src_path}: {str(e)}")
 
             # 6. Dependency Installation
             if requirements_file:
