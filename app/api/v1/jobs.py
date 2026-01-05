@@ -253,7 +253,16 @@ async def stream_logs(job_id: int, db: Session = Depends(get_db)):
         first_wait = True
         # We stream as long as the job is active or logs are still appearing
         while True:
+            # Sync with SLURM for real-time status
             updated_job = db_service.get_job(job_id)
+            if updated_job.slurm_job_id:
+                try:
+                    current_slurm_state = slurm_service.get_job_state(updated_job.slurm_job_id)
+                    if current_slurm_state != updated_job.status:
+                        updated_job = db_service.update_job_status(job_id, current_slurm_state)
+                except Exception as e:
+                    logger.error(f"Failed to sync SLURM state in log stream: {e}")
+
             active = updated_job.status in [JobStatus.PENDING, JobStatus.RUNNING]
             
             chunk_found = False
