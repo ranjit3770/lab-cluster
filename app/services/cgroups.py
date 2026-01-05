@@ -68,22 +68,38 @@ class CgroupService:
                 f"wiops={quota.write_iops}"
             )
 
-            # 3. Locate Cgroup Directory (Polling)
-            # Path: /sys/fs/cgroup/slurm/uid_<uid>/job_<slurm_job_id>/
-            cgroup_path = Path(settings.CGROUP_ROOT) / f"uid_{uid}" / f"job_{slurm_job_id}"
-            io_max_file = cgroup_path / "io.max"
-
+            # 3. Locate Cgroup Directory (Flexible Search)
+            # SLURM structures vary (uid_{uid}/job_{id} or just job_{id})
+            # We search for the specific job directory under the root
+            
+            cgroup_root = Path(settings.CGROUP_ROOT)
+            io_max_file = None
+            
+            yield f"Status: Searching for Cgroup directory in {cgroup_root}...\n"
+            
             start_time = time.time()
-            found = False
+            found_path = None
             
             while time.time() - start_time < self.CGROUP_WAIT_TIMEOUT:
-                if io_max_file.exists():
-                    found = True
-                    break
+                # Search recursively for the job directory
+                # Pattern: **/job_{slurm_job_id}
+                matches = list(cgroup_root.glob(f"**/job_{slurm_job_id}"))
+                if matches:
+                    found_path = matches[0]
+                    io_max_file = found_path / "io.max"
+                    if io_max_file.exists():
+                        break
                 time.sleep(self.CGROUP_POLL_INTERVAL)
 
-            if not found:
-                raise CgroupError(f"Cgroup directory not found after {self.CGROUP_WAIT_TIMEOUT}s: {cgroup_path}")
+            if not io_max_file or not io_max_file.exists():
+                # Debug: list what we DO see in the root
+                existing = [str(p.name) for p in cgroup_root.iterdir() if p.is_dir()]
+                raise CgroupError(
+                    f"Cgroup 'io.max' not found for SLURM {slurm_job_id} after {self.CGROUP_WAIT_TIMEOUT}s. "
+                    f"Checked root: {cgroup_root}. Found folders: {existing}"
+                )
+            
+            yield f"Status: Found Cgroup at {found_path}\n"
 
             # 4. Apply Limits
             logger.debug(f"Writing limits to {io_max_file}: {limit_str}")
