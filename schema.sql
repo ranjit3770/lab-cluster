@@ -51,3 +51,18 @@ INSERT IGNORE INTO `user_quotas`
 (`user_id`, `disk_quota_mb`, `cpus_per_job`, `mem_mb_per_cpu`, `max_concurrent_jobs`) 
 VALUES 
 ('default_user', 5000, 2, 2048, 10);
+
+
+
+
+-- Create the database if it doesn't exist
+CREATE DATABASE IF NOT EXISTS slurm_job_db;
+
+-- Create the user with the expected password
+CREATE USER 'job_exec_user'@'localhost' IDENTIFIED BY 'securepassword';
+
+-- Grant all privileges on the database to this user
+GRANT ALL PRIVILEGES ON slurm_job_db.* TO 'job_exec_user'@'localhost';
+
+-- Refresh privileges
+FLUSH PRIVILEGES;
