@@ -235,33 +235,55 @@ async def stream_logs(job_id: int, db: Session = Depends(get_db)):
     job = db_service.get_job(job_id)
     
     # Locate log files
+    # We must resolve the username (path) from the user_id (stored in DB)
+    db_service = DatabaseService(db)
+    quota = db_service.get_user_quota(job.user_id)
+    resolved_username = quota.username
+    
     env_service = EnvironmentService()
-    job_dir = env_service.get_job_dir(job.user_id, job_id)
+    job_dir = env_service.get_job_dir(resolved_username, str(job_id))
     stdout_path = job_dir / f"{job_id}.o"
     stderr_path = job_dir / f"{job_id}.e"
     
     async def log_generator():
-        # Simple tail implementation
-        # For simplicity, we just read existing content. 
-        # Real-time tailing would require a loop with sleep, checking for job completion.
+        import asyncio
+        last_pos_out = 0
+        last_pos_err = 0
         
-        # Checking if file exists first
-        if not stdout_path.exists() and not stderr_path.exists():
-            yield f"Waiting for logs... (Job status: {job.status.value})\n"
-            return
-
-        # Basic read (non-tailing for this MVP/Snippet)
-        # To strictly implement 'stream', we'd loop.
-        try:
-             # Just reading stdout for demo
+        # We stream as long as the job is active or logs are still appearing
+        while True:
+            updated_job = db_service.get_job(job_id)
+            active = updated_job.status in [JobStatus.PENDING, JobStatus.RUNNING]
+            
+            chunk_found = False
+            
+            # Tail Stdout
             if stdout_path.exists():
                 with open(stdout_path, "r") as f:
-                    yield f.read()
+                    f.seek(last_pos_out)
+                    chunk = f.read()
+                    if chunk:
+                        yield chunk
+                        last_pos_out = f.tell()
+                        chunk_found = True
+            
+            # Tail Stderr
             if stderr_path.exists():
-                yield "\n--- STDERR ---\n"
                 with open(stderr_path, "r") as f:
-                    yield f.read()
-        except Exception as e:
-            yield f"Error reading logs: {e}"
+                    f.seek(last_pos_err)
+                    chunk = f.read()
+                    if chunk:
+                        if last_pos_err == 0: yield "\n--- STDERR ---\n"
+                        yield chunk
+                        last_pos_err = f.tell()
+                        chunk_found = True
+
+            # If job finished and no more chunks found, exit
+            if not active and not chunk_found:
+                yield f"\n--- Job Finished (Status: {updated_job.status.value}) ---\n"
+                break
+            
+            # Sleep to prevent high CPU usage
+            await asyncio.sleep(0.5)
 
     return StreamingResponse(log_generator(), media_type="text/plain")
