@@ -75,7 +75,7 @@ class CgroupService:
             cgroup_root = Path(settings.CGROUP_ROOT)
             io_max_file = None
             
-            yield f"Status: Searching for Cgroup directory in {cgroup_root}...\n"
+            logger.info(f"Searching for Cgroup directory in {cgroup_root}...")
             
             start_time = time.time()
             found_path = None
@@ -99,7 +99,7 @@ class CgroupService:
                     f"Checked root: {cgroup_root}. Found folders: {existing}"
                 )
             
-            yield f"Status: Found Cgroup at {found_path}\n"
+            logger.info(f"Found Cgroup at {found_path}")
 
             # 4. Apply Limits
             logger.debug(f"Writing limits to {io_max_file}: {limit_str}")
