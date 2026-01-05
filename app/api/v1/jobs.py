@@ -250,6 +250,7 @@ async def stream_logs(job_id: int, db: Session = Depends(get_db)):
         last_pos_out = 0
         last_pos_err = 0
         
+        first_wait = True
         # We stream as long as the job is active or logs are still appearing
         while True:
             updated_job = db_service.get_job(job_id)
@@ -260,6 +261,11 @@ async def stream_logs(job_id: int, db: Session = Depends(get_db)):
             # Check if log files exist
             stdout_exists = stdout_path.exists()
             stderr_exists = stderr_path.exists()
+
+            # If job is pending/running but no files yet, inform the user
+            if active and not stdout_exists and not stderr_exists and first_wait:
+                yield f"Status: Job {job_id} is {updated_job.status.value}. Waiting for log files to be created by SLURM...\n"
+                first_wait = False
 
             # If job failed early and no logs exist, provide context
             if not active and not stdout_exists and not stderr_exists:
