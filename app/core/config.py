@@ -16,12 +16,14 @@ class Settings(BaseSettings):
     DB_HOST: str = Field(default="localhost", description="MySQL Host")
     DB_PORT: int = Field(default=3306, description="MySQL Port")
     DB_USER: str = Field(default="job_exec_user", description="MySQL User")
-    DB_PASSWORD: str = Field(default="securepassword", description="MySQL Password") # Should be SecretStr in prod, keeping str for simple URL const
+    DB_PASSWORD: str = Field(default="Amrita@123", description="MySQL Password") # Should be SecretStr in prod, keeping str for simple URL const
     DB_NAME: str = Field(default="slurm_job_db", description="MySQL Database Name")
     
     @property
     def DATABASE_URL(self) -> str:
-        return f"mysql+pymysql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
+        import urllib.parse
+        encoded_password = urllib.parse.quote_plus(self.DB_PASSWORD)
+        return f"mysql+pymysql://{self.DB_USER}:{encoded_password}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     # Filesystem Configuration
     BASE_JOB_DIR: str = Field(default="/var/lib/job-exec/users", description="Base path for user job workspaces")

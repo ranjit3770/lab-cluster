@@ -59,7 +59,7 @@ VALUES
 CREATE DATABASE IF NOT EXISTS slurm_job_db;
 
 -- Create the user with the expected password
-CREATE USER 'job_exec_user'@'localhost' IDENTIFIED BY 'securepassword';
+CREATE USER 'job_exec_user'@'localhost' IDENTIFIED BY 'Amrita@123';
 
 -- Grant all privileges on the database to this user
 GRANT ALL PRIVILEGES ON slurm_job_db.* TO 'job_exec_user'@'localhost';
