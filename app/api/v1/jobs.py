@@ -257,8 +257,18 @@ async def stream_logs(job_id: int, db: Session = Depends(get_db)):
             
             chunk_found = False
             
+            # Check if log files exist
+            stdout_exists = stdout_path.exists()
+            stderr_exists = stderr_path.exists()
+
+            # If job failed early and no logs exist, provide context
+            if not active and not stdout_exists and not stderr_exists:
+                yield f"--- Job Finished (Status: {updated_job.status.value}) ---\n"
+                yield "Notice: No SLURM log files found. The job likely failed during the setup/enforcement phase (e.g., Cgroups, Quota, or sbatch rejection).\n"
+                break
+
             # Tail Stdout
-            if stdout_path.exists():
+            if stdout_exists:
                 with open(stdout_path, "r") as f:
                     f.seek(last_pos_out)
                     chunk = f.read()
@@ -268,7 +278,7 @@ async def stream_logs(job_id: int, db: Session = Depends(get_db)):
                         chunk_found = True
             
             # Tail Stderr
-            if stderr_path.exists():
+            if stderr_exists:
                 with open(stderr_path, "r") as f:
                     f.seek(last_pos_err)
                     chunk = f.read()
