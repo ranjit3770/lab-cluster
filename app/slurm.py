@@ -8,18 +8,21 @@ def submit_job(job):
     plan = plan_resources(job.total_cpu, job.total_ram, job.resource_mode)
 
     user_root = f"{DATA_ROOT}/{job.username}"
-    project_root = f"{user_root}/projects/{job.project_name}"
     logs_dir = f"{user_root}/slurm_logs"
     venv_path = f"{user_root}/venv"
 
-    # Ensure directories exist
-    os.makedirs(project_root, exist_ok=True)
-    os.makedirs(logs_dir, exist_ok=True)
-
-    # Validate entry point exists
-    entry_file = os.path.join(project_root, job.entry_point)
+    # Resolve entry point (relative to user root)
+    # e.g. "testing_script/main.py" -> /data_storage/test/testing_script/main.py
+    entry_file = os.path.join(user_root, job.entry_point)
+    
     if not os.path.exists(entry_file):
-        raise FileNotFoundError(f"Entry point '{job.entry_point}' not found in {project_root}")
+        raise FileNotFoundError(f"Entry point '{job.entry_point}' not found at {entry_file}")
+    
+    # Project root is the directory containing the script
+    project_root = os.path.dirname(entry_file)
+
+    # Ensure logs dir exists (project dir must already exist)
+    os.makedirs(logs_dir, exist_ok=True)
 
     cmd_args = job.command_args or ""
 
