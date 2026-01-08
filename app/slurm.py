@@ -16,7 +16,10 @@ def submit_job(job):
     os.makedirs(project_root, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)
 
-
+    # Validate entry point exists
+    entry_file = os.path.join(project_root, job.entry_point)
+    if not os.path.exists(entry_file):
+        raise FileNotFoundError(f"Entry point '{job.entry_point}' not found in {project_root}")
 
     cmd_args = job.command_args or ""
 
