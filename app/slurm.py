@@ -42,8 +42,8 @@ def submit_job(job):
     script = f"""#!/bin/bash
 #SBATCH --job-name={job.project_name}
 #SBATCH --time={job.time}
-#SBATCH --output={logs_dir}/%u_%j.out
-#SBATCH --error={logs_dir}/%u_%j.err
+#SBATCH --output={logs_dir}/{job.username}_%j.out
+#SBATCH --error={logs_dir}/{job.username}_%j.err
 #SBATCH --export=NONE
 {resource_flags}
 

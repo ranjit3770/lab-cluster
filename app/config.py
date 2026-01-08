@@ -1,7 +1,7 @@
 MYSQL_CONFIG = {
     "host": "localhost",
     "user": "slurm_user",
-    "password": "slurm_pass",
+    "password": "slurmJob_Sub",
     "database": "slurm_jobs"
 }
 
