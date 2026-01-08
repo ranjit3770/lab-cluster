@@ -10,6 +10,7 @@ app = FastAPI(title="SLURM Job Submission API")
 
 @app.post("/submit")
 def submit(job: JobRequest):
+    print("Payload: ", job)
     job_id = submit_job(job)
     insert_job_log(job_id, job)
     return {"job_id": job_id, "status": "SUBMITTED"}
