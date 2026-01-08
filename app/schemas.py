@@ -11,4 +11,4 @@ class JobRequest(BaseModel):
     time: str
     command_args: Optional[str] = None
     requirements_path: Optional[str] = None
-    dependency_path: Optional[str] = None
+

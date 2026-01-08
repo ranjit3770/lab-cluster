@@ -45,27 +45,20 @@ def submit_job(job):
 """
 
     # Optional requirements install
-    # Determine where dependencies are located
-    if job.dependency_path:
-        dep_root = f"{user_root}/{job.dependency_path}"
-        # If requirements file is listed, verify it exists
-        if job.requirements_path:
-            req_file = os.path.join(dep_root, job.requirements_path)
-            if os.path.exists(req_file):
-                install_cmd = f"$VENV/bin/pip install --quiet -r {req_file}"
-            else:
-                install_cmd = f"echo 'Warning: Requirements file {job.requirements_path} not found in {dep_root}'"
-        else:
-            install_cmd = "echo 'No requirements file specified'"
+    # Dependency installation
+    # Default to requirements.txt in the same folder as the script if not specified
+    req_filename = job.requirements_path if job.requirements_path else "requirements.txt"
+    req_file_path = os.path.join(project_root, req_filename)
+
+    if os.path.exists(req_file_path):
+        # Only install if explicitly requested OR if the default file actually exists
+        if job.requirements_path or os.path.exists(req_file_path):
+             install_cmd = f"$VENV/bin/pip install --quiet -r {req_file_path}"
     else:
-         # Fallback to project root or skip (legacy behavior)
         if job.requirements_path:
-             # Assume relative to project root if no dependency_path given?
-             # For now, let's assume if they give a path, it's absolute or relative to job execution.
-             # But without dependency_path, we'll keep the old behavior (or simple echo)
-             install_cmd = f"$VENV/bin/pip install --quiet -r {job.requirements_path}"
+             install_cmd = f"echo 'Warning: Requirements file {job.requirements_path} not found in {project_root}'"
         else:
-            install_cmd = "echo 'No requirements file provided'"
+             install_cmd = "echo 'No requirements file provided'"
 
     # SBATCH script
     script = f"""#!/bin/bash
