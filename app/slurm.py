@@ -48,25 +48,27 @@ def submit_job(job):
 """
 
     # Dependency installation
-    # Dependency installation (ONLY if user explicitly provides requirements_path)
+    # Dependency installation (STRICT: only if user passes requirements_path)
+    print("Requirements path: ", job.requirements_path)
     if job.requirements_path:
         req_file_path = os.path.join(project_root, job.requirements_path)
 
         if os.path.exists(req_file_path):
             install_cmd = f"""
-    echo "[SYSTEM LOG] Installing dependencies from {req_file_path}"
-    "$VENV/bin/pip" install -r "{req_file_path}"
-    echo "[SYSTEM LOG] Dependency installation completed successfully"
-    """
+echo "[SYSTEM LOG] Installing dependencies from {req_file_path}"
+"$VENV/bin/pip" install -r "{req_file_path}"
+echo "[SYSTEM LOG] Dependency installation completed successfully"
+"""
         else:
             install_cmd = f"""
-    echo "[SYSTEM LOG] ERROR: Requirements file '{job.requirements_path}' not found in {project_root}"
-    exit 1
-    """
+echo "[SYSTEM LOG] ERROR: Requirements file '{job.requirements_path}' not found in {project_root}"
+exit 1
+"""
     else:
         install_cmd = """
-    echo "[SYSTEM LOG] No requirements file provided by user; skipping dependency installation"
+echo "[SYSTEM LOG] No requirements file provided by user; skipping dependency installation"
     """
+
 
     # FIX: run script relative to project_root
     entry_script = os.path.basename(job.entry_point)
