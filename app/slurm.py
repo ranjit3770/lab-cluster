@@ -11,19 +11,20 @@ def submit_job(job):
     logs_dir = f"{user_root}/slurm_logs"
     venv_path = f"{user_root}/venv"
 
-    # Resolve entry point (relative to user root)
-    # e.g. "testing_script/main.py" -> /data_storage/test/testing_script/main.py
-
-
+    # Resolve entry point
     entry_file_point = user_root + "/" + job.entry_point
-    
+
     if not os.path.exists(entry_file_point):
-        raise FileNotFoundError(f"Entry point '{job.entry_point}' not found at {entry_file_point}")
-    
+        raise FileNotFoundError(
+            f"Entry point '{job.entry_point}' not found at {entry_file_point}"
+        )
+
     # Project root is the directory containing the script
     project_root = os.path.dirname(entry_file_point)
+    print("Project Root: ", project_root)
     print("Project root exists: ", os.path.exists(project_root))
-    # Ensure logs dir exists (project dir must already exist)
+
+    # Ensure logs dir exists
     os.makedirs(logs_dir, exist_ok=True)
 
     cmd_args = job.command_args or ""
@@ -46,21 +47,26 @@ def submit_job(job):
 #SBATCH --mem={mem}G
 """
 
-    # Optional requirements install
     # Dependency installation
-    # Default to requirements.txt in the same folder as the script if not specified
     req_filename = job.requirements_path if job.requirements_path else "requirements.txt"
     req_file_path = os.path.join(project_root, req_filename)
 
     if os.path.exists(req_file_path):
-        # Only install if explicitly requested OR if the default file actually exists
-        if job.requirements_path or os.path.exists(req_file_path):
-             install_cmd = f"echo '[SYSTEM LOG] Installing dependencies...'; $VENV/bin/pip install --quiet -r {req_file_path}"
+        install_cmd = (
+            f"echo '[SYSTEM LOG] Installing dependencies...'; "
+            f"$VENV/bin/pip install --quiet -r {req_file_path}"
+        )
     else:
         if job.requirements_path:
-             install_cmd = f"echo '[SYSTEM LOG] Warning: Requirements file {job.requirements_path} not found in {project_root}'"
+            install_cmd = (
+                f"echo '[SYSTEM LOG] Warning: Requirements file "
+                f"{job.requirements_path} not found in {project_root}'"
+            )
         else:
-             install_cmd = "echo '[SYSTEM LOG] No requirements file provided'"
+            install_cmd = "echo '[SYSTEM LOG] No requirements file provided'"
+
+    # FIX: run script relative to project_root
+    entry_script = os.path.basename(job.entry_point)
 
     # SBATCH script
     script = f"""#!/bin/bash
@@ -93,13 +99,13 @@ source "$VENV/bin/activate"
 # Install deps if provided
 {install_cmd}
 
-# Run job inside venv
-"$VENV/bin/python" {job.entry_point} {cmd_args}
+# Run job inside venv (FIXED)
+"$VENV/bin/python" "{entry_script}" {cmd_args}
 """
 
     with tempfile.NamedTemporaryFile("w", delete=False) as f:
         f.write(script)
         path = f.name
-    
+
     output = subprocess.check_output(["sbatch", path]).decode()
     return output.strip().split()[-1]
