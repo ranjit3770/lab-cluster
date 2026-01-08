@@ -13,6 +13,10 @@ def submit_job(job):
 
     # Resolve entry point (relative to user root)
     # e.g. "testing_script/main.py" -> /data_storage/test/testing_script/main.py
+
+    print("Entry point: ", job.entry_point)
+    print("User root: ", user_root)
+
     entry_file = os.path.join(user_root, job.entry_point)
     
     if not os.path.exists(entry_file):
