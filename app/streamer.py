@@ -2,6 +2,7 @@ import os, time
 from app.config import DATA_ROOT, LOG_SLEEP
 
 from app.status import job_status
+from app.models import update_job_status
 
 def combined_log_stream(username, job_id):
     base = f"{DATA_ROOT}/{username}/slurm_logs"
@@ -52,6 +53,7 @@ def combined_log_stream(username, job_id):
                 # First check if the main job status indicates done
                 # Note: sacct might return multiple lines/states; we assume job_status handles basic parsing
                 if status in TERMINAL_STATES:
+                    update_job_status(job_id, status)
                     break
                 time.sleep(LOG_SLEEP)
     finally:
