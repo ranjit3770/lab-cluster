@@ -25,7 +25,8 @@ def submit_job(job):
     
     # Project root is the directory containing the script
     project_root = os.path.dirname(entry_file_point)
-
+    print("Project root: ", project_root)
+    print("Project root exists: ", os.path.exists(project_root))
     # Ensure logs dir exists (project dir must already exist)
     os.makedirs(logs_dir, exist_ok=True)
 
