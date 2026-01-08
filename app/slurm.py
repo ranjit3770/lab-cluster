@@ -52,18 +52,20 @@ def submit_job(job):
     req_file_path = os.path.join(project_root, req_filename)
 
     if os.path.exists(req_file_path):
-        install_cmd = (
-            f"echo '[SYSTEM LOG] Installing dependencies...'; "
-            f"$VENV/bin/pip install --quiet -r {req_file_path}"
-        )
+        install_cmd = f"""
+    echo "[SYSTEM LOG] Installing dependencies from {req_file_path}"
+    "$VENV/bin/pip" install -r "{req_file_path}"
+    echo "[SYSTEM LOG] Dependency installation completed successfully"
+    """
     else:
         if job.requirements_path:
-            install_cmd = (
-                f"echo '[SYSTEM LOG] Warning: Requirements file "
-                f"{job.requirements_path} not found in {project_root}'"
-            )
+            install_cmd = f"""
+    echo "[SYSTEM LOG] WARNING: Requirements file '{job.requirements_path}' not found in {project_root}"
+    """
         else:
-            install_cmd = "echo '[SYSTEM LOG] No requirements file provided'"
+            install_cmd = """
+    echo "[SYSTEM LOG] No requirements file provided"
+    """
 
     # FIX: run script relative to project_root
     entry_script = os.path.basename(job.entry_point)
