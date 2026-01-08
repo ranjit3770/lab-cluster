@@ -15,8 +15,8 @@ def combined_log_stream(username, job_id):
     fout = open(out, "r") if os.path.exists(out) else None
     ferr = open(err, "r") if os.path.exists(err) else None
 
-    if fout: fout.seek(0, 2)
-    if ferr: ferr.seek(0, 2)
+    if fout: fout.seek(0, 0)
+    if ferr: ferr.seek(0, 0)
 
     try:
         while True:

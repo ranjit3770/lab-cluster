@@ -52,6 +52,7 @@ set -euo pipefail
 PROJECT_ROOT="{project_root}"
 VENV="{venv_path}"
 
+mkdir -p "$PROJECT_ROOT"
 cd "$PROJECT_ROOT"
 
 # Create user venv if missing
