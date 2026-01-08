@@ -39,3 +39,12 @@ def update_job_status(job_id: str, status: str):
     db.commit()
     cur.close()
     db.close()
+
+def get_job_log_status(job_id: str):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT status FROM job_logs WHERE job_id=%s", (job_id,))
+    row = cur.fetchone()
+    cur.close()
+    db.close()
+    return row[0] if row else None
