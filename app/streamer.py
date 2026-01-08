@@ -12,8 +12,11 @@ def combined_log_stream(username, job_id):
     # Wait for files to appear or job to finish (fail fast if invalid job)
     waits = 0
     while not (os.path.exists(out) or os.path.exists(err)):
-        if waits > 10 and job_status(job_id) in ["FAILED", "COMPLETED", "CANCELLED", "NOT_FOUND"]:
-            yield f"Job finished (status: {job_status(job_id)}) but logs were not found.\n"
+        status = job_status(job_id)
+        if waits > 10 and status in ["FAILED", "COMPLETED", "CANCELLED", "NOT_FOUND"]:
+            if status != "NOT_FOUND":
+                 update_job_status(job_id, status)
+            yield f"Job finished (status: {status}) but logs were not found.\n"
             return
         time.sleep(LOG_SLEEP)
         waits += 1
@@ -53,7 +56,14 @@ def combined_log_stream(username, job_id):
                 # First check if the main job status indicates done
                 # Note: sacct might return multiple lines/states; we assume job_status handles basic parsing
                 if status in TERMINAL_STATES:
-                    update_job_status(job_id, status)
+                    # HEURISTIC: If Slurm can't find the job (bad DB connection) but we saw logs,
+                    # assume it finished successfully (COMPLETED).
+                    if status == "NOT_FOUND" and (fout is not None):
+                         final_status = "COMPLETED"
+                    else:
+                         final_status = status
+                    
+                    update_job_status(job_id, final_status)
                     break
                 time.sleep(LOG_SLEEP)
     finally:
