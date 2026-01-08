@@ -53,12 +53,12 @@ def submit_job(job):
     if os.path.exists(req_file_path):
         # Only install if explicitly requested OR if the default file actually exists
         if job.requirements_path or os.path.exists(req_file_path):
-             install_cmd = f"$VENV/bin/pip install --quiet -r {req_file_path}"
+             install_cmd = f"echo '[SYSTEM LOG] Installing dependencies...'; $VENV/bin/pip install --quiet -r {req_file_path}"
     else:
         if job.requirements_path:
-             install_cmd = f"echo 'Warning: Requirements file {job.requirements_path} not found in {project_root}'"
+             install_cmd = f"echo '[SYSTEM LOG] Warning: Requirements file {job.requirements_path} not found in {project_root}'"
         else:
-             install_cmd = "echo 'No requirements file provided'"
+             install_cmd = "echo '[SYSTEM LOG] No requirements file provided'"
 
     # SBATCH script
     script = f"""#!/bin/bash

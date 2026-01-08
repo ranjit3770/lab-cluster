@@ -36,7 +36,10 @@ def combined_log_stream(username, job_id):
             if fout:
                 line = fout.readline()
                 if line:
-                    yield line
+                    if line.startswith("[SYSTEM LOG]"):
+                        yield line
+                    else:
+                        yield f"[SCRIPT LOGS] {line}"
                     emitted = True
             if ferr:
                 line = ferr.readline()
