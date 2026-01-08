@@ -72,9 +72,14 @@ source "$VENV/bin/activate"
 "$VENV/bin/python" {job.entry_point} {cmd_args}
 """
 
+    print(f"DEBUG: logs_dir is {logs_dir}")
+    print(f"DEBUG: Generated script:\n{script}")
+
     with tempfile.NamedTemporaryFile("w", delete=False) as f:
         f.write(script)
         path = f.name
+    
+    print(f"DEBUG: Script written to {path}")
 
     output = subprocess.check_output(["sbatch", path]).decode()
     return output.strip().split()[-1]

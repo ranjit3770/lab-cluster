@@ -14,7 +14,6 @@ def plan_resources(total_cpu, total_ram, mode):
     free_nodes = []
 
     for n in nodes:
-        print("node: ", n)
         cpu = n.get("free_cpus", n.get("alloc_idle_cpus", 0))
         ram = n.get("free_memory", n.get("real_memory", 0) - n.get("alloc_memory", 0)) // 1024
         total_free_cpu += cpu
