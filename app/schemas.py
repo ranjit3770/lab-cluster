@@ -12,3 +12,6 @@ class JobRequest(BaseModel):
     command_args: Optional[str] = None
     requirements_path: Optional[str] = None
 
+class JobResponse(BaseModel):
+    job_id: str
+    status: str

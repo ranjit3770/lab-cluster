@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from app.schemas import JobRequest
+from app.schemas import JobRequest, JobResponse
 from app.slurm import submit_job
 from app.streamer import combined_log_stream
 from app.status import job_status, cancel_job
@@ -8,7 +8,7 @@ from app.models import insert_job_log, update_job_status
 
 app = FastAPI(title="SLURM Job Submission API")
 
-@app.post("/submit")
+@app.post("/submit", response_model=JobResponse)
 def submit(job: JobRequest):
     print("Payload: ", job)
     job_id = submit_job(job)
