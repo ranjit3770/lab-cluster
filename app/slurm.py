@@ -17,7 +17,7 @@ def submit_job(job):
 
     entry_file_point = user_root + "/" + job.entry_point
     print("Entry file point: ", entry_file_point)
-    
+    print("Entry file: ", os.path.exists(entry_file_point))
     entry_file = os.path.join(user_root, job.entry_point)
     
     if not os.path.exists(entry_file):
