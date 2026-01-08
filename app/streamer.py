@@ -26,7 +26,8 @@ def combined_log_stream(username, job_id):
     # Terminal states where we should stop after draining logs
     TERMINAL_STATES = {
         "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT", "NODE_FAIL", 
-        "PREEMPTED", "BOOT_FAIL", "DEADLINE", "OUT_OF_MEMORY"
+        "PREEMPTED", "BOOT_FAIL", "DEADLINE", "OUT_OF_MEMORY",
+        "NOT_FOUND", "UNKNOWN"
     }
 
     try:
