@@ -16,11 +16,10 @@ def submit_job(job):
     os.makedirs(project_root, exist_ok=True)
     os.makedirs(logs_dir, exist_ok=True)
 
-    # Auto-create entry point if missing (for testing)
+    # Auto-create entry point (always overwrite for testing)
     entry_file = os.path.join(project_root, job.entry_point)
-    if not os.path.exists(entry_file):
-        with open(entry_file, "w") as f:
-            f.write("import sys\nprint('Hello! execution successful.')\nprint(f'Python: {sys.version}')")
+    with open(entry_file, "w") as f:
+        f.write("import sys\nprint('Hello! execution successful.')\nprint('This is a test error message on stderr', file=sys.stderr)\nprint(f'Python: {sys.version}')")
 
     cmd_args = job.command_args or ""
 
