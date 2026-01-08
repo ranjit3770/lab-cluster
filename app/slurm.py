@@ -20,11 +20,11 @@ def submit_job(job):
     print("Entry file: ", os.path.exists(entry_file_point))
     entry_file = os.path.join(user_root, job.entry_point)
     
-    if not os.path.exists(entry_file):
+    if not os.path.exists(entry_file_point):
         raise FileNotFoundError(f"Entry point '{job.entry_point}' not found at {entry_file}")
     
     # Project root is the directory containing the script
-    project_root = os.path.dirname(entry_file)
+    project_root = os.path.dirname(entry_file_point)
 
     # Ensure logs dir exists (project dir must already exist)
     os.makedirs(logs_dir, exist_ok=True)
