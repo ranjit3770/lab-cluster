@@ -1,0 +1,116 @@
+---
+- name: Deploy Slurm Systemd Services
+  hosts: all
+  become: yes
+
+  tasks:
+    # --- SECTION 1: PRE-REQUISITES (HEAD NODE) ---
+    - name: Create slurmrestd system user
+      user:
+        name: slurmrestd
+        system: yes
+        shell: /usr/sbin/nologin
+        create_home: no
+      when: "'head_nodes' in group_names"
+
+    # --- SECTION 2: SERVICE FILES (ALL NODES) ---
+    - name: Deploy slurmd.service to all nodes
+      copy:
+        dest: /etc/systemd/system/slurmd.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Slurm node daemon
+          After=network.target munge.service
+          Requires=munge.service
+
+          [Service]
+          Type=simple
+          ExecStart=/usr/local/slurm/sbin/slurmd -D
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+
+    # --- SECTION 3: HEAD NODE SPECIFIC SERVICES ---
+    - name: Deploy Head Node Services
+      block:
+        - name: Deploy slurmctld.service
+          copy:
+            dest: /etc/systemd/system/slurmctld.service
+            content: |
+              [Unit]
+              Description=Slurm controller daemon
+              After=network.target munge.service
+              Requires=munge.service
+
+              [Service]
+              Type=simple
+              ExecStart=/usr/local/slurm/sbin/slurmctld -D
+              Restart=always
+              User=root
+
+              [Install]
+              WantedBy=multi-user.target
+
+        - name: Deploy slurmdbd.service
+          copy:
+            dest: /etc/systemd/system/slurmdbd.service
+            content: |
+              [Unit]
+              Description=Slurm Database Daemon
+              After=network.target munge.service mariadb.service
+              Requires=munge.service
+
+              [Service]
+              Type=simple
+              User=slurm
+              Group=slurm
+              ExecStart=/usr/local/slurm/sbin/slurmdbd -D
+              Restart=always
+              RestartSec=5
+              LimitNOFILE=65536
+              RuntimeDirectory=slurm
+
+              [Install]
+              WantedBy=multi-user.target
+
+        - name: Deploy slurmrestd.service
+          copy:
+            dest: /etc/systemd/system/slurmrestd.service
+            content: |
+              [Unit]
+              Description=Slurm REST Daemon
+              After=network.target slurmctld.service
+              Requires=slurmctld.service
+
+              [Service]
+              Type=simple
+              User=slurmrestd
+              Group=slurmrestd
+              RuntimeDirectory=slurmrestd
+              ExecStart=/usr/local/slurm/sbin/slurmrestd -a rest_auth/local unix:/run/slurmrestd/slurmrestd.socket
+              Environment="LD_LIBRARY_PATH=/usr/local/slurm/lib/slurm:/usr/local/slurm/lib"
+              Restart=always
+              RestartSec=5
+
+              [Install]
+              WantedBy=multi-user.target
+      when: "'head_nodes' in group_names"
+
+    # --- SECTION 4: SYSTEMD RELOAD ---
+    - name: Reload systemd manager configuration
+      systemd:
+        daemon_reload: yes
+        daemon_reexec: yes
+
+    - name: Ensure Munge is started before Slurm
+      service:
+        name: munge
+        state: started
+        enabled: yes
+
+    - name: Print Next Steps
+      debug:
+        msg: "Services are deployed. You can now start them using: systemctl start slurmctld (on head) and systemctl start slurmd (on workers)."

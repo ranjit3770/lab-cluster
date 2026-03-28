@@ -1,0 +1,33 @@
+---
+- name: Install Slurm and Munge Dependencies
+  hosts: cluster_nodes
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+
+    - name: Install build-essential and required libraries
+      apt:
+        name:
+          - build-essential
+          - munge
+          - libmunge-dev
+          - libhwloc-dev
+          - libssl-dev
+          - libjson-c-dev
+          - libpam0g-dev
+          - libmysqlclient-dev
+          - curl
+          - python3
+        state: present
+        force_apt_get: yes
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Ensure Munge service is started and enabled
+      service:
+        name: munge
+        state: started
+        enabled: yes

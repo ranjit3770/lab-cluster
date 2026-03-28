@@ -1,0 +1,100 @@
+---
+- name: Configure Slurm with Dynamic Node Looping
+  hosts: all
+  become: yes
+
+  tasks:
+    # --- SECTION 1: PRE-REQUISITES ---
+    - name: Set hostname (replacing underscores with hyphens)
+      hostname:
+        name: "{{ inventory_hostname | replace('_', '-') }}"
+
+    - name: Install Intel GPU tools
+      apt:
+        name: intel-gpu-tools
+        state: present
+
+    - name: Add slurm user to video and render groups
+      user:
+        name: slurm
+        groups: video,render
+        append: yes
+
+    - name: Ensure PID directory exists
+      file:
+        path: /var/run/slurm
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+
+    # --- SECTION 2: SLURM.CONF (DYNAMIC LOOP) ---
+    - name: Deploy slurm.conf using dynamic loops
+      copy:
+        dest: /etc/slurm/slurm.conf
+        owner: slurm
+        group: slurm
+        mode: '0644'
+        content: |
+          # --- CLUSTER IDENTIFICATION ---
+          ClusterName=demo-cluster
+          ControlMachine=head-node
+          # Grabs IP of the first node in the head_nodes inventory group
+          ControlAddr={{ hostvars[groups['head_nodes'][0]]['ansible_host'] }}
+
+          # --- AUTHENTICATION & SECURITY ---
+          AuthType=auth/munge
+          CryptoType=crypto/munge
+          MpiDefault=none
+
+          # --- ACCOUNTING & DATABASE ---
+          AccountingStorageType=accounting_storage/slurmdbd
+          AccountingStorageHost=head-node
+          AccountingStoragePort=6819
+          JobAcctGatherType=jobacct_gather/linux
+          JobAcctGatherFrequency=30
+
+          # --- PROCESS & TASK TRACKING ---
+          ProctrackType=proctrack/linuxproc
+          TaskPlugin=task/affinity
+
+          # --- PORTS & DIRECTORIES ---
+          SlurmctldPort=6817
+          SlurmdPort=6818
+          SlurmdSpoolDir=/var/spool/slurmd
+          StateSaveLocation=/var/spool/slurmctld
+          SlurmdUser=root
+
+          # --- LOGGING ---
+          SlurmctldLogFile=/var/log/slurm/slurmctld.log
+          SlurmdLogFile=/var/log/slurm/slurmd.log
+          SlurmctldPidFile=/var/run/slurm/slurmctld.pid
+
+          # --- GRES SETTINGS ---
+          GresTypes=gpu
+
+          # --- NODE DEFINITIONS ---
+          # Head Node (Matched to new hyphenated hostname)
+          NodeName=head-node NodeAddr={{ hostvars[groups['head_nodes'][0]]['ansible_host'] }} Sockets=1 CoresPerSocket=6 ThreadsPerCore=1 CPUs=6 RealMemory=7000 State=UNKNOWN
+
+          # Workers (Dynamic Loop with underscore-to-hyphen conversion)
+          {% for host in groups['cluster_nodes'] %}
+          NodeName={{ host | replace('_', '-') }} NodeAddr={{ hostvars[host]['ansible_host'] }} Sockets=1 CoresPerSocket=6 ThreadsPerCore=2 CPUs=12 RealMemory=6000 Feature={{ host | replace('_', '-') }} Gres=gpu:intel:1 State=UNKNOWN
+          {% endfor %}
+
+          # --- PARTITION DEFINITIONS ---
+          PartitionName=main Nodes=head-node,{% set worker_list = [] %}{% for host in groups['cluster_nodes'] %}{{ worker_list.append(host | replace('_', '-')) }}{% endfor %}{{ worker_list | join(',') }} Default=YES MaxTime=INFINITE State=UP
+
+    # --- SECTION 3: OTHER CONFIGS ---
+    - name: Deploy cgroup.conf
+      copy:
+        dest: /etc/slurm/cgroup.conf
+        content: "CgroupPlugin=disabled\n"
+
+    - name: Deploy gres.conf (Workers only)
+      copy:
+        dest: /etc/slurm/gres.conf
+        content: |
+          # Defines the Intel GPU for Slurm
+          Name=gpu Type=intel File=/dev/dri/renderD128
+      when: "'cluster_nodes' in group_names"

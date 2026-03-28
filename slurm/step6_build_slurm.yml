@@ -1,0 +1,78 @@
+---
+- name: Dynamic Download, Build, and PATH Setup for Slurm
+  hosts: all
+  become: yes
+  vars:
+    src_dir: "/usr/src"
+
+  tasks:
+    # --- SECTION 1: VERSION DISCOVERY ---
+    - name: Get latest release tag from GitHub API
+      uri:
+        url: "https://api.github.com/repos/SchedMD/slurm/releases/latest"
+        return_content: yes
+      register: github_api_response
+      run_once: true
+
+    - name: Clean the tag version
+      set_fact:
+        cleaned_version: "{{ github_api_response.json.tag_name | regex_replace('^slurm-', '') | regex_replace('-', '.') | regex_replace('\\.[0-9]+$', '') }}"
+      run_once: true
+
+    # --- SECTION 2: MANDATORY DEPENDENCIES ---
+    - name: Install build dependencies
+      apt:
+        name:
+          - build-essential
+          - libhwloc-dev
+          - libssl-dev
+          - libhttp-parser-dev
+          - libjson-c-dev
+          - pkg-config
+          - libmunge-dev
+          - munge
+        state: present
+        update_cache: yes
+
+    # --- SECTION 3: DOWNLOAD & EXTRACT ---
+    - name: Download and Extract Slurm
+      unarchive:
+        src: "https://download.schedmd.com/slurm/slurm-{{ cleaned_version }}.tar.bz2"
+        dest: "{{ src_dir }}"
+        remote_src: yes
+        creates: "{{ src_dir }}/slurm-{{ cleaned_version }}/configure"
+
+    # --- SECTION 4: CONFIGURE, BUILD, AND INSTALL ---
+    - name: Configure, Build, and Install Slurm
+      shell: |
+        cd {{ src_dir }}/slurm-{{ cleaned_version }}
+        ./configure \
+          --prefix=/usr/local/slurm \
+          --sysconfdir=/etc/slurm \
+          --with-munge \
+          --with-hwloc \
+          --enable-slurmrestd \
+          --with-mysql_config=no
+        make -j $(nproc)
+        make install
+      args:
+        creates: /usr/local/slurm/sbin/slurmctld
+
+    # --- SECTION 5: PATH SETUP (3.4) ---
+    - name: Create Slurm PATH profile script
+      copy:
+        dest: /etc/profile.d/slurm.sh
+        content: "export PATH=/usr/local/slurm/bin:/usr/local/slurm/sbin:$PATH"
+        mode: '0644'
+
+    # --- SECTION 6: VERIFICATION ---
+    - name: Verify Slurm installation versions
+      shell: |
+        export PATH=/usr/local/slurm/bin:/usr/local/slurm/sbin:$PATH
+        slurmd -V
+        slurmctld -V
+      register: slurm_version_output
+
+    - name: Show Slurm Versions
+      debug:
+        msg: "{{ slurm_version_output.stdout_lines }}"

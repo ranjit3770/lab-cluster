@@ -1,0 +1,81 @@
+---
+- name: Fix Config and Start Slurm Services
+  hosts: all
+  become: yes
+
+  tasks:
+    # --- SECTION 0: ENVIRONMENT SETUP ---
+    - name: Ensure Slurm PATH is in .bashrc for the current session
+      lineinfile:
+        path: /root/.bashrc
+        line: 'export PATH=/usr/local/slurm/bin:/usr/local/slurm/sbin:$PATH'
+        state: present
+
+    # --- SECTION 1: AUTO-FIX CONFIG (No Database Mode) ---
+    - name: Disable accounting storage to prevent socket timeouts
+      lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^AccountingStorageType='
+        line: 'AccountingStorageType=accounting_storage/none'
+
+    - name: Comment out SlurmDBD specific lines
+      replace:
+        path: /etc/slurm/slurm.conf
+        regexp: '^({{ item }})'
+        replace: '# \1'
+      loop:
+        - "AccountingStorageHost"
+        - "AccountingStoragePort"
+
+    # --- SECTION 2: GLOBAL PRE-START ---
+    - name: Ensure Munge is running
+      service:
+        name: munge
+        state: restarted
+        enabled: yes
+
+    # --- SECTION 3: HEAD NODE START SEQUENCE ---
+    - name: Initialize Head Node Services
+      block:
+        - name: Restart Slurm Controller
+          service:
+            name: slurmctld
+            state: restarted
+            enabled: yes
+
+        - name: Restart Slurmrestd
+          service:
+            name: slurmrestd
+            state: restarted
+            enabled: yes
+
+        - name: Start Slurmd on Head Node
+          service:
+            name: slurmd
+            state: restarted
+            enabled: yes
+      when: "'head_nodes' in group_names"
+
+    # --- SECTION 4: WORKER NODE START SEQUENCE ---
+    - name: Start Slurmd on Workers
+      service:
+        name: slurmd
+        state: restarted
+        enabled: yes
+      when: "'cluster_nodes' in group_names"
+
+    # --- SECTION 5: VERIFICATION ---
+    - name: Wait for controller to wake up
+      pause:
+        seconds: 10
+
+    - name: Check Cluster Status (sinfo)
+      shell: |
+        export PATH=/usr/local/slurm/bin:/usr/local/slurm/sbin:$PATH
+        sinfo -N -l
+      register: sinfo_output
+      run_once: true
+
+    - name: Final Status Report
+      debug:
+        msg: "{{ sinfo_output.stdout_lines }}"

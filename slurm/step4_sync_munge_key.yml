@@ -1,0 +1,48 @@
+---
+- name: Generate and Sync Munge Key
+  hosts: all
+  become: yes
+  tasks:
+    # --- SECTION 1: PREPARATION ON HEAD NODE ---
+    - name: Ensure munge is installed on Head Node
+      apt:
+        name: munge
+        state: present
+        update_cache: yes
+      when: inventory_hostname == 'head_node'
+      delegate_to: localhost
+      connection: local
+
+    - name: Generate Munge key on Head Node
+      shell: mungekey --create
+      args:
+        creates: /etc/munge/munge.key
+      when: inventory_hostname == 'head_node'
+      delegate_to: localhost
+      connection: local
+
+    - name: Set permissions on Head Node key
+      file:
+        path: /etc/munge/munge.key
+        owner: munge
+        group: munge
+        mode: '0400'
+      when: inventory_hostname == 'head_node'
+      delegate_to: localhost
+      connection: local
+
+    # --- SECTION 2: WORKER NODES ---
+    - name: Copy Munge key to Worker Nodes
+      copy:
+        src: /etc/munge/munge.key
+        dest: /etc/munge/munge.key
+        owner: munge
+        group: munge
+        mode: '0400'
+      when: "'cluster_nodes' in group_names"
+
+    # --- SECTION 3: RESTART SERVICES ---
+    - name: Restart Munge service on all nodes
+      service:
+        name: munge
+        state: restarted

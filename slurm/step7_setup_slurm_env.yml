@@ -1,0 +1,49 @@
+---
+- name: Setup Slurm User and Directory Structure
+  hosts: all
+  become: yes
+
+  tasks:
+    # --- SECTION 1: CREATE SLURM USER ---
+    - name: Create slurm system user
+      user:
+        name: slurm
+        system: yes
+        shell: /bin/bash
+        create_home: yes
+        state: present
+        comment: "Slurm Workload Manager"
+
+    # --- SECTION 2: CREATE DIRECTORIES ---
+    - name: Create required Slurm directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+      loop:
+        - /etc/slurm            # Configuration files (slurm.conf)
+        - /var/spool/slurmd     # Compute node state
+        - /var/log/slurm        # Log files (slurmctld.log, slurmd.log)
+        - /var/spool/slurmctld  # Controller state/checkpoints
+
+    # --- SECTION 3: PERMISSIONS REINFORCEMENT ---
+    - name: Ensure correct ownership recursively on spool and logs
+      file:
+        path: "{{ item }}"
+        owner: slurm
+        group: slurm
+        recurse: yes
+      loop:
+        - /var/spool/slurmd
+        - /var/spool/slurmctld
+        - /var/log/slurm
+
+    - name: Verify directory creation
+      shell: ls -ld /etc/slurm /var/spool/slurmd /var/log/slurm /var/spool/slurmctld
+      register: dir_check
+
+    - name: Show directory status
+      debug:
+        msg: "{{ dir_check.stdout_lines }}"

@@ -1,0 +1,21 @@
+- name: Fix Slurm Config for No-Database Mode
+  hosts: all
+  become: yes
+  tasks:
+    - name: Disable accounting in slurm.conf
+      lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^AccountingStorageType='
+        line: 'AccountingStorageType=accounting_storage/none'
+    
+    - name: Comment out SlurmDBD lines
+      replace:
+        path: /etc/slurm/slurm.conf
+        regexp: '^(AccountingStorageHost|AccountingStoragePort)'
+        replace: '# \1'
+
+    - name: Restart Slurm Controller
+      service:
+        name: slurmctld
+        state: restarted
+      when: "'head_nodes' in group_names"
