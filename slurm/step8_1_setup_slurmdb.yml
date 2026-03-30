@@ -1,0 +1,104 @@
+---
+- name: Setup Slurm Database and Accounting
+  hosts: head_nodes
+  become: yes
+  vars:
+    db_name: "slurm_acct_db"
+    db_user: "slurm"
+    db_password: "slurm123"
+    # Use inventory_hostname_short or a clean string to avoid FQDN issues in Slurm
+    cluster_hn: "head-node" 
+
+  tasks:
+    - name: 1. Install MariaDB and SlurmDBD packages
+      package:
+        name:
+          - mariadb-server
+          - slurmdbd
+          - python3-pymysql 
+        state: present
+
+    - name: Ensure MariaDB is started
+      service:
+        name: mariadb
+        state: started
+        enabled: yes
+
+    - name: 2. Configure MariaDB for Slurm
+      mysql_db:
+        name: "{{ db_name }}"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Create Slurm Database User
+      mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.*:ALL"
+        state: present
+        host: "localhost"
+        plugin: mysql_native_password
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: 3. Create Slurm Directories and Set Permissions
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+      loop:
+        - /var/spool/slurmctld
+        - /var/run/slurm
+        - /var/log/slurm
+        - /etc/slurm
+
+    - name: 4. Generate slurmdbd.conf
+      copy:
+        dest: /etc/slurm/slurmdbd.conf
+        owner: slurm
+        group: slurm
+        mode: '0600' # Strict permissions required for slurmdbd.conf
+        content: |
+          AuthType=auth/munge
+          DbdAddr=localhost
+          DbdHost={{ cluster_hn }}
+          SlurmUser=slurm
+          LogFile=/var/log/slurm/slurmdbd.log
+          PidFile=/var/run/slurm/slurmdbd.pid
+          StorageType=accounting_storage/mysql
+          StorageHost=localhost
+          StoragePass={{ db_password }}
+          StorageUser={{ db_user }}
+          StorageLoc={{ db_name }}
+      register: dbd_conf
+
+    - name: 5. Update slurm.conf Accounting (Smart Replace)
+      replace:
+        path: /etc/slurm/slurm.conf
+        regexp: "^#? *{{ item.key }}=.*"
+        replace: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: 'AccountingStorageType', value: 'accounting_storage/slurmdbd' }
+        - { key: 'AccountingStorageHost', value: "{{ cluster_hn }}" }
+        - { key: 'AccountingStoragePort', value: '6819' }
+        - { key: 'ClusterName', value: 'demo-cluster' }
+      register: slurm_conf_updates
+
+    - name: 6. Start and Enable SlurmDBD
+      systemd:
+        name: slurmdbd
+        state: restarted
+        enabled: yes
+
+    - name: 7. Wait for SlurmDBD to be ready
+      pause:
+        seconds: 5
+      when: dbd_conf.changed
+
+    - name: 8. Restart Slurm Controller (Apply Accounting)
+      systemd:
+        name: slurmctld
+        state: restarted
+        enabled: yes
+      # Restart if config changed OR if it was previously failed/stopped

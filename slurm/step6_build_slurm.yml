@@ -31,6 +31,9 @@
           - pkg-config
           - libmunge-dev
           - munge
+          - libmariadb-dev
+          - libmariadb-dev-compat
+          - mysql-common
         state: present
         update_cache: yes
 
@@ -51,8 +54,7 @@
           --sysconfdir=/etc/slurm \
           --with-munge \
           --with-hwloc \
-          --enable-slurmrestd \
-          --with-mysql_config=no
+          --enable-slurmrestd 
         make -j $(nproc)
         make install
       args:

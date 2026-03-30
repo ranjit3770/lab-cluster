@@ -4,19 +4,29 @@
   become: yes
 
   tasks:
-    # --- SECTION 0: ENVIRONMENT SETUP ---
-    - name: Ensure Slurm PATH is in .bashrc for the current session
-      lineinfile:
-        path: /root/.bashrc
-        line: 'export PATH=/usr/local/slurm/bin:/usr/local/slurm/sbin:$PATH'
-        state: present
+    # --- SECTION 0: SYSTEM IDENTIFICATION FIX ---
+    - name: Force hostname to match Slurm config (hyphenated)
+      hostname:
+        name: "head-node"
+      when: "'head_nodes' in group_names"
 
-    # --- SECTION 1: AUTO-FIX CONFIG (No Database Mode) ---
-    - name: Disable accounting storage to prevent socket timeouts
+    - name: Ensure /etc/hosts has local resolution for head-node
+      lineinfile:
+        path: /etc/hosts
+        line: "127.0.1.1 head-node"
+        state: present
+      when: "'head_nodes' in group_names"
+
+    # --- SECTION 1: AUTO-FIX CONFIG ---
+    - name: Set Accounting to none and fix naming
       lineinfile:
         path: /etc/slurm/slurm.conf
-        regexp: '^AccountingStorageType='
-        line: 'AccountingStorageType=accounting_storage/none'
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^AccountingStorageType=', line: 'AccountingStorageType=accounting_storage/none' }
+        - { regexp: '^ControlMachine=', line: 'ControlMachine=head-node' }
+        - { regexp: '^JobAcctGatherType=', line: 'JobAcctGatherType=jobacct_gather/none' }
 
     - name: Comment out SlurmDBD specific lines
       replace:
@@ -27,55 +37,58 @@
         - "AccountingStorageHost"
         - "AccountingStoragePort"
 
-    # --- SECTION 2: GLOBAL PRE-START ---
+    # --- SECTION 2: CLEANUP ---
+    - name: Cleanup Head Node stale state
+      block:
+        - name: Remove stale PID file
+          file:
+            path: /var/run/slurm/slurmctld.pid
+            state: absent
+
+        - name: Clear Slurm State Save directory
+          shell: "rm -rf /var/spool/slurmctld/*"
+      when: "'head_nodes' in group_names"
+
     - name: Ensure Munge is running
       service:
         name: munge
         state: restarted
         enabled: yes
 
-    # --- SECTION 3: HEAD NODE START SEQUENCE ---
-    - name: Initialize Head Node Services
-      block:
-        - name: Restart Slurm Controller
-          service:
-            name: slurmctld
-            state: restarted
-            enabled: yes
-
-        - name: Restart Slurmrestd
-          service:
-            name: slurmrestd
-            state: restarted
-            enabled: yes
-
-        - name: Start Slurmd on Head Node
-          service:
-            name: slurmd
-            state: restarted
-            enabled: yes
+    # --- SECTION 3: SERVICE STARTUP ---
+    - name: Start Slurm Controller
+      service:
+        name: slurmctld
+        state: restarted
+        enabled: yes
       when: "'head_nodes' in group_names"
 
-    # --- SECTION 4: WORKER NODE START SEQUENCE ---
-    - name: Start Slurmd on Workers
+    - name: Wait for Slurmctld to listen
+      wait_for:
+        host: 0.0.0.0
+        port: 6817
+        state: started
+        timeout: 30
+      when: "'head_nodes' in group_names"
+
+    - name: Start Slurmd (Head and Workers)
       service:
         name: slurmd
         state: restarted
         enabled: yes
-      when: "'cluster_nodes' in group_names"
 
-    # --- SECTION 5: VERIFICATION ---
-    - name: Wait for controller to wake up
-      pause:
-        seconds: 10
-
+    # --- SECTION 4: VERIFICATION ---
     - name: Check Cluster Status (sinfo)
       shell: |
         export PATH=/usr/local/slurm/bin:/usr/local/slurm/sbin:$PATH
         sinfo -N -l
       register: sinfo_output
       run_once: true
+      delegate_to: head_node
+      ignore_errors: yes 
 
     - name: Final Status Report
       debug:
-        msg: "{{ sinfo_output.stdout_lines }}"
+        msg: 
+          - "STDOUT: {{ sinfo_output.stdout_lines }}"
+          - "STDERR: {{ sinfo_output.stderr_lines }}"

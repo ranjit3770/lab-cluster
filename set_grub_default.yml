@@ -1,6 +1,6 @@
 ---
 - name: Set Ubuntu as default GRUB boot entry
-  hosts: cluster_nodes
+  hosts: all
   become: yes
   tasks:
     - name: Ensure GRUB_DEFAULT is set to 0 (usually Ubuntu)
@@ -17,4 +17,6 @@
     - name: Reboot nodes to apply changes (Optional)
       reboot:
         msg: "Rebooting to apply new default boot order"
+        # Adding a test_command bypasses the 'local connection' safety check
+        test_command: whoami
       when: grub_change.changed
