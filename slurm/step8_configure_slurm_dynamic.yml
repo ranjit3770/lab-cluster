@@ -40,7 +40,7 @@
           ClusterName=demo-cluster
           ControlMachine=head-node
           # Grabs IP of the first node in the head_nodes inventory group
-          ControlAddr={{ hostvars[groups['head_nodes'][0]]['ansible_host'] }}
+          ControlAddr={{ hostvars[groups['head_nodes'][0]]['ansible_ip'] }}
 
           # --- AUTHENTICATION & SECURITY ---
           AuthType=auth/munge
