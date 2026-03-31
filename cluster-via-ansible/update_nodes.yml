@@ -1,0 +1,36 @@
+---
+- name: Force Fix and Update Apt
+  hosts: cluster_nodes
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: 1. Kill any stuck apt/dpkg processes
+      shell: |
+        killall apt apt-get dpkg || true
+      ignore_errors: yes
+
+    - name: 2. Forcefully remove lock files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /var/lib/dpkg/lock
+        - /var/lib/dpkg/lock-frontend
+        - /var/lib/dpkg/lock
+        - /var/lib/apt/lists/lock
+        - /var/cache/apt/archives/lock
+
+    - name: 3. Fix interrupted dpkg configuration
+      shell: dpkg --configure -a
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: 4. Force repair broken dependencies
+      shell: apt-get install -f -y
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: 5. Update apt cache (The Goal)
+      apt:
+        update_cache: yes
+        force_apt_get: yes

@@ -1,0 +1,44 @@
+---
+- name: Clean up Slurm and Munge from Cluster
+  hosts: cluster_nodes
+  become: yes
+  tasks:
+    - name: Stop Slurm and Munge services
+      shell: |
+        systemctl stop slurmctld slurmd slurmdbd slurmrestd munge || true
+      ignore_errors: yes
+
+    - name: Purge Slurm and Munge packages
+      apt:
+        name: 
+          - "slurm*"
+          - "munge*"
+        state: absent
+        purge: yes
+        force_apt_get: yes
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Remove Slurm and Munge directories and files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /etc/slurm
+        - /var/spool/slurmctld
+        - /var/spool/slurmd
+        - /var/log/slurm_jobacct.log
+        - /var/log/slurmctld.log
+        - /var/log/slurmd.log
+        - /usr/local/slurm
+        - /run/munge
+        - /var/lib/munge
+        - /var/log/munge
+
+    - name: Final cleanup of any remaining Slurm-related wildcards
+      shell: rm -rf /var/spool/slurm* /var/log/slurm*
+
+    - name: Reboot the nodes
+      reboot:
+        msg: "Rebooting nodes after Slurm cleanup"
+        reboot_timeout: 600

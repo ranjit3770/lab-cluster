@@ -1,0 +1,92 @@
+---
+- name: Setup Slurm Database and Accounting
+  hosts: head_nodes
+  become: yes
+  vars:
+    db_name: "slurm_acct_db"
+    db_user: "slurm"
+    db_password: "slurm123"
+    # Hardcode to localhost for the DBD Host to ensure it binds correctly
+    cluster_hn: "localhost" 
+
+  tasks:
+    - name: 1. Install Dependencies
+      package:
+        name: [mariadb-server, slurmdbd, python3-pymysql, munge, libmariadb-dev, libmariadb-dev-compat]
+        state: present
+
+    - name: 2. Ensure Prerequisite Services are Running
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop: [mariadb, munge]
+
+    - name: 3. Wait for MariaDB Port
+      wait_for:
+        port: 3306
+        timeout: 30
+
+    - name: 4. Configure MariaDB for Slurm
+      mysql_db:
+        name: "{{ db_name }}"
+        state: present
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Create Slurm Database User
+      mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.*:ALL"
+        state: present
+        host: "localhost"
+        plugin: mysql_native_password
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: 5. Fix Directory Permissions
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+      loop: [/var/spool/slurmctld, /var/run/slurm, /var/log/slurm, /etc/slurm]
+
+    - name: 6. Generate slurmdbd.conf
+      copy:
+        dest: /etc/slurm/slurmdbd.conf
+        content: |
+          AuthType=auth/munge
+          DbdAddr=127.0.0.1
+          DbdHost={{ cluster_hn }}
+          SlurmUser=slurm
+          LogFile=/var/log/slurm/slurmdbd.log
+          PidFile=/var/run/slurm/slurmdbd.pid
+          StorageType=accounting_storage/mysql
+          StorageHost=localhost
+          StoragePass={{ db_password }}
+          StorageUser={{ db_user }}
+          StorageLoc={{ db_name }}
+        owner: slurm
+        group: slurm
+        mode: '0600'
+      register: dbd_config
+
+    - name: 7. Force Restart SlurmDBD
+      systemd:
+        name: slurmdbd
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+    - name: 8. Wait for SlurmDBD Port (6819)
+      wait_for:
+        port: 6819
+        host: 127.0.0.1
+        timeout: 60
+        msg: "SlurmDBD failed to start and listen on port 6819 within 60 seconds."
+
+    - name: 9. Final Validation Check
+      command: systemctl is-active slurmdbd
+      register: slurmdbd_status
+      changed_when: false

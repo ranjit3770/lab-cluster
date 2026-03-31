@@ -1,0 +1,18 @@
+[Unit]
+Description=Slurm REST Daemon
+After=network.target slurmctld.service
+Requires=slurmctld.service
+
+[Service]
+Type=simple
+User=slurmrestd
+Group=slurmrestd
+RuntimeDirectory=slurmrestd
+# This creates /run/slurmrestd/ with correct ownership automatically
+ExecStart=/usr/local/slurm/sbin/slurmrestd -a rest_auth/local unix:/run/slurmrestd/slurmrestd.socket
+Environment="LD_LIBRARY_PATH=/usr/local/slurm/lib/slurm:/usr/local/slurm/lib"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,48 @@
+---
+- name: Fix Slurm Accounting and Resume Nodes
+  hosts: all
+  become: yes
+  vars:
+    head_node_name: "head-node"
+
+  tasks:
+    - name: 1. Ensure Accounting is ENABLED in slurm.conf
+      replace:
+        path: /etc/slurm/slurm.conf
+        regexp: "{{ item.regexp }}"
+        replace: "{{ item.replace }}"
+      loop:
+        - { regexp: '^AccountingStorageType=.*', replace: 'AccountingStorageType=accounting_storage/slurmdbd' }
+        - { regexp: '^#\s*(AccountingStorageHost=.*)', replace: '\1' }
+        - { regexp: '^#\s*(AccountingStoragePort=.*)', replace: '\1' }
+      register: slurm_conf
+
+    - name: 2. Restart Slurm Services
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop: "{{ ('head_nodes' in group_names) | ternary(['slurmdbd', 'slurmctld'], ['slurmd']) }}"
+      when: slurm_conf.changed or force_restart | default(false)
+
+    - name: 3. Wait for services to settle
+      pause:
+        seconds: 5
+
+    - name: 4. Dynamically Resume ALL Down Nodes
+      delegate_to: head_node
+      run_once: true
+      shell: |
+        # Get list of all nodes in 'down' state according to Slurm
+        DOWN_NODES=$(sinfo -h -t down -o %N)
+        if [ ! -z "$DOWN_NODES" ]; then
+          scontrol update nodename=$DOWN_NODES state=resume
+        else
+          echo "No nodes currently in DOWN state."
+        fi
+      register: resume_output
+      when: "'head_nodes' in group_names"
+
+    - name: 5. Show Resume Result
+      debug:
+        msg: "{{ resume_output.stdout if resume_output.stdout is defined else 'No nodes needed resuming' }}"
+      when: "'head_nodes' in group_names"

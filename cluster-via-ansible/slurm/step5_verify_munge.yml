@@ -1,0 +1,30 @@
+---
+- name: Enable, Start, and Verify Munge
+  hosts: all
+  become: yes
+  tasks:
+    - name: Ensure Munge is enabled and started
+      service:
+        name: munge
+        state: started
+        enabled: yes
+
+    - name: Run Munge authentication test
+      # We check the exit code (rc) of the pipe
+      shell: munge -n | unmunge
+      register: munge_test
+      changed_when: false
+      ignore_errors: yes
+
+    - name: "Check for Success"
+      assert:
+        that:
+          - munge_test.rc == 0
+          - "'Success' in munge_test.stdout"
+        fail_msg: "Munge test failed on {{ inventory_hostname }}! Output was: {{ munge_test.stdout }}"
+        success_msg: "Munge verified on {{ inventory_hostname }}"
+
+    - name: Debug Output on Failure
+      debug:
+        var: munge_test.stdout_lines
+      when: munge_test.rc != 0

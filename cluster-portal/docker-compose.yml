@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------------
+  # 1. Database: MariaDB Engine for Identity & Job Registry
+  # --------------------------------------------------------------------------
+  database:
+    image: mariadb:10.6
+    container_name: portal_database
+    restart: always
+    command: [
+      "mysqld",
+      "--character-set-server=utf8mb4",
+      "--collation-server=utf8mb4_unicode_ci",
+      "--max-connections=200",
+      "--innodb-buffer-pool-size=512M"
+    ]
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-Amma@123}
+      MARIADB_DATABASE: strach_portal
+    ports:
+      - "3307:3306"
+    volumes:
+      - portal_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-Amma@123}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - portal_network
+
+  # --------------------------------------------------------------------------
+  # 2. Backend: Core Identity & Management Gateway (Scaled for 15 Users)
+  # --------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: portal_backend
+    restart: always
+    # Scaling: Use Gunicorn with 4 workers for high concurrency
+    entrypoint: ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-"]
+    environment:
+      - MYSQL_SERVER=database
+      - MYSQL_PORT=3306
+      - MYSQL_USER=root
+      - MYSQL_PASSWORD=${MYSQL_ROOT_PASSWORD:-Amma@123}
+      - MYSQL_DB=strach_portal
+      - DATA_STORAGE=/data_storage
+      - EXTERNAL_JOB_API_URL=http://job-api:9000
+    ports:
+      - "8000:8000"
+    volumes:
+      - /data_storage:/data_storage
+      - /etc/slurm:/etc/slurm:ro
+      - /var/run/munge/munge.socket.2:/var/run/munge/munge.socket.2:ro
+      - /run/slurmrestd:/run/slurmrestd:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - portal_network
+
+  # --------------------------------------------------------------------------
+  # 3. Job-API: Compute Fabrication & Slurm Dispatcher (Production Optimized)
+  # --------------------------------------------------------------------------
+  job-api:
+    build:
+      context: ./backend/job-api
+      dockerfile: Dockerfile
+    container_name: portal_job_api
+    restart: always
+    # Scaling: Use Gunicorn with 4 workers for workload dispatch stability
+    entrypoint: ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:9000", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-"]
+    environment:
+      - MYSQL_SERVER=database
+      - MYSQL_PORT=3306
+      - MYSQL_USER=slurm_user
+      - MYSQL_PASSWORD=slurmJob_Sub
+      - MYSQL_DB=slurm_jobs
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-Amma@123}
+      - DATA_ROOT=/data_storage
+    ports:
+      - "9000:9000"
+    volumes:
+      - /data_storage:/data_storage
+      - /etc/slurm:/etc/slurm:ro
+      - /var/run/munge/munge.socket.2:/var/run/munge/munge.socket.2:ro
+      - /run/slurmrestd:/run/slurmrestd:ro
+      - /etc/passwd:/etc/passwd:ro
+      - /etc/group:/etc/group:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - portal_network
+
+  # --------------------------------------------------------------------------
+  # 4. Frontend: High-Fidelity Management Dashboard
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
+    container_name: portal_frontend
+    restart: always
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_API_URL=
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    networks:
+      - portal_network
+
+networks:
+  portal_network:
+    driver: bridge
+
+volumes:
+  portal_db_data:
