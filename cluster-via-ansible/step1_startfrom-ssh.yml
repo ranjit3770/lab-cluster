@@ -1,0 +1,45 @@
+---
+- name: Verify and Sync SSH Keys
+  hosts: all
+  become: yes
+  tasks:
+    # --- CHECK PHASE ---
+    - name: Check if SSH Private Key exists on Head Node
+      stat:
+        path: /root/.ssh/id_rsa
+      register: ssh_key_stat
+      when: "'head_nodes' in group_names"
+
+    - name: Report if Key is missing on Head Node
+      debug:
+        msg: "SSH Key not found. It will be generated in the next step."
+      when: "'head_nodes' in group_names" and not ssh_key_stat.stat.exists
+
+    # --- ACTION PHASE (Head Node) ---
+    - name: Generate SSH key if it does not exist
+      user:
+        name: root
+        generate_ssh_key: yes
+        ssh_key_bits: 2048
+        ssh_key_file: .ssh/id_rsa
+      when: "'head_nodes' in group_names"
+
+    - name: Slurp the Public Key for distribution
+      slurp:
+        src: /root/.ssh/id_rsa.pub
+      register: head_pub_key
+      delegate_to: head_node
+      run_once: true
+
+    # --- CHECK & ACTION PHASE (Worker Nodes) ---
+    - name: Ensure Public Key is present on Worker Nodes
+      authorized_key:
+        user: root
+        state: present
+        key: "{{ head_pub_key['content'] | b64decode }}"
+      register: auth_key_result
+
+    - name: Report status of Worker Node Key
+      debug:
+        msg: "Key was already present (No change needed)"
+      when: not auth_key_result.changed
