@@ -6,35 +6,26 @@
     db_name: "slurm_acct_db"
     db_user: "slurm"
     db_password: "slurm123"
-    cluster_hn: "{{ inventory_hostname }}"
+    # Hardcode to localhost for the DBD Host to ensure it binds correctly
+    cluster_hn: "localhost" 
 
   tasks:
-    - name: Install MySQL development headers
-      package:
-        name: 
-          - libmariadb-dev
-          - libmariadb-dev-compat
-          - mysql-common
-        state: present
-    
     - name: 1. Install Dependencies
       package:
-        name: [mariadb-server, slurmdbd, python3-pymysql, munge]
+        name: [mariadb-server, slurmdbd, python3-pymysql, munge, libmariadb-dev, libmariadb-dev-compat]
         state: present
 
-    - name: 2. Ensure Slurm User Exists
-      user:
-        name: slurm
-        shell: /bin/false
-        system: yes
-        state: present
-
-    - name: 3. Ensure Prerequisite Services are Running
+    - name: 2. Ensure Prerequisite Services are Running
       service:
         name: "{{ item }}"
         state: started
         enabled: yes
       loop: [mariadb, munge]
+
+    - name: 3. Wait for MariaDB Port
+      wait_for:
+        port: 3306
+        timeout: 30
 
     - name: 4. Configure MariaDB for Slurm
       mysql_db:
@@ -61,15 +52,7 @@
         mode: '0755'
       loop: [/var/spool/slurmctld, /var/run/slurm, /var/log/slurm, /etc/slurm]
 
-    - name: 6. Initialize Log File (Corrected Syntax)
-      file:
-        path: /var/log/slurm/slurmdbd.log
-        state: touch
-        owner: slurm
-        group: slurm
-        mode: '0644'
-
-    - name: 7. Generate slurmdbd.conf
+    - name: 6. Generate slurmdbd.conf
       copy:
         dest: /etc/slurm/slurmdbd.conf
         content: |
@@ -87,48 +70,23 @@
         owner: slurm
         group: slurm
         mode: '0600'
+      register: dbd_config
 
-    - name: 8. Smart Update slurm.conf
-      replace:
-        path: /etc/slurm/slurm.conf
-        regexp: "^#? *{{ item.key }}=.*"
-        replace: "{{ item.key }}={{ item.value }}"
-      loop:
-        - { key: 'AccountingStorageType', value: 'accounting_storage/slurmdbd' }
-        - { key: 'AccountingStorageHost', value: "{{ cluster_hn }}" }
-        - { key: 'AccountingStoragePort', value: '6819' }
-
-    - name: 9. Force Path Symlinks (Source-Built Slurm Path)
-      file:
-        path: "/usr/local/slurm/etc"
-        state: directory
-        owner: slurm
-        group: slurm
-
-    - name: Create Symlinks
-      file:
-        src: "/etc/slurm/{{ item }}"
-        dest: "/usr/local/slurm/etc/{{ item }}"
-        state: link
-        force: yes
-      loop: [slurm.conf, slurmdbd.conf]
-
-    - name: 10. Start SlurmDBD
+    - name: 7. Force Restart SlurmDBD
       systemd:
         name: slurmdbd
         state: restarted
         enabled: yes
         daemon_reload: yes
 
-    - name: 11. Wait for SlurmDBD to become active
-      pause:
-        seconds: 5
+    - name: 8. Wait for SlurmDBD Port (6819)
+      wait_for:
+        port: 6819
+        host: 127.0.0.1
+        timeout: 60
+        msg: "SlurmDBD failed to start and listen on port 6819 within 60 seconds."
 
-    - name: 12. Final Validation Check
+    - name: 9. Final Validation Check
       command: systemctl is-active slurmdbd
       register: slurmdbd_status
       changed_when: false
-      # If it's still "activating", this retry logic will give it more time
-      until: slurmdbd_status.rc == 0
-      retries: 5
-      delay: 2

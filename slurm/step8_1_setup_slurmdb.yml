@@ -6,7 +6,6 @@
     db_name: "slurm_acct_db"
     db_user: "slurm"
     db_password: "slurm123"
-    # Use inventory_hostname_short or a clean string to avoid FQDN issues in Slurm
     cluster_hn: "head-node" 
 
   tasks:
@@ -18,11 +17,22 @@
           - python3-pymysql 
         state: present
 
-    - name: Ensure MariaDB is started
-      service:
+    # NEW: Fix potential permission issues before starting
+    - name: Ensure MariaDB data directory has correct permissions
+      file:
+        path: /var/lib/mysql
+        owner: mysql
+        group: mysql
+        state: directory
+        recurse: yes
+
+    - name: Ensure MariaDB is started and enabled
+      systemd:
         name: mariadb
-        state: started
+        state: started  # 'started' is safer for initial setup
         enabled: yes
+      register: mariadb_start
+      ignore_errors: no
 
     - name: 2. Configure MariaDB for Slurm
       mysql_db:
@@ -58,7 +68,7 @@
         dest: /etc/slurm/slurmdbd.conf
         owner: slurm
         group: slurm
-        mode: '0600' # Strict permissions required for slurmdbd.conf
+        mode: '0600'
         content: |
           AuthType=auth/munge
           DbdAddr=localhost
@@ -73,7 +83,7 @@
           StorageLoc={{ db_name }}
       register: dbd_conf
 
-    - name: 5. Update slurm.conf Accounting (Smart Replace)
+    - name: 5. Update slurm.conf Accounting
       replace:
         path: /etc/slurm/slurm.conf
         regexp: "^#? *{{ item.key }}=.*"
@@ -85,20 +95,22 @@
         - { key: 'ClusterName', value: 'demo-cluster' }
       register: slurm_conf_updates
 
-    - name: 6. Start and Enable SlurmDBD
+    - name: 6. Restart SlurmDBD if config changed
       systemd:
         name: slurmdbd
         state: restarted
         enabled: yes
-
-    - name: 7. Wait for SlurmDBD to be ready
-      pause:
-        seconds: 5
       when: dbd_conf.changed
 
-    - name: 8. Restart Slurm Controller (Apply Accounting)
+    - name: 7. Ensure SlurmDBD is running
+      systemd:
+        name: slurmdbd
+        state: started
+        enabled: yes
+
+    - name: 8. Restart Slurm Controller
       systemd:
         name: slurmctld
         state: restarted
         enabled: yes
-      # Restart if config changed OR if it was previously failed/stopped
+      when: slurm_conf_updates.changed
