@@ -1,0 +1,7 @@
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step1_startfrom-ssh.yml --ask-vault-pass --ask-pass
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step2_set_grub_default.yml --ask-vault-pass
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step2_5_set_hostnames.yml --ask-vault-pass
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step3_update_nodes.yml --ask-vault-pass
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini finally/append_slurm_node.yml --ask-vault-pass
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini cluster_manage.yml --ask-vault-pass

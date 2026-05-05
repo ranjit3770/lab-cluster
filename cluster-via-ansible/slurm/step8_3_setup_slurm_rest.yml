@@ -1,0 +1,110 @@
+---
+- name: Full Dynamic Setup of Slurm REST API
+  hosts: head_nodes
+  become: yes
+  vars:
+    # Path consistency with Step 6 & 7
+    slurm_bin_path: "/usr/local/slurm/bin"
+    slurm_sbin_path: "/usr/local/slurm/sbin"
+    slurm_lib_path: "/usr/local/slurm/lib"
+    slurm_conf_path: "/etc/slurm/slurm.conf"  # Points to the unified config path
+    jwt_key_path: "/var/spool/slurm/jwt_hs256.key" # Moved to a verified directory from Step 7
+    api_user: "slurmapi"
+
+  tasks:
+    # --- SECTION 1: USER SETUP ---
+    - name: 1. Create dedicated Slurm API user
+      ansible.builtin.user:
+        name: "{{ api_user }}"
+        shell: /usr/sbin/nologin
+        system: yes
+        create_home: no
+        groups: slurm # Added to ensure it can interact with slurm files if needed
+
+    # --- SECTION 2: JWT KEY MANAGEMENT ---
+    - name: 2. Ensure JWT Key directory exists
+      ansible.builtin.file:
+        path: "{{ jwt_key_path | dirname }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+
+    - name: 3. Generate JWT HS256 Key if missing
+      ansible.builtin.shell: |
+        if [ ! -f {{ jwt_key_path }} ]; then
+          dd if=/dev/urandom bs=1 count=2048 of={{ jwt_key_path }}
+          chown slurm:{{ api_user }} {{ jwt_key_path }}
+          chmod 0640 {{ jwt_key_path }}
+        fi
+      args:
+        creates: "{{ jwt_key_path }}"
+
+    - name: 4. Set strict permissions on JWT Key (Reinforcement)
+      ansible.builtin.file:
+        path: "{{ jwt_key_path }}"
+        owner: slurm
+        group: "{{ api_user }}"
+        mode: '0640'
+
+    # --- SECTION 3: CONFIGURATION ---
+    - name: 5. Configure JWT in slurm.conf
+      ansible.builtin.blockinfile:
+        path: "{{ slurm_conf_path }}"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - JWT AUTH"
+        block: |
+          AuthAltTypes=auth/jwt
+          AuthAltParameters=jwt_key={{ jwt_key_path }}
+      register: slurm_conf_update
+
+    # --- SECTION 4: SERVICE MANAGEMENT ---
+    - name: 6. Restart slurmctld to apply JWT settings
+      ansible.builtin.systemd:
+        name: slurmctld
+        state: restarted
+      when: slurm_conf_update.changed
+
+    - name: 7. Create slurmrestd systemd service unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/slurmrestd.service
+        content: |
+          [Unit]
+          Description=Slurm REST daemon
+          After=slurmctld.service network.target
+          ConditionPathExists={{ slurm_conf_path }}
+
+          [Service]
+          # Ensure libraries from /usr/local/slurm/lib are found
+          Environment="LD_LIBRARY_PATH={{ slurm_lib_path }}"
+          User={{ api_user }}
+          Group={{ api_user }}
+          # The -a rest_auth/jwt flag requires the plugin compiled in Step 6
+          ExecStart={{ slurm_sbin_path }}/slurmrestd -a rest_auth/jwt 0.0.0.0:6820
+          Restart=on-failure
+          # Give the process access to the PID directory created in Step 7
+          RuntimeDirectory=slurm
+          RuntimeDirectoryMode=0755
+
+          [Install]
+          WantedBy=multi-user-system.target
+
+    - name: 8. Start and Enable slurmrestd
+      ansible.builtin.systemd:
+        name: slurmrestd
+        state: restarted
+        daemon_reload: yes
+        enabled: yes
+
+    # --- SECTION 5: VERIFICATION ---
+    - name: 9. Wait for slurmrestd Port (6820)
+      ansible.builtin.wait_for:
+        port: 6820
+        host: 0.0.0.0
+        timeout: 15
+        msg: "slurmrestd failed to bind to port 6820. Check journalctl -u slurmrestd"
+
+    - name: 10. Check slurmrestd service status
+      ansible.builtin.command: systemctl is-active slurmrestd
+      register: rest_status
+      changed_when: false
+      failed_when: rest_status.rc != 0

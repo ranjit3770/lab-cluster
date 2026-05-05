@@ -1,0 +1,34 @@
+---
+- name: Choose Slurm cluster operation
+  hosts: localhost
+  gather_facts: no
+  vars_prompt:
+    - name: cluster_operation
+      prompt: "Type setup for full cluster setup, or append to add one new worker"
+      private: no
+    - name: requested_new_node_name
+      prompt: "For append only, enter the new inventory host name, example worker_node29"
+      private: no
+      default: ""
+
+  tasks:
+    - name: Validate selected cluster operation
+      ansible.builtin.assert:
+        that:
+          - cluster_operation | lower in ['setup', 'append']
+          - cluster_operation | lower != 'append' or requested_new_node_name | length > 0
+        fail_msg: "Use setup for full deployment, or append with a new worker inventory name."
+
+    - name: Save selected operation for imported playbooks
+      ansible.builtin.set_fact:
+        cluster_operation_choice: "{{ cluster_operation | lower }}"
+        requested_append_node_name: "{{ requested_new_node_name }}"
+
+- import_playbook: step4_main.yml
+  when: hostvars['localhost']['cluster_operation_choice'] == 'setup'
+
+- import_playbook: finally/append_slurm_node.yml
+  vars:
+    new_node_name: "{{ hostvars['localhost']['requested_append_node_name'] }}"
+    append_confirmation: "append"
+  when: hostvars['localhost']['cluster_operation_choice'] == 'append'

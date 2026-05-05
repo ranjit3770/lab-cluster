@@ -1,0 +1,31 @@
+# General
+.DS_Store
+.vscode/
+.idea/
+*.log
+*.tmp
+
+# Backend (Python)
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/.env.local
+backend/.env.test
+!backend/.env.example
+backend/.pytest_cache/
+backend/dist/
+backend/build/
+backend/*.egg-info/
+.coverage
+htmlcov/
+
+# Frontend (Node)
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/test-results/

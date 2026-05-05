@@ -1,0 +1,31 @@
+---
+- name: Dynamically Resume Down Slurm Nodes
+  hosts: head_nodes
+  become: yes
+  vars:
+    slurm_bin_path: "/usr/local/slurm/bin"
+
+  tasks:
+    - name: 1. Identify nodes in DOWN state
+      ansible.builtin.shell: |
+        export PATH={{ slurm_bin_path }}:$PATH
+        {{ slurm_bin_path }}/sinfo -h -t down -o %N
+      register: down_nodes_output
+      changed_when: false
+
+    - name: 2. Resume nodes if any are down
+      ansible.builtin.shell: |
+        export PATH={{ slurm_bin_path }}:$PATH
+        {{ slurm_bin_path }}/scontrol update nodename={{ item }} state=resume
+      loop: "{{ down_nodes_output.stdout_lines }}"
+      when: down_nodes_output.stdout != ""
+      register: resume_result
+
+    - name: 3. Report Results
+      ansible.builtin.debug:
+        msg: >
+          {% if down_nodes_output.stdout == "" %}
+          All nodes are already healthy. No action taken.
+          {% else %}
+          Resumed the following nodes: {{ down_nodes_output.stdout }}
+          {% endif %}

@@ -1,0 +1,42 @@
+[head_nodes]
+head_node ansible_host=127.0.0.1 ansible_ip=172.17.181.171 ansible_connection=local
+
+[cluster_nodes]
+worker_node1  ansible_host=172.17.181.153
+worker_node2  ansible_host=172.17.181.154
+worker_node3  ansible_host=172.17.181.155
+worker_node4  ansible_host=172.17.181.156
+worker_node5  ansible_host=172.17.181.157
+worker_node6  ansible_host=172.17.181.158
+worker_node7  ansible_host=172.17.181.159
+worker_node8  ansible_host=172.17.181.160
+worker_node9  ansible_host=172.17.181.161
+worker_node10 ansible_host=172.17.181.162
+worker_node11 ansible_host=172.17.181.163
+worker_node12 ansible_host=172.17.181.164
+worker_node13 ansible_host=172.17.181.165
+worker_node14 ansible_host=172.17.181.166
+worker_node15 ansible_host=172.17.181.167
+worker_node16 ansible_host=172.17.181.168
+worker_node17 ansible_host=172.17.181.169
+worker_node18 ansible_host=172.17.181.170
+
+[head_nodes:vars]
+ansible_user=root
+ansible_python_interpreter=/usr/bin/python3
+
+[cluster_nodes:vars]
+ansible_user=root
+ansible_python_interpreter=/usr/bin/python3
+
+[windows_nodes]
+windows_worker_node1 ansible_host=172.17.181.170
+
+[windows_nodes:vars]
+ansible_user=Administrator
+ansible_password="{{ win_admin_pass }}"
+ansible_connection=winrm
+ansible_winrm_server_cert_validation=ignore
+ansible_winrm_transport=ntlm
+ansible_port=5985
+ansible_winrm_scheme=http

@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pydantic
+requests
+requests-unixsocket
+mysql-connector-python
+gunicorn
+notebook
