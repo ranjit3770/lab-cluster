@@ -1,0 +1,30 @@
+---
+- name: Check and Repair Slurm Service on Workers
+  hosts: cluster_nodes
+  become: yes
+  gather_facts: no  # Set to no for speed, or yes if you need OS info
+  tasks:
+    - name: 1. Get Slurmd Service Status
+      ansible.builtin.systemd:
+        name: slurmd
+      register: slurm_service_status
+
+    - name: 2. Report Status
+      ansible.builtin.debug:
+        msg: 
+          - "Host: {{ inventory_hostname }}"
+          - "Active State: {{ slurm_service_status.status.ActiveState }}"
+          - "Sub State: {{ slurm_service_status.status.SubState }}"
+
+    - name: 3. Attempt to Start Slurmd if it is Down
+      ansible.builtin.systemd:
+        name: slurmd
+        state: started
+        enabled: yes
+      when: slurm_service_status.status.ActiveState != "active"
+      register: repair_attempt
+
+    - name: 4. Final Confirmation
+      ansible.builtin.debug:
+        msg: "Service was down but has been restarted on {{ inventory_hostname }}"
+      when: repair_attempt.changed

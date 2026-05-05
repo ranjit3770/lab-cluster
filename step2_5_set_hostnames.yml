@@ -1,0 +1,26 @@
+---
+- name: Set Hostnames and Configure /etc/hosts
+  hosts: head_nodes,cluster_nodes
+  become: yes
+  tasks:
+    - name: Set the system hostname to match Ansible inventory name
+      hostname:
+        name: "{{ inventory_hostname | replace('_', '-') }}"
+
+    - name: Ensure correct self-referencing in /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname | replace('_', '-') }}"
+
+    - name: Generate /etc/hosts mappings for the entire Slurm cluster
+      blockinfile:
+        path: /etc/hosts
+        marker: "# {mark} SLURM HOSTS (Ansible Managed)"
+        content: |
+          {% for host in groups['head_nodes'] %}
+          {{ hostvars[host]['ansible_ip'] | default(hostvars[host]['ansible_host']) }} {{ host | replace('_', '-') }} {{ host }}
+          {% endfor %}
+          {% for host in groups['cluster_nodes'] %}
+          {{ hostvars[host]['ansible_host'] }} {{ host | replace('_', '-') }} {{ host }}
+          {% endfor %}

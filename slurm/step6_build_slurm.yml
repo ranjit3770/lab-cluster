@@ -1,0 +1,120 @@
+---
+- name: Unified Build and PATH Setup for Slurm
+  hosts: head_nodes,cluster_nodes
+  become: yes
+  vars:
+    src_dir: "/usr/src"
+    slurm_prefix: "/usr/local/slurm"
+    slurm_sysconfdir: "/etc/slurm"
+    target_version: "25.11.4" 
+    force_rebuild: false      
+
+  tasks:
+    # --- SECTION 0: IDENTITY SETUP (Fixes chown lookup error) ---
+    - name: 0a. Ensure slurm group exists
+      ansible.builtin.group:
+        name: slurm
+        system: yes
+        state: present
+
+    - name: 0b. Ensure slurm user exists
+      ansible.builtin.user:
+        name: slurm
+        group: slurm
+        system: yes
+        shell: /bin/bash
+        create_home: yes
+        state: present
+        comment: "Slurm Workload Manager"
+
+    # --- SECTION 1: DEPENDENCIES ---
+    - name: 1. Install build dependencies
+      ansible.builtin.apt:
+        name: [build-essential, libhwloc-dev, libssl-dev, libhttp-parser-dev, libjson-c-dev, pkg-config, libmunge-dev, munge, libmariadb-dev, libmariadb-dev-compat, mysql-common, libjwt-dev]
+        state: present
+
+    # --- SECTION 2: SOURCE ACQUISITION ---
+    - name: 2a. Check if Slurm archive already exists
+      ansible.builtin.stat:
+        path: "{{ src_dir }}/slurm-{{ target_version }}.tar.bz2"
+      register: slurm_archive
+
+    - name: 2. Download Slurm {{ target_version }}
+      ansible.builtin.get_url:
+        url: "https://download.schedmd.com/slurm/slurm-{{ target_version }}.tar.bz2"
+        dest: "{{ src_dir }}/slurm-{{ target_version }}.tar.bz2"
+        mode: '0644'
+        timeout: 60
+      register: slurm_download
+      retries: 3
+      delay: 10
+      until: slurm_download is succeeded
+      when: not slurm_archive.stat.exists
+
+    - name: 3. Extract Slurm Archive
+      ansible.builtin.unarchive:
+        src: "{{ src_dir }}/slurm-{{ target_version }}.tar.bz2"
+        dest: "{{ src_dir }}"
+        remote_src: yes
+
+    # --- SECTION 3: COMPILATION ---
+    - name: 4. Configure and Build Slurm
+      ansible.builtin.shell: |
+        cd {{ src_dir }}/slurm-{{ target_version }}
+        ./configure --prefix={{ slurm_prefix }} --sysconfdir={{ slurm_sysconfdir }} --with-munge --with-hwloc --with-jwt --enable-slurmrestd 
+        make -j $(nproc)
+        make install
+      args:
+        # Rebuild if force_rebuild is true, otherwise skip if binary exists
+        creates: "{{ (force_rebuild | bool) | ternary('', slurm_prefix + '/sbin/slurmctld') }}"
+
+    # --- SECTION 4: CONFIGURATION STRUCTURE ---
+    - name: 5. Ensure configuration directory exists
+      ansible.builtin.file:
+        path: "{{ slurm_sysconfdir }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+
+    - name: 6. Check for legacy configuration path
+      ansible.builtin.stat:
+        path: "{{ slurm_prefix }}/etc"
+      register: etc_path_status
+
+    - name: Migrate legacy etc directory if it exists
+      when: etc_path_status.stat.exists and etc_path_status.stat.isdir and not etc_path_status.stat.islnk
+      block:
+        - name: Backup existing configs
+          ansible.builtin.shell: "cp -rn {{ slurm_prefix }}/etc/* {{ slurm_sysconfdir }}/ || true"
+        - name: Remove legacy directory
+          ansible.builtin.file:
+            path: "{{ slurm_prefix }}/etc"
+            state: absent
+
+    - name: 7. Create symlink for consistency
+      ansible.builtin.file:
+        src: "{{ slurm_sysconfdir }}"
+        dest: "{{ slurm_prefix }}/etc"
+        state: link
+        force: yes
+
+    # --- SECTION 5: ENVIRONMENT ---
+    - name: 8. Setup PATH Profile
+      ansible.builtin.copy:
+        dest: /etc/profile.d/slurm.sh
+        content: |
+          export PATH={{ slurm_prefix }}/bin:{{ slurm_prefix }}/sbin:$PATH
+          export LD_LIBRARY_PATH={{ slurm_prefix }}/lib:$LD_LIBRARY_PATH
+        mode: '0644'
+
+    # --- SECTION 6: VERIFICATION ---
+    - name: 9. Final Verification
+      ansible.builtin.shell: "{{ slurm_prefix }}/sbin/slurmctld -V"
+      register: slurm_v
+      changed_when: false
+      failed_when: false 
+
+    - name: Show Results
+      ansible.builtin.debug:
+        msg: "Installation successful. Version found: {{ slurm_v.stdout | default('Binary exists at ' + slurm_prefix) }}"

@@ -1,0 +1,682 @@
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini finally/repair_unknown_slurm_nodes.yml
+
+PLAY [Detect UNKNOWN Slurm nodes] ******************************************************************************************************************************************************
+
+TASK [Find Slurm nodes in UNKNOWN state] ***********************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:40 +0530 (0:00:00.007)       0:00:00.007 *********** 
+ok: [head_node]
+
+TASK [Show UNKNOWN nodes found by Slurm] ***********************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:40 +0530 (0:00:00.652)       0:00:00.660 *********** 
+ok: [head_node] => {
+    "msg": [
+        "worker-node19",
+        "worker-node20",
+        "worker-node21",
+        "worker-node22",
+        "worker-node23",
+        "worker-node24",
+        "worker-node25",
+        "worker-node26",
+        "worker-node27",
+        "worker-node28"
+    ]
+}
+
+TASK [Save UNKNOWN worker inventory names] *********************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:40 +0530 (0:00:00.031)       0:00:00.692 *********** 
+ok: [head_node]
+
+PLAY [Restart slurmd only on UNKNOWN worker nodes] *************************************************************************************************************************************
+
+TASK [Ensure hostname matches Slurm NodeName] ******************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:40 +0530 (0:00:00.040)       0:00:00.732 *********** 
+skipping: [worker_node1]
+skipping: [worker_node3]
+skipping: [worker_node2]
+skipping: [worker_node4]
+skipping: [worker_node5]
+skipping: [worker_node6]
+skipping: [worker_node7]
+skipping: [worker_node8]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node13]
+skipping: [worker_node12]
+skipping: [worker_node14]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+ok: [worker_node21]
+ok: [worker_node20]
+ok: [worker_node22]
+ok: [worker_node26]
+ok: [worker_node27]
+ok: [worker_node19]
+ok: [worker_node24]
+ok: [worker_node28]
+ok: [worker_node23]
+ok: [worker_node25]
+
+TASK [Ensure local hostname resolves correctly] ****************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:42 +0530 (0:00:01.192)       0:00:01.925 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node3]
+skipping: [worker_node4]
+skipping: [worker_node5]
+skipping: [worker_node7]
+skipping: [worker_node6]
+skipping: [worker_node8]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node12]
+skipping: [worker_node13]
+skipping: [worker_node14]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+ok: [worker_node19]
+ok: [worker_node20]
+ok: [worker_node26]
+ok: [worker_node24]
+ok: [worker_node21]
+ok: [worker_node25]
+ok: [worker_node27]
+ok: [worker_node22]
+ok: [worker_node23]
+ok: [worker_node28]
+
+TASK [Clear failed slurmd state] *******************************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:42 +0530 (0:00:00.405)       0:00:02.330 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node3]
+skipping: [worker_node4]
+skipping: [worker_node5]
+skipping: [worker_node6]
+skipping: [worker_node8]
+skipping: [worker_node7]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node12]
+skipping: [worker_node13]
+skipping: [worker_node14]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node18]
+skipping: [worker_node17]
+ok: [worker_node19]
+ok: [worker_node22]
+ok: [worker_node20]
+ok: [worker_node23]
+ok: [worker_node21]
+ok: [worker_node24]
+ok: [worker_node26]
+ok: [worker_node28]
+ok: [worker_node27]
+ok: [worker_node25]
+
+TASK [Ensure munge is running] *********************************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:42 +0530 (0:00:00.377)       0:00:02.707 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node3]
+skipping: [worker_node5]
+skipping: [worker_node4]
+skipping: [worker_node6]
+skipping: [worker_node7]
+skipping: [worker_node8]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node12]
+skipping: [worker_node13]
+skipping: [worker_node14]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+ok: [worker_node19]
+ok: [worker_node22]
+ok: [worker_node26]
+ok: [worker_node20]
+ok: [worker_node23]
+ok: [worker_node21]
+ok: [worker_node25]
+ok: [worker_node24]
+ok: [worker_node28]
+ok: [worker_node27]
+
+TASK [Avoid cgroup proctrack on nodes without mounted cgroup v1 controllers] ***********************************************************************************************************
+Tuesday 05 May 2026  15:21:43 +0530 (0:00:00.634)       0:00:03.341 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node3]
+skipping: [worker_node4]
+skipping: [worker_node5]
+skipping: [worker_node6]
+skipping: [worker_node7]
+skipping: [worker_node8]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node12]
+skipping: [worker_node13]
+skipping: [worker_node14]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+changed: [worker_node19]
+changed: [worker_node27]
+changed: [worker_node26]
+changed: [worker_node20]
+changed: [worker_node22]
+changed: [worker_node21]
+changed: [worker_node23]
+changed: [worker_node25]
+changed: [worker_node28]
+changed: [worker_node24]
+
+TASK [Restart slurmd on UNKNOWN node] **************************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:43 +0530 (0:00:00.434)       0:00:03.776 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node3]
+skipping: [worker_node4]
+skipping: [worker_node5]
+skipping: [worker_node6]
+skipping: [worker_node8]
+skipping: [worker_node7]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node12]
+skipping: [worker_node13]
+skipping: [worker_node14]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+changed: [worker_node19]
+changed: [worker_node20]
+changed: [worker_node23]
+changed: [worker_node22]
+changed: [worker_node21]
+changed: [worker_node25]
+changed: [worker_node24]
+changed: [worker_node27]
+changed: [worker_node26]
+changed: [worker_node28]
+
+TASK [Verify slurmd is active] *********************************************************************************************************************************************************
+Tuesday 05 May 2026  15:21:44 +0530 (0:00:00.789)       0:00:04.565 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node3]
+skipping: [worker_node5]
+skipping: [worker_node4]
+skipping: [worker_node6]
+skipping: [worker_node7]
+skipping: [worker_node8]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node12]
+skipping: [worker_node13]
+skipping: [worker_node14]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+ok: [worker_node19]
+ok: [worker_node20]
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (12 retries left).
+ok: [worker_node21]
+ok: [worker_node23]
+ok: [worker_node25]
+ok: [worker_node22]
+ok: [worker_node27]
+ok: [worker_node28]
+ok: [worker_node26]
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (11 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (10 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (9 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (8 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (7 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (6 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (5 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (4 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (3 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (2 retries left).
+FAILED - RETRYING: [worker_node24]: Verify slurmd is active (1 retries left).
+[ERROR]: Task failed: Action failed: non-zero return code
+Origin: /opt/amritacluster/cluster-via-ansible/finally/repair_unknown_slurm_nodes.yml:99:7
+
+97       when: inventory_hostname in unknown_worker_inventory_names
+98
+99     - name: Verify slurmd is active
+         ^ column 7
+
+ok: [worker_node24]
+
+TASK [Show slurmd status if it did not become active] **********************************************************************************************************************************
+Tuesday 05 May 2026  15:22:47 +0530 (0:01:03.052)       0:01:07.618 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node3]
+skipping: [worker_node4]
+skipping: [worker_node5]
+skipping: [worker_node6]
+skipping: [worker_node7]
+skipping: [worker_node8]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node12]
+skipping: [worker_node13]
+skipping: [worker_node14]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+skipping: [worker_node19]
+skipping: [worker_node21]
+skipping: [worker_node20]
+skipping: [worker_node22]
+skipping: [worker_node26]
+skipping: [worker_node23]
+skipping: [worker_node28]
+skipping: [worker_node25]
+skipping: [worker_node27]
+ok: [worker_node24]
+
+TASK [Show slurmd journal if it did not become active] *********************************************************************************************************************************
+Tuesday 05 May 2026  15:22:48 +0530 (0:00:00.411)       0:01:08.029 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node3]
+skipping: [worker_node4]
+skipping: [worker_node6]
+skipping: [worker_node7]
+skipping: [worker_node5]
+skipping: [worker_node10]
+skipping: [worker_node8]
+skipping: [worker_node9]
+skipping: [worker_node13]
+skipping: [worker_node12]
+skipping: [worker_node14]
+skipping: [worker_node11]
+skipping: [worker_node15]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+skipping: [worker_node19]
+skipping: [worker_node20]
+skipping: [worker_node21]
+skipping: [worker_node22]
+skipping: [worker_node23]
+skipping: [worker_node25]
+skipping: [worker_node26]
+skipping: [worker_node27]
+skipping: [worker_node28]
+ok: [worker_node24]
+
+TASK [Display slurmd failure details] **************************************************************************************************************************************************
+Tuesday 05 May 2026  15:22:48 +0530 (0:00:00.543)       0:01:08.573 *********** 
+skipping: [worker_node1]
+skipping: [worker_node2]
+skipping: [worker_node4]
+skipping: [worker_node3]
+skipping: [worker_node5]
+skipping: [worker_node6]
+skipping: [worker_node7]
+skipping: [worker_node8]
+skipping: [worker_node9]
+skipping: [worker_node10]
+skipping: [worker_node11]
+skipping: [worker_node12]
+skipping: [worker_node13]
+skipping: [worker_node15]
+skipping: [worker_node14]
+skipping: [worker_node16]
+skipping: [worker_node17]
+skipping: [worker_node18]
+skipping: [worker_node19]
+skipping: [worker_node20]
+skipping: [worker_node21]
+skipping: [worker_node22]
+skipping: [worker_node23]
+skipping: [worker_node25]
+skipping: [worker_node26]
+ok: [worker_node24] => {
+    "msg": [
+        [
+            "× slurmd.service - Slurm node daemon",
+            "     Loaded: loaded (/etc/systemd/system/slurmd.service; enabled; preset: enabled)",
+            "     Active: failed (Result: exit-code) since Tue 2026-05-05 15:21:45 IST; 1min 2s ago",
+            "   Duration: 29ms",
+            "    Process: 68530 ExecStart=/usr/local/slurm/sbin/slurmd -D (code=exited, status=1/FAILURE)",
+            "   Main PID: 68530 (code=exited, status=1/FAILURE)",
+            "        CPU: 25ms",
+            "",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Scheduled restart job, restart counter is at 5.",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Start request repeated too quickly.",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Failed with result 'exit-code'.",
+            "May 05 15:21:45 worker-node24 systemd[1]: Failed to start slurmd.service - Slurm node daemon."
+        ],
+        [
+            "May 05 15:21:45 worker-node24 slurmd[68524]: [2026-05-05T15:21:45.244] error: cgroup namespace 'memory' not mounted. aborting",
+            "May 05 15:21:45 worker-node24 slurmd[68524]: [2026-05-05T15:21:45.261] error: Node configuration differs from hardware: CPUs=12:16(hw) Boards=1:1(hw) SocketsPerBoard=1:1(hw) CoresPerSocket=12:8(hw) ThreadsPerCore=1:2(hw)",
+            "May 05 15:21:45 worker-node24 slurmd[68524]: [2026-05-05T15:21:45.261] Can not stat gres.conf file (/etc/slurm/gres.conf), using slurm.conf data",
+            "May 05 15:21:45 worker-node24 slurmd[68524]: [2026-05-05T15:21:45.262] warning: Ignoring file-less GPU gpu:intel from final GRES list",
+            "May 05 15:21:45 worker-node24 slurmd[68524]: [2026-05-05T15:21:45.264] error: cannot create proctrack context for proctrack/linux",
+            "May 05 15:21:45 worker-node24 slurmd[68524]: [2026-05-05T15:21:45.264] error: slurmd initialization failed",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Main process exited, code=exited, status=1/FAILURE",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Failed with result 'exit-code'.",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Scheduled restart job, restart counter is at 3.",
+            "May 05 15:21:45 worker-node24 systemd[1]: Started slurmd.service - Slurm node daemon.",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.489] warning: cgroup/v1 plugin is deprecated, please upgrade to cgroup/v2 at your earliest convenience",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.489] error: unable to open '/sys/fs/cgroup/cpuset/tasks' for reading : No such file or directory",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.489] error: cgroup namespace 'cpuset' not mounted. aborting",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.489] error: unable to open '/sys/fs/cgroup/memory/tasks' for reading : No such file or directory",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.489] error: cgroup namespace 'memory' not mounted. aborting",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.502] error: Node configuration differs from hardware: CPUs=12:16(hw) Boards=1:1(hw) SocketsPerBoard=1:1(hw) CoresPerSocket=12:8(hw) ThreadsPerCore=1:2(hw)",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.502] Can not stat gres.conf file (/etc/slurm/gres.conf), using slurm.conf data",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.502] warning: Ignoring file-less GPU gpu:intel from final GRES list",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.504] error: cannot create proctrack context for proctrack/linux",
+            "May 05 15:21:45 worker-node24 slurmd[68528]: [2026-05-05T15:21:45.504] error: slurmd initialization failed",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Main process exited, code=exited, status=1/FAILURE",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Failed with result 'exit-code'.",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Scheduled restart job, restart counter is at 4.",
+            "May 05 15:21:45 worker-node24 systemd[1]: Started slurmd.service - Slurm node daemon.",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.733] warning: cgroup/v1 plugin is deprecated, please upgrade to cgroup/v2 at your earliest convenience",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.733] error: unable to open '/sys/fs/cgroup/cpuset/tasks' for reading : No such file or directory",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.733] error: cgroup namespace 'cpuset' not mounted. aborting",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.733] error: unable to open '/sys/fs/cgroup/memory/tasks' for reading : No such file or directory",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.733] error: cgroup namespace 'memory' not mounted. aborting",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.749] error: Node configuration differs from hardware: CPUs=12:16(hw) Boards=1:1(hw) SocketsPerBoard=1:1(hw) CoresPerSocket=12:8(hw) ThreadsPerCore=1:2(hw)",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.750] Can not stat gres.conf file (/etc/slurm/gres.conf), using slurm.conf data",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.750] warning: Ignoring file-less GPU gpu:intel from final GRES list",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.751] error: cannot create proctrack context for proctrack/linux",
+            "May 05 15:21:45 worker-node24 slurmd[68530]: [2026-05-05T15:21:45.752] error: slurmd initialization failed",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Main process exited, code=exited, status=1/FAILURE",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Failed with result 'exit-code'.",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Scheduled restart job, restart counter is at 5.",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Start request repeated too quickly.",
+            "May 05 15:21:45 worker-node24 systemd[1]: slurmd.service: Failed with result 'exit-code'.",
+            "May 05 15:21:45 worker-node24 systemd[1]: Failed to start slurmd.service - Slurm node daemon."
+        ]
+    ]
+}
+skipping: [worker_node27]
+skipping: [worker_node28]
+
+PLAY [Resume repaired UNKNOWN Slurm nodes] *********************************************************************************************************************************************
+
+TASK [Wait for slurmd heartbeats] ******************************************************************************************************************************************************
+Tuesday 05 May 2026  15:22:48 +0530 (0:00:00.205)       0:01:08.778 *********** 
+Pausing for 30 seconds
+(ctrl+C then 'C' = continue early, ctrl+C then 'A' = abort)
+ok: [head_node]
+
+TASK [Resume repaired UNKNOWN nodes] ***************************************************************************************************************************************************
+Tuesday 05 May 2026  15:23:18 +0530 (0:00:30.016)       0:01:38.794 *********** 
+ok: [head_node]
+
+TASK [Show resume result] **************************************************************************************************************************************************************
+Tuesday 05 May 2026  15:23:19 +0530 (0:00:00.624)       0:01:39.419 *********** 
+ok: [head_node] => {
+    "msg": [
+        "Skipping worker-node19: slurm_update error: Invalid node state transition",
+        "Skipping worker-node20: slurm_update error: Invalid node state transition",
+        "Skipping worker-node21: slurm_update error: Invalid node state transition",
+        "Skipping worker-node22: slurm_update error: Invalid node state transition",
+        "Skipping worker-node23: slurm_update error: Invalid node state transition",
+        "Skipping worker-node24: slurm_update error: Invalid node state transition",
+        "Skipping worker-node25: slurm_update error: Invalid node state transition",
+        "Skipping worker-node26: slurm_update error: Invalid node state transition",
+        "Skipping worker-node27: slurm_update error: Invalid node state transition",
+        "Skipping worker-node28: slurm_update error: Invalid node state transition"
+    ]
+}
+
+TASK [Show final Slurm state] **********************************************************************************************************************************************************
+Tuesday 05 May 2026  15:23:19 +0530 (0:00:00.033)       0:01:39.452 *********** 
+ok: [head_node]
+
+TASK [Display final Slurm state] *******************************************************************************************************************************************************
+Tuesday 05 May 2026  15:23:19 +0530 (0:00:00.193)       0:01:39.646 *********** 
+ok: [head_node] => {
+    "msg": [
+        "PARTITION AVAIL  TIMELIMIT  NODES  STATE NODELIST",
+        "main*        up   infinite     19  down* head-node,worker-node[1-18]",
+        "main*        up   infinite     10   unk* worker-node[19-28]"
+    ]
+}
+
+TASK [Show remaining UNKNOWN node details] *********************************************************************************************************************************************
+Tuesday 05 May 2026  15:23:19 +0530 (0:00:00.017)       0:01:39.663 *********** 
+ok: [head_node]
+
+TASK [Display remaining UNKNOWN node details] ******************************************************************************************************************************************
+Tuesday 05 May 2026  15:23:20 +0530 (0:00:00.258)       0:01:39.922 *********** 
+ok: [head_node] => {
+    "msg": [
+        "NodeName=worker-node19 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.161 NodeHostName=worker-node19 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node20 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.162 NodeHostName=worker-node20 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node21 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.163 NodeHostName=worker-node21 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node22 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.164 NodeHostName=worker-node22 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node23 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.165 NodeHostName=worker-node23 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node24 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.166 NodeHostName=worker-node24 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node25 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.167 NodeHostName=worker-node25 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node26 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.168 NodeHostName=worker-node26 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node27 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.169 NodeHostName=worker-node27 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0",
+        "",
+        "NodeName=worker-node28 CoresPerSocket=12 ",
+        "   CPUAlloc=0 CPUEfctv=12 CPUTot=12 CPULoad=0.00",
+        "   AvailableFeatures=(null)",
+        "   ActiveFeatures=(null)",
+        "   Gres=gpu:intel:1",
+        "   NodeAddr=172.17.181.170 NodeHostName=worker-node28 ",
+        "   RealMemory=3600 AllocMem=0 FreeMem=N/A Sockets=1 Boards=1",
+        "   State=UNKNOWN+NOT_RESPONDING ThreadsPerCore=1 TmpDisk=0 Weight=1 Owner=N/A MCS_label=N/A",
+        "   Partitions=main ",
+        "   BootTime=None SlurmdStartTime=None",
+        "   LastBusyTime=Unknown ResumeAfterTime=None",
+        "   CfgTRES=cpu=12,mem=3600M,billing=12",
+        "   AllocTRES=",
+        "   CurrentWatts=0 AveWatts=0"
+    ]
+}
+
+PLAY RECAP *****************************************************************************************************************************************************************************
+head_node                  : ok=10   changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+worker_node1               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node10              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node11              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node12              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node13              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node14              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node15              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node16              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node17              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node18              : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node19              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node2               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node20              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node21              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node22              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node23              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node24              : ok=10   changed=2    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+worker_node25              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node26              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node27              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node28              : ok=7    changed=2    unreachable=0    failed=0    skipped=3    rescued=0    ignored=0   
+worker_node3               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node4               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node5               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node6               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node7               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node8               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+worker_node9               : ok=0    changed=0    unreachable=0    failed=0    skipped=10   rescued=0    ignored=0   
+
+
+PLAYBOOK RECAP *************************************************************************************************************************************************************************
+Playbook run took 0 days, 0 hours, 1 minutes, 39 seconds
+
+
+TASKS RECAP ****************************************************************************************************************************************************************************
+Tuesday 05 May 2026  15:23:20 +0530 (0:00:00.030)       0:01:39.953 *********** 
+=============================================================================== 
+Verify slurmd is active -------------------------------------------------------------------------------------------------------------------------------------------------------- 63.05s
+Wait for slurmd heartbeats ----------------------------------------------------------------------------------------------------------------------------------------------------- 30.02s
+Ensure hostname matches Slurm NodeName ------------------------------------------------------------------------------------------------------------------------------------------ 1.19s
+Restart slurmd on UNKNOWN node -------------------------------------------------------------------------------------------------------------------------------------------------- 0.79s
+Find Slurm nodes in UNKNOWN state ----------------------------------------------------------------------------------------------------------------------------------------------- 0.65s
+Ensure munge is running --------------------------------------------------------------------------------------------------------------------------------------------------------- 0.63s
+Resume repaired UNKNOWN nodes --------------------------------------------------------------------------------------------------------------------------------------------------- 0.62s
+Show slurmd journal if it did not become active --------------------------------------------------------------------------------------------------------------------------------- 0.54s
+Avoid cgroup proctrack on nodes without mounted cgroup v1 controllers ----------------------------------------------------------------------------------------------------------- 0.43s
+Show slurmd status if it did not become active ---------------------------------------------------------------------------------------------------------------------------------- 0.41s
+Ensure local hostname resolves correctly ---------------------------------------------------------------------------------------------------------------------------------------- 0.41s
+Clear failed slurmd state ------------------------------------------------------------------------------------------------------------------------------------------------------- 0.38s
+Show remaining UNKNOWN node details --------------------------------------------------------------------------------------------------------------------------------------------- 0.26s
+Display slurmd failure details -------------------------------------------------------------------------------------------------------------------------------------------------- 0.21s
+Show final Slurm state ---------------------------------------------------------------------------------------------------------------------------------------------------------- 0.19s
+Save UNKNOWN worker inventory names --------------------------------------------------------------------------------------------------------------------------------------------- 0.04s
+Show resume result -------------------------------------------------------------------------------------------------------------------------------------------------------------- 0.03s
+Show UNKNOWN nodes found by Slurm ----------------------------------------------------------------------------------------------------------------------------------------------- 0.03s
+Display remaining UNKNOWN node details ------------------------------------------------------------------------------------------------------------------------------------------ 0.03s
+Display final Slurm state ------------------------------------------------------------------------------------------------------------------------------------------------------- 0.02s

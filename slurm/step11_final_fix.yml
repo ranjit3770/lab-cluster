@@ -1,0 +1,50 @@
+---
+- name: Final Slurm Recovery - Robust Version
+  hosts: head_nodes
+  become: yes
+
+  tasks:
+    - name: 1. Stop all Slurm services
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop: [slurmrestd, slurmctld, slurmdbd]
+      ignore_errors: yes
+
+    - name: 2. Find the Slurm source directory on disk
+      ansible.builtin.find:
+        paths: /usr/local/src
+        patterns: "slurm-*"
+        file_type: directory
+      register: slurm_sources
+
+    - name: 3. Set source path variable
+      ansible.builtin.set_fact:
+        target_source: "{{ slurm_sources.files[0].path }}"
+      when: slurm_sources.matched > 0
+
+    - name: 4. Clean and Reinstall Slurm
+      ansible.builtin.shell: |
+        cd {{ target_source }}
+        # Re-run configure to ensure JWT and paths are set correctly
+        ./configure --prefix=/usr/local/slurm --sysconfdir=/usr/local/slurm/etc --with-jwt=/usr
+        make install
+      register: reinstall_out
+
+    - name: 5. Ensure LD Config knows about Slurm libraries
+      ansible.builtin.copy:
+        dest: /etc/ld.so.conf.d/slurm.conf
+        content: "/usr/local/slurm/lib\n/usr/local/slurm/lib/slurm\n"
+      notify: Reload ldconfig
+
+    - name: 6. Restart Services in Order
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+      loop: [munge, slurmdbd, slurmctld, slurmrestd]
+
+  handlers:
+    - name: Reload ldconfig
+      ansible.builtin.command: ldconfig

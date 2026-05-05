@@ -1,0 +1,105 @@
+---
+- name: Deploy Slurm Systemd Services
+  hosts: head_nodes,cluster_nodes
+  become: yes
+  vars:
+    slurm_sbin_path: "/usr/local/slurm/sbin"
+    slurm_lib_path: "/usr/local/slurm/lib"
+    api_user: "slurmapi"
+
+  tasks:
+    # --- SECTION 1: PRE-REQUISITES ---
+    - name: Create slurmapi system user
+      ansible.builtin.user:
+        name: "{{ api_user }}"
+        system: yes
+        shell: /usr/sbin/nologin
+        create_home: no
+      when: "'head_nodes' in group_names"
+
+    # --- SECTION 2: SERVICE FILES ---
+    - name: Deploy slurmd.service to all nodes
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/slurmd.service
+        mode: '0644'
+        content: |
+          [Unit]
+          Description=Slurm node daemon
+          After=network.target munge.service
+          Requires=munge.service
+
+          [Service]
+          Environment="LD_LIBRARY_PATH={{ slurm_lib_path }}"
+          Type=simple
+          ExecStart={{ slurm_sbin_path }}/slurmd -D
+          Restart=always
+          User=root
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Deploy Head Node Services
+      when: "'head_nodes' in group_names"
+      block:
+        - name: Deploy slurmctld.service
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/slurmctld.service
+            content: |
+              [Unit]
+              Description=Slurm controller daemon
+              After=network.target munge.service
+              Requires=munge.service
+
+              [Service]
+              Environment="LD_LIBRARY_PATH={{ slurm_lib_path }}"
+              Type=simple
+              ExecStart={{ slurm_sbin_path }}/slurmctld -D
+              Restart=always
+              User=root
+
+              [Install]
+              WantedBy=multi-user.target
+
+        - name: Deploy slurmrestd.service
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/slurmrestd.service
+            content: |
+              [Unit]
+              Description=Slurm REST daemon
+              After=slurmctld.service network.target
+
+              [Service]
+              Environment="LD_LIBRARY_PATH={{ slurm_lib_path }}"
+              User={{ api_user }}
+              Group={{ api_user }}
+              ExecStart={{ slurm_sbin_path }}/slurmrestd -a rest_auth/jwt 0.0.0.0:6820
+              Restart=on-failure
+
+              [Install]
+              WantedBy=multi-user.target
+
+    # --- SECTION 3: REFRESH & START ---
+    - name: Reload systemd and enable services
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Ensure Munge is running
+      ansible.builtin.service:
+        name: munge
+        state: started
+        enabled: yes
+
+    - name: Start Slurm Services on Head Node
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop: [slurmctld, slurmrestd]
+      when: "'head_nodes' in group_names"
+
+    - name: Start Slurm Services on Workers
+      ansible.builtin.systemd:
+        name: slurmd
+        state: started
+        enabled: yes
+      when: "'cluster_nodes' in group_names"

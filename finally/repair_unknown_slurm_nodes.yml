@@ -1,0 +1,274 @@
+---
+- name: Detect Slurm nodes that need repair
+  hosts: head_nodes
+  become: yes
+  gather_facts: no
+  vars:
+    slurm_bin: "/usr/local/slurm/bin"
+
+  tasks:
+    - name: Find Slurm nodes in DOWN, DRAIN, INVALID, or UNKNOWN state
+      ansible.builtin.shell:
+        cmd: |
+          {{ slurm_bin }}/scontrol show node -o | awk '
+            {
+              node = ""
+              state = ""
+              for (i = 1; i <= NF; i++) {
+                if ($i ~ /^NodeName=/) {
+                  node = $i
+                  sub(/^NodeName=/, "", node)
+                }
+                if ($i ~ /^State=/) {
+                  state = tolower($i)
+                  sub(/^state=/, "", state)
+                  gsub(/[+*~#$@%]/, " ", state)
+                }
+              }
+              if (node != "" && state ~ /(^| )(down|drain|drained|draining|inval|invalid|unk|unknown)( |$)/) {
+                print node
+              }
+            }
+          '
+      register: unknown_slurm_nodes
+      changed_when: false
+
+    - name: Show Slurm nodes selected for repair
+      ansible.builtin.debug:
+        msg: "{{ unknown_slurm_nodes.stdout_lines | default([]) }}"
+
+    - name: Save UNKNOWN worker inventory names
+      ansible.builtin.set_fact:
+        problem_slurm_node_names: "{{ unknown_slurm_nodes.stdout_lines }}"
+        unknown_worker_inventory_names: >-
+          {{
+            unknown_slurm_nodes.stdout_lines
+            | map('replace', '-', '_')
+            | select('in', groups['cluster_nodes'])
+            | list
+          }}
+
+- name: Keep head node Slurm config compatible with repaired workers
+  hosts: head_nodes
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Avoid cgroup proctrack on head node config
+      ansible.builtin.replace:
+        path: /etc/slurm/slurm.conf
+        regexp: '^\s*ProctrackType\s*=\s*proctrack/(cgroup|linux)\s*$'
+        replace: 'ProctrackType=proctrack/linuxproc'
+
+    - name: Reconfigure slurmctld after config repair
+      ansible.builtin.command: /usr/local/slurm/bin/scontrol reconfigure
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure munge is running on head node
+      ansible.builtin.systemd:
+        name: munge
+        state: started
+        enabled: yes
+
+    - name: Restart slurmd on head node when it needs repair
+      ansible.builtin.systemd:
+        name: slurmd
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+      when: "'head-node' in (hostvars[groups['head_nodes'][0]].problem_slurm_node_names | default([]))"
+
+- name: Restart slurmd on UNKNOWN or inactive worker nodes
+  hosts: cluster_nodes
+  become: yes
+  gather_facts: no
+  vars:
+    head_inventory_name: "{{ groups['head_nodes'][0] }}"
+    unknown_worker_inventory_names: "{{ hostvars[head_inventory_name].unknown_worker_inventory_names | default([]) }}"
+
+  tasks:
+    - name: Check current slurmd state
+      ansible.builtin.command: systemctl is-active slurmd
+      register: current_slurmd_state
+      changed_when: false
+      failed_when: false
+
+    - name: Mark workers that need slurmd repair
+      ansible.builtin.set_fact:
+        needs_slurmd_repair: "{{ inventory_hostname in unknown_worker_inventory_names or current_slurmd_state.stdout != 'active' }}"
+
+    - name: Ensure hostname matches Slurm NodeName
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname | replace('_', '-') }}"
+      when: needs_slurmd_repair
+
+    - name: Ensure local hostname resolves correctly
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: '^127\.0\.1\.1'
+        line: "127.0.1.1 {{ inventory_hostname | replace('_', '-') }} {{ inventory_hostname }}"
+      when: needs_slurmd_repair
+
+    - name: Clear failed slurmd state
+      ansible.builtin.command: systemctl reset-failed slurmd
+      changed_when: false
+      failed_when: false
+      when: needs_slurmd_repair
+
+    - name: Ensure munge is running
+      ansible.builtin.systemd:
+        name: munge
+        state: started
+        enabled: yes
+      when: needs_slurmd_repair
+
+    - name: Avoid cgroup proctrack on nodes without mounted cgroup v1 controllers
+      ansible.builtin.replace:
+        path: /etc/slurm/slurm.conf
+        regexp: '^\s*ProctrackType\s*=\s*proctrack/(cgroup|linux)\s*$'
+        replace: 'ProctrackType=proctrack/linuxproc'
+      when: needs_slurmd_repair
+
+    - name: Restart slurmd on worker that needs repair
+      ansible.builtin.systemd:
+        name: slurmd
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+      when: needs_slurmd_repair
+
+    - name: Verify slurmd is active
+      ansible.builtin.command: systemctl is-active slurmd
+      register: slurmd_active
+      changed_when: false
+      failed_when: false
+      retries: 12
+      delay: 5
+      until: slurmd_active.stdout == "active"
+      when: needs_slurmd_repair
+
+    - name: Show slurmd status if it did not become active
+      ansible.builtin.command: systemctl status slurmd --no-pager
+      register: slurmd_failed_status
+      changed_when: false
+      failed_when: false
+      when:
+        - needs_slurmd_repair
+        - slurmd_active.stdout | default('') != "active"
+
+    - name: Show slurmd journal if it did not become active
+      ansible.builtin.command: journalctl -u slurmd -n 40 --no-pager
+      register: slurmd_failed_journal
+      changed_when: false
+      failed_when: false
+      when:
+        - needs_slurmd_repair
+        - slurmd_active.stdout | default('') != "active"
+
+    - name: Display slurmd failure details
+      ansible.builtin.debug:
+        msg:
+          - "{{ slurmd_failed_status.stdout_lines | default([]) }}"
+          - "{{ slurmd_failed_journal.stdout_lines | default([]) }}"
+      when:
+        - needs_slurmd_repair
+        - slurmd_active.stdout | default('') != "active"
+
+    - name: Check final slurmd state on every worker
+      ansible.builtin.command: systemctl is-active slurmd
+      register: final_slurmd_state
+      changed_when: false
+      failed_when: false
+
+    - name: Report final slurmd state on every worker
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} slurmd={{ final_slurmd_state.stdout }}"
+
+- name: Resume repaired UNKNOWN Slurm nodes
+  hosts: head_nodes
+  become: yes
+  gather_facts: no
+  vars:
+    slurm_bin: "/usr/local/slurm/bin"
+    problem_slurm_node_names: "{{ hostvars[groups['head_nodes'][0]].problem_slurm_node_names | default([]) }}"
+    unknown_worker_inventory_names: "{{ hostvars[groups['head_nodes'][0]].unknown_worker_inventory_names | default([]) }}"
+
+  tasks:
+    - name: Wait for slurmd heartbeats
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: Resume repaired UNKNOWN nodes
+      ansible.builtin.shell:
+        cmd: |
+          failed=0
+          for node in {{ problem_slurm_node_names | join(' ') }}; do
+            output=$({{ slurm_bin }}/scontrol update nodename="$node" state=resume 2>&1)
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
+              echo "Resume accepted: $node"
+            elif echo "$output" | grep -qi "Invalid node state transition"; then
+              echo "Skipping $node: $output"
+            else
+              echo "Failed to resume $node: $output"
+              failed=1
+            fi
+          done
+          exit "$failed"
+      register: resume_unknown
+      changed_when: "'Resume accepted:' in resume_unknown.stdout"
+      when: problem_slurm_node_names | length > 0
+
+    - name: Show resume result
+      ansible.builtin.debug:
+        msg: "{{ resume_unknown.stdout_lines | default(['No UNKNOWN worker nodes were repaired.']) }}"
+
+    - name: Show final Slurm state
+      ansible.builtin.command: "{{ slurm_bin }}/sinfo"
+      register: sinfo_after_repair
+      changed_when: false
+
+    - name: Display final Slurm state
+      ansible.builtin.debug:
+        msg: "{{ sinfo_after_repair.stdout_lines }}"
+
+    - name: Show remaining UNKNOWN node details
+      ansible.builtin.shell:
+        cmd: |
+          for node in {{ unknown_worker_inventory_names | map('replace', '_', '-') | join(' ') }}; do
+            {{ slurm_bin }}/scontrol show node "$node"
+          done
+      register: remaining_unknown_details
+      changed_when: false
+      when:
+        - unknown_worker_inventory_names | length > 0
+        - "'unk' in (sinfo_after_repair.stdout | lower)"
+
+    - name: Display remaining UNKNOWN node details
+      ansible.builtin.debug:
+        msg: "{{ remaining_unknown_details.stdout_lines | default([]) }}"
+      when:
+        - unknown_worker_inventory_names | length > 0
+        - "'unk' in (sinfo_after_repair.stdout | lower)"
+
+- name: Verify slurmd is active on every worker
+  hosts: cluster_nodes
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Check slurmd final state
+      ansible.builtin.command: systemctl is-active slurmd
+      register: slurmd_final_verify
+      changed_when: false
+      failed_when: false
+
+    - name: Show slurmd final state
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} slurmd={{ slurmd_final_verify.stdout }}"
+
+    - name: Fail if slurmd is not active
+      ansible.builtin.fail:
+        msg: "{{ inventory_hostname }} slurmd is {{ slurmd_final_verify.stdout }} after repair"
+      when: slurmd_final_verify.stdout != "active"
