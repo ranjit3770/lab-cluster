@@ -7,11 +7,131 @@ import time
 import requests
 import json
 import shlex
+import pwd
+import grp
+import re
+import math
 from app.planner import plan_resources
 from app.config import DATA_ROOT, MYSQL_CONFIG, SLURM_PATH, SLURM_LIB_PATH, SLURM_JWT_USER, SLURM_JWT_TOKEN, SLURM_REST_URL, SLURM_VERSION
 
 # Slurm Environment Config
 EXCLUDE_NODES = os.getenv("SLURM_EXCLUDE_NODES", "head-node")
+
+def _to_int(value, default=0):
+    if value is None:
+        return default
+    if isinstance(value, (int, float)):
+        return int(value)
+    raw = str(value).strip()
+    if not raw or raw.upper() in {"N/A", "NA", "NONE", "NULL", "UNKNOWN", "(NULL)"}:
+        return default
+    import re
+    match = re.match(r"^-?\d+", raw)
+    if not match:
+        return default
+    try:
+        return int(match.group(0))
+    except Exception:
+        return default
+
+def _parse_slurm_memory_to_gb(value, cpus=1):
+    if value is None:
+        return 0.0
+    raw = str(value).strip()
+    if not raw or raw.upper() in {"N/A", "NA", "NONE", "NULL", "UNKNOWN", "(NULL)"}:
+        return 0.0
+
+    per_cpu = raw.endswith("c")
+    if per_cpu:
+        raw = raw[:-1]
+
+    match = re.match(r"^([0-9]+(?:\.[0-9]+)?)([KMGTP]?)", raw, re.IGNORECASE)
+    if not match:
+        return 0.0
+
+    amount = float(match.group(1))
+    unit = match.group(2).upper() or "M"
+    multiplier = {
+        "K": 1 / (1024 * 1024),
+        "M": 1 / 1024,
+        "G": 1,
+        "T": 1024,
+        "P": 1024 * 1024,
+    }.get(unit, 1 / 1024)
+
+    gb = amount * multiplier
+    if per_cpu:
+        gb *= max(1, _to_int(cpus, 1))
+    return gb
+
+def _walltime_to_seconds(value, default_seconds=1800):
+    try:
+        parts = [int(part) for part in str(value or "").split(":")]
+        if len(parts) == 3:
+            return parts[0] * 3600 + parts[1] * 60 + parts[2]
+        if len(parts) == 2:
+            return parts[0] * 60 + parts[1]
+        if len(parts) == 1:
+            return parts[0] * 60
+    except Exception:
+        pass
+    return default_seconds
+
+def _seconds_to_walltime(seconds):
+    seconds = max(60, int(seconds))
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+def _slurm_bin(name):
+    for directory in SLURM_PATH.split(":"):
+        candidate = os.path.join(directory, name)
+        if os.path.exists(candidate):
+            return candidate
+    for candidate in (f"/usr/local/slurm/bin/{name}", f"/usr/local/bin/{name}", f"/usr/bin/{name}", f"/bin/{name}"):
+        if os.path.exists(candidate):
+            return candidate
+    return name
+
+def _chown_path_to_user(path, username):
+    try:
+        user_info = pwd.getpwnam(username)
+        try:
+            gid = grp.getgrnam(username).gr_gid
+        except KeyError:
+            gid = user_info.pw_gid
+        os.chown(path, user_info.pw_uid, gid)
+    except Exception as exc:
+        print(f"[SLURM-CLI] Ownership adjustment skipped for {path}: {exc}")
+
+def _submit_script_with_sbatch(username, script_path, work_dir):
+    sbatch = _slurm_bin("sbatch")
+    commands = [
+        ["sudo", "-n", "-u", username, sbatch, "--export=ALL", "--chdir", work_dir, script_path],
+    ]
+    last_error = ""
+
+    for cmd in commands:
+        try:
+            output = subprocess.check_output(
+                cmd,
+                env=get_slurm_env(),
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=30,
+            )
+            match = re.search(r"Submitted batch job\s+(\S+)", output)
+            if match:
+                return match.group(1)
+            last_error = output.strip() or "sbatch did not return a job id."
+        except Exception as exc:
+            last_error = str(exc)
+            if hasattr(exc, "output") and exc.output:
+                last_error = exc.output.strip()
+            print(f"[SLURM-CLI] sbatch attempt failed ({' '.join(cmd)}): {last_error}")
+
+    raise Exception(f"sbatch CLI fallback failed: {last_error}")
 
 def get_slurm_env():
     """Build the environment dictionary for Slurm CLI calls."""
@@ -62,11 +182,51 @@ def get_user_quota(username):
     except:
         return None
 
+def _get_slurm_usage_cli(username):
+    try:
+        output = subprocess.check_output(
+            [
+                _slurm_bin("squeue"),
+                "--noheader",
+                "--user",
+                username,
+                "--states=RUNNING",
+                "--format=%C|%m",
+            ],
+            env=get_slurm_env(),
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=5,
+        ).strip()
+    except Exception as exc:
+        detail = getattr(exc, "output", None) or str(exc)
+        print(f"[QUOTA] Slurm CLI usage query failed for {username}: {str(detail).strip()}")
+        return None
+
+    total_cpu = 0
+    total_ram_gb = 0.0
+    for line in output.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("|", 1)
+        cpus = _to_int(parts[0] if parts else 0, 0)
+        mem = parts[1] if len(parts) > 1 else 0
+        total_cpu += cpus
+        total_ram_gb += _parse_slurm_memory_to_gb(mem, cpus)
+
+    print(f"[DEBUG] CLI Usage for {username}: CPU={total_cpu}, RAM={total_ram_gb:.2f}GB")
+    return total_cpu, total_ram_gb
+
 def get_slurm_usage(username):
     """
-    Query current resource usage via Slurm REST API.
+    Query current resource usage. Prefer Slurm CLI because this deployment can
+    operate through sbatch/squeue even when slurmrestd JWT auth is unavailable.
     Returns (total_cpu, total_ram_gb).
     """
+    cli_usage = _get_slurm_usage_cli(username)
+    if cli_usage is not None:
+        return cli_usage
+
     jwt = get_slurm_jwt()
     if not jwt:
         print(f"[QUOTA] Failed to fetch usage for {username}: No JWT.")
@@ -113,7 +273,8 @@ def get_slurm_usage(username):
             if isinstance(cpus, dict):
                 cpus = cpus.get("number", 0)
             
-            total_cpu += int(cpus or 0)
+            cpus = _to_int(cpus, 0)
+            total_cpu += cpus
             
             # RAM calculation (stored in MB by Slurm)
             # v0.0.41 standard is often 'memory_per_node' or 'memory_per_cpu'
@@ -126,9 +287,9 @@ def get_slurm_usage(username):
                 mem = job.get("memory_per_cpu", 0)
                 if isinstance(mem, dict):
                     mem = mem.get("number", 0)
-                mem = int(mem or 0) * int(cpus or 1)
+                mem = _to_int(mem, 0) * max(1, cpus)
             
-            total_ram_gb += (float(mem or 0) / 1024.0)
+            total_ram_gb += (_to_int(mem, 0) / 1024.0)
             
         print(f"[DEBUG] REST Usage for {username}: CPU={total_cpu}, RAM={total_ram_gb:.2f}GB")
         return total_cpu, total_ram_gb
@@ -251,6 +412,11 @@ def submit_job(job, bypass_quota=False, replace_id=None):
 
     # Default walltime: always enforced
     walltime = job.time if job.time and ":" in job.time else "00:30:00"
+    min_walltime_seconds = 1800 if is_jupyter else 60
+    if _walltime_to_seconds(walltime) < min_walltime_seconds:
+        corrected_walltime = _seconds_to_walltime(min_walltime_seconds)
+        warnings.append(f"Walltime increased from {walltime} to {corrected_walltime} for reliable startup and scheduler accounting.")
+        walltime = corrected_walltime
 
     resource_directives = plan.get("sbatch_directives", [
         f"#SBATCH --ntasks={ntasks}",
@@ -264,13 +430,14 @@ def submit_job(job, bypass_quota=False, replace_id=None):
 
     # 5. Build execution commands
     cmd_args = job.command_args or ""
+    srun_bin = _slurm_bin("srun")
     
     if is_jupyter:
         install_cmd = '"$VENV/bin/pip" install --quiet jupyterlab notebook'
-        jupyter_cmd = f'"$VENV/bin/jupyter" lab --ip=0.0.0.0 --port={jupyter_port} --no-browser --ServerApp.token="{jupyter_token}" --ServerApp.allow_origin="*"'
+        jupyter_cmd = f'{shlex.quote(os.path.join(venv_path, "bin", "jupyter"))} lab --ip=0.0.0.0 --port={jupyter_port} --no-browser --ServerApp.token="{jupyter_token}" --ServerApp.allow_origin="*"'
         execution_cmd = (
             f'echo "[INFO] Jupyter starting on port {jupyter_port} (token: {jupyter_token})..." && '
-            f'srun --ntasks=1 --cpus-per-task={cpus_per_task} --cpu-bind=cores bash -lc {shlex.quote(jupyter_cmd)}'
+            f'/bin/bash -c {shlex.quote(jupyter_cmd)}'
         )
     else:
         entry_script = os.path.basename(job.entry_point or "")
@@ -287,22 +454,29 @@ def submit_job(job, bypass_quota=False, replace_id=None):
         if not user_command:
             if not entry_script:
                 raise ValueError("Either entry_point or command must be supplied for batch submissions.")
-            user_command = f'"$VENV/bin/python" "{entry_script}" {cmd_args}'.strip()
-        execution_cmd = (
-            f'echo "[INFO] Running optimized Slurm task layout..." && '
-            f'srun --ntasks={ntasks} --cpus-per-task={cpus_per_task} --cpu-bind=cores bash -lc {shlex.quote(user_command)}'
-        )
+            user_command = f'{shlex.quote(os.path.join(venv_path, "bin", "python"))} {shlex.quote(entry_script)} {cmd_args}'.strip()
+        if ntasks == 1:
+            execution_cmd = (
+                f'echo "[INFO] Running single-task workload inside the Slurm allocation..." && '
+                f'/bin/bash -c {shlex.quote(user_command)}'
+            )
+        else:
+            execution_cmd = (
+                f'echo "[INFO] Running distributed Slurm task layout..." && '
+                f'{shlex.quote(srun_bin)} --export=ALL --ntasks={ntasks} --cpus-per-task={cpus_per_task} --cpu-bind=cores /bin/bash -c {shlex.quote(user_command)}'
+            )
 
     # Join directives outside f-string (Python < 3.12 compat)
     resource_block = "\n".join(resource_directives)
+    allocated_cpu = ntasks * cpus_per_task
+    allocated_memory_mb = allocated_cpu * mem_per_cpu
 
     script = f"""#!/bin/bash
 #SBATCH --job-name={job.project_name}
 #SBATCH --time={walltime}
 #SBATCH --output={logs_dir}/{job.username}_%j.out
 #SBATCH --error={logs_dir}/{job.username}_%j.err
-#SBATCH --export=NONE
-#SBATCH --uid={job.username}
+#SBATCH --export=ALL
 {resource_block}
 
 set -euo pipefail
@@ -312,6 +486,62 @@ echo "[INFO] Allocated resources: {ntasks} tasks x {cpus_per_task} CPU/task, {me
 echo "[INFO] Planner request id: {plan.get('request_id')}"
 PROJECT_ROOT="{project_root}"
 VENV="{venv_path}"
+PORTAL_REQUEST_ID="{plan.get('request_id')}"
+PORTAL_ALLOCATION_MODE="{plan.get('allocation_mode', 'distributed')}"
+PORTAL_NTASKS="{ntasks}"
+PORTAL_CPUS_PER_TASK="{cpus_per_task}"
+PORTAL_ALLOCATED_CPUS="{allocated_cpu}"
+PORTAL_MEM_PER_CPU_MB="{mem_per_cpu}"
+PORTAL_ALLOCATED_MEMORY_MB="{allocated_memory_mb}"
+PORTAL_ALLOCATED_MEMORY_GB="{max(1, int(math.ceil(allocated_memory_mb / 1024)))}"
+PORTAL_EXPECTED_NODE_COUNT="{plan.get('expected_node_count') or 1}"
+export PROJECT_ROOT
+export VENV
+export PORTAL_REQUEST_ID
+export PORTAL_ALLOCATION_MODE
+export PORTAL_NTASKS
+export PORTAL_CPUS_PER_TASK
+export PORTAL_ALLOCATED_CPUS
+export PORTAL_MEM_PER_CPU_MB
+export PORTAL_ALLOCATED_MEMORY_MB
+export PORTAL_ALLOCATED_MEMORY_GB
+export PORTAL_EXPECTED_NODE_COUNT
+export HOME="{user_root}"
+export PATH="$VENV/bin:{SLURM_PATH}:/usr/local/bin:/usr/bin:/bin"
+export PYTHONNOUSERSITE=1
+
+cat > "$PROJECT_ROOT/.portal_resource_allocation.json" <<RESOURCE_JSON
+{{
+  "request_id": "$PORTAL_REQUEST_ID",
+  "job_id": "${{SLURM_JOB_ID:-pending}}",
+  "allocation_mode": "$PORTAL_ALLOCATION_MODE",
+  "ntasks": {ntasks},
+  "cpus_per_task": {cpus_per_task},
+  "allocated_cpus": {allocated_cpu},
+  "memory_per_cpu_mb": {mem_per_cpu},
+  "allocated_memory_mb": {allocated_memory_mb},
+  "allocated_memory_gb": {max(1, int(math.ceil(allocated_memory_mb / 1024)))},
+  "slurm_job_cpus_per_node": "${{SLURM_JOB_CPUS_PER_NODE:-unknown}}",
+  "slurm_job_node_list": "${{SLURM_JOB_NODELIST:-unknown}}"
+}}
+RESOURCE_JSON
+if [ -n "${{SLURM_JOB_ID:-}}" ]; then
+    cp "$PROJECT_ROOT/.portal_resource_allocation.json" "{logs_dir}/resource_${{SLURM_JOB_ID}}.json" || true
+fi
+
+echo "[VERIFY] Slurm job id: ${{SLURM_JOB_ID:-unknown}}"
+echo "[VERIFY] Slurm node list: ${{SLURM_JOB_NODELIST:-unknown}}"
+echo "[VERIFY] Slurm CPUs per task: ${{SLURM_CPUS_PER_TASK:-{cpus_per_task}}}"
+echo "[VERIFY] Slurm CPUs per node: ${{SLURM_JOB_CPUS_PER_NODE:-unknown}}"
+echo "[VERIFY] Portal resource contract: $PROJECT_ROOT/.portal_resource_allocation.json"
+if [ -r /proc/self/status ]; then
+    grep -E 'Cpus_allowed_list|Mems_allowed_list' /proc/self/status | sed 's/^/[VERIFY] /' || true
+fi
+if [ -r /sys/fs/cgroup/memory.max ]; then
+    echo "[VERIFY] cgroup memory.max: $(cat /sys/fs/cgroup/memory.max)"
+elif [ -r /sys/fs/cgroup/memory/memory.limit_in_bytes ]; then
+    echo "[VERIFY] cgroup memory.limit_in_bytes: $(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)"
+fi
 
 cd "$PROJECT_ROOT"
 if [ ! -d "$VENV" ]; then
@@ -328,10 +558,12 @@ echo "[INFO] Job completed."
 
     generated_dir = os.path.join(logs_dir, "generated")
     os.makedirs(generated_dir, exist_ok=True)
+    _chown_path_to_user(generated_dir, job.username)
     path = os.path.join(generated_dir, f"{plan.get('request_id')}.sbatch")
     with open(path, "w") as f:
         f.write(script)
-    os.chmod(path, 0o700)
+    _chown_path_to_user(path, job.username)
+    os.chmod(path, 0o755)
 
     audit_log_path = os.path.join(generated_dir, f"{plan.get('request_id')}.json")
     with open(audit_log_path, "w") as f:
@@ -351,89 +583,97 @@ echo "[INFO] Job completed."
             "optimized_plan": plan,
             "sbatch_script": script,
         }, f, indent=2, default=str)
+    _chown_path_to_user(audit_log_path, job.username)
+    os.chmod(audit_log_path, 0o644)
 
     try:
         jwt = get_slurm_jwt()
         if not jwt:
-            raise Exception("Unauthorized: Could not generate Slurm JWT.")
-            
-        # Convert walltime "HH:MM:SS" to total minutes for REST API
-        try:
-            parts = walltime.split(':')
-            if len(parts) == 3:
-                total_minutes = int(parts[0]) * 60 + int(parts[1])
+            print(f"[SLURM-CLI] Falling back to sbatch for {job.username}; JWT unavailable.")
+            slurm_job_id = _submit_script_with_sbatch(job.username, path, project_root)
+            submission_transport = "sbatch-cli"
+        else:
+            # Convert walltime "HH:MM:SS" to total minutes for REST API
+            try:
+                parts = walltime.split(':')
+                if len(parts) == 3:
+                    total_minutes = int(parts[0]) * 60 + int(parts[1])
+                else:
+                    total_minutes = int(parts[0])
+            except:
+                total_minutes = 60 # Fallback 1 hour
+
+            # Slurm v0.0.41/44 Expectations:
+            # 1. Environment MUST be a list of "KEY=VALUE" strings, not a dictionary.
+            # 2. 'user_name' is often ignored; identity is handled by headers.
+            job_descriptor = {
+                "name": job.project_name,
+                "current_working_directory": f"{DATA_ROOT}/{job.username}",
+                "standard_output": f"{logs_dir}/{job.username}_%j.out",
+                "standard_error": f"{logs_dir}/{job.username}_%j.err",
+                "tasks": int(ntasks),
+                "cpus_per_task": int(cpus_per_task),
+                "partition": partition,
+                "time_limit": total_minutes,
+                "environment": [
+                    f"HOME={DATA_ROOT}/{job.username}",
+                    f"USER={job.username}",
+                    "PATH=/usr/local/bin:/usr/bin:/bin"
+                ]
+            }
+            if not partition:
+                job_descriptor.pop("partition", None)
+
+            job_descriptor["memory_per_cpu"] = int(mem_per_cpu)
+
+            expected_node_count = plan.get("expected_node_count")
+            eligible_nodes = plan.get("cluster_snapshot", {}).get("eligible_nodes", 0)
+            if expected_node_count:
+                job_descriptor["nodes"] = [int(expected_node_count), max(int(expected_node_count), int(eligible_nodes or expected_node_count))]
+
+            if gpu_count > 0:
+                job_descriptor["gres"] = f"gpu:{gpu_count}"
+
+            payload = {
+                "job": job_descriptor,
+                "script": script
+            }
+
+            # In v0.0.41+, you submit through the JWT user in the header.
+            # CLI fallback submits as the target Linux user instead.
+            url = f"{SLURM_REST_URL}/job/submit"
+            headers = {
+                "X-SLURM-USER-NAME": SLURM_JWT_USER,
+                "X-SLURM-USER-TOKEN": jwt,
+                "Content-Type": "application/json"
+            }
+
+            print(f"[SLURM-REST] Submitting job for {job.username}...")
+            res = requests.post(url, json=payload, headers=headers, timeout=10)
+
+            if res.status_code >= 400:
+                 print(f"[SLURM-REST] ERROR BODY: {res.text}")
+                 if res.status_code == 404 and "v0.0.41" not in url:
+                      f_url = url.replace("v0.0.44", "v0.0.41")
+                      res = requests.post(f_url, json=payload, headers=headers, timeout=10)
+                      if res.status_code >= 400:
+                          print(f"[SLURM-REST] FALLBACK ERROR BODY: {res.text}")
+
+            if res.status_code in {401, 403}:
+                print(f"[SLURM-CLI] Falling back to sbatch for {job.username} after REST {res.status_code}.")
+                slurm_job_id = _submit_script_with_sbatch(job.username, path, project_root)
+                submission_transport = "sbatch-cli"
             else:
-                total_minutes = int(parts[0])
-        except:
-            total_minutes = 60 # Fallback 1 hour
-
-        # Slurm v0.0.41/44 Expectations:
-        # 1. Environment MUST be a list of "KEY=VALUE" strings, not a dictionary.
-        # 2. 'user_name' is often ignored; identity is handled by headers.
-        job_descriptor = {
-            "name": job.project_name,
-            "current_working_directory": f"{DATA_ROOT}/{job.username}",
-            "standard_output": f"{logs_dir}/{job.username}_%j.out",
-            "standard_error": f"{logs_dir}/{job.username}_%j.err",
-            "tasks": int(ntasks),
-            "cpus_per_task": int(cpus_per_task),
-            "partition": partition,
-            "time_limit": total_minutes,
-            "environment": [
-                f"HOME={DATA_ROOT}/{job.username}",
-                f"USER={job.username}",
-                "PATH=/usr/local/bin:/usr/bin:/bin"
-            ]
-        }
-        if not partition:
-            job_descriptor.pop("partition", None)
-        
-        job_descriptor["memory_per_cpu"] = int(mem_per_cpu)
-
-        expected_node_count = plan.get("expected_node_count")
-        eligible_nodes = plan.get("cluster_snapshot", {}).get("eligible_nodes", 0)
-        if expected_node_count:
-            job_descriptor["nodes"] = [int(expected_node_count), max(int(expected_node_count), int(eligible_nodes or expected_node_count))]
-            
-        if gpu_count > 0:
-            job_descriptor["gres"] = f"gpu:{gpu_count}"
-
-        payload = {
-            "job": job_descriptor,
-            "script": script
-        }
-        
-        # In v0.0.41+, you submit-as using the JWT user (slurmrestd) in the header
-        # The script's #SBATCH --uid={job.username} handles the final execution identity.
-        url = f"{SLURM_REST_URL}/job/submit"
-        headers = {
-            "X-SLURM-USER-NAME": SLURM_JWT_USER,
-            "X-SLURM-USER-TOKEN": jwt,
-            "Content-Type": "application/json"
-        }
-        
-        print(f"[SLURM-REST] Submitting job for {job.username}...")
-        res = requests.post(url, json=payload, headers=headers, timeout=10)
-        
-        if res.status_code >= 400:
-             print(f"[SLURM-REST] ERROR BODY: {res.text}")
-             if res.status_code == 404 and "v0.0.41" not in url:
-                  f_url = url.replace("v0.0.44", "v0.0.41")
-                  res = requests.post(f_url, json=payload, headers=headers, timeout=10)
-                  if res.status_code >= 400:
-                      print(f"[SLURM-REST] FALLBACK ERROR BODY: {res.text}")
-             
-        res.raise_for_status()
-        res_json = res.json()
-
-        
-        slurm_job_id = res_json.get("job_id")
-        if not slurm_job_id:
-             errors = res_json.get("errors", [])
-             raise Exception(f"Slurm rejected submission: {errors}")
+                res.raise_for_status()
+                res_json = res.json()
+                slurm_job_id = res_json.get("job_id")
+                if not slurm_job_id:
+                     errors = res_json.get("errors", [])
+                     raise Exception(f"Slurm rejected submission: {errors}")
+                submission_transport = "slurm-rest"
         
         slurm_job_id = str(slurm_job_id)
-        print(f"[SLURM-REST] Success. Job ID: {slurm_job_id}")
+        print(f"[SLURM] Success. Job ID: {slurm_job_id}")
         
         # 6. Persistent Logging
         from app.models import insert_job_log
@@ -529,6 +769,7 @@ echo "[INFO] Job completed."
             },
             "audit_log_path": audit_log_path,
             "generated_script_path": path,
+            "submission_transport": submission_transport,
         }
         return slurm_job_id, warnings, quota_meta, jupyter_port, jupyter_token, orchestration_meta
     except Exception as e:

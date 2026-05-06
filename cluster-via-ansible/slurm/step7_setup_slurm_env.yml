@@ -68,10 +68,13 @@
       copy:
         dest: /etc/slurm/cgroup.conf
         content: |
-          CgroupPlugin=cgroup/v1
+          CgroupPlugin=cgroup/v2
           ConstrainCores=yes
           ConstrainRAMSpace=yes
-          ConstrainSwapSpace=no
+          ConstrainSwapSpace=yes
+          ConstrainDevices=yes
+          AllowedRAMSpace=100
+          AllowedSwapSpace=0
         owner: slurm
         group: slurm
         mode: '0644'

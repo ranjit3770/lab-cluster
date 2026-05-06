@@ -37,3 +37,4 @@ class JobResponse(BaseModel):
     expected_node_distribution: Optional[list[dict[str, Any]]] = None
     allocation: Optional[dict[str, Any]] = None
     audit_log_path: Optional[str] = None
+    submission_transport: Optional[str] = None

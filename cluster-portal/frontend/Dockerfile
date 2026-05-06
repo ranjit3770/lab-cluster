@@ -14,10 +14,18 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Nginx config to handle SPA routing
 RUN echo 'server { \
     listen 80; \
+    add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate" always; \
+    add_header Pragma "no-cache" always; \
+    add_header Expires "0" always; \
     location / { \
         root /usr/share/nginx/html; \
         index index.html index.htm; \
         try_files $uri $uri/ /index.html; \
+    } \
+    location /assets/ { \
+        root /usr/share/nginx/html; \
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate" always; \
+        try_files $uri =404; \
     } \
 }' > /etc/nginx/conf.d/default.conf
 EXPOSE 80

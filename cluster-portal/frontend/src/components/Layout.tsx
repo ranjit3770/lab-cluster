@@ -12,6 +12,7 @@ import {
   Server,
   Briefcase,
   Terminal,
+  Network,
   ChevronDown,
   Zap,
   X
@@ -101,7 +102,10 @@ export default function Layout() {
   const managementItems = [
     { to: "/management/platform-config", icon: Settings, label: "Portal Settings" },
     { to: "/management/job-setting", icon: Briefcase, label: "System Status" },
-    { to: "/management/admin-tools", icon: Terminal, label: "Node Tools" },
+    { to: "/management/admin-tools", icon: Terminal, label: "Slurm Nodes" },
+    ...(user?.role === 'admin'
+      ? [{ to: "/management/node-management", icon: Network, label: "Node Management" }]
+      : []),
   ];
 
   const isAdmin = user?.role === 'admin' || user?.role === 'developer';
@@ -123,6 +127,7 @@ export default function Layout() {
     if (path.includes('/requests')) return 'Requests';
     if (path.includes('/files')) return 'Files';
     if (path.includes('/feedback')) return 'Feedback';
+    if (path.includes('/node-management')) return 'Node Management';
     if (path.includes('/admin-tools')) return 'Node Tools';
     if (path.includes('/platform-config')) return 'Portal Settings';
     if (path.includes('/job-setting')) return 'System Status';

@@ -91,6 +91,33 @@
   
   body {
     @apply bg-background text-foreground font-sans antialiased selection:bg-primary/30;
+    user-select: text;
+  }
+
+  html,
+  #root,
+  main,
+  section,
+  article,
+  p,
+  span,
+  div,
+  pre,
+  code,
+  table,
+  input,
+  textarea {
+    user-select: text;
+  }
+
+  *::selection {
+    background: rgba(20, 184, 166, 0.75) !important;
+    color: #020617 !important;
+  }
+
+  *::-moz-selection {
+    background: rgba(20, 184, 166, 0.75) !important;
+    color: #020617 !important;
   }
 
   h1, h2, h3, h4, h5, h6 {

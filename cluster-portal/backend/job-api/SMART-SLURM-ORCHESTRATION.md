@@ -71,11 +71,13 @@ Slurm remains the final scheduler; the expected distribution is advisory and tra
 
 The script includes:
 
-- job name, walltime, logs, uid, export policy
+- job name, walltime, logs, and export policy
 - optimized Slurm directives
+- runtime resource contract environment variables
 - virtualenv setup
 - optional requirements installation
-- execution through `srun`
+- direct single-task execution inside the Slurm allocation
+- `srun` only for multi-task distributed jobs
 - planner metadata in log output
 
 Generated scripts and replay data are stored under:
@@ -90,6 +92,12 @@ Each submission writes:
 - `<request_id>.json`
 
 The JSON audit file contains the input request, optimized plan, Slurm directives, expected distribution, cluster snapshot, and final script.
+
+Runtime resource verification is documented in:
+
+```text
+RESOURCE-ALLOCATION-AND-VERIFICATION.md
+```
 
 ## Multi-User Fairness
 
@@ -164,4 +172,3 @@ The planner is intentionally modular:
 - `app/models.py`: planner metadata persistence
 - `app/schemas.py`: direct command and enriched response model
 - `smart_submit.py`: CLI preview/submit tool
-

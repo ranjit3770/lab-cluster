@@ -89,18 +89,18 @@ export default function JobsPage() {
         script_path: '',
         requirements_path: '',
         dependency_path: '',
-        total_cpu: 1,
-        total_ram: 1,
+        total_cpu: '1',
+        total_ram: '1',
         walltime: '01:00:00',
-        gpu_count: 0,
+        gpu_count: '0',
         job_type: 'distributed'
     });
 
 
 
     const [jupyterResources, setJupyterResources] = useState({
-        total_cpu: 1,
-        total_ram: 1,
+        total_cpu: '1',
+        total_ram: '1',
         walltime: '04:00:00'
     });
 
@@ -128,6 +128,36 @@ export default function JobsPage() {
     const [openDropdown, setOpenDropdown] = useState<'script' | 'req' | 'dep' | null>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const reqDropdownRef = useRef<HTMLDivElement>(null);
+
+    const normalizeIntInput = (value: string | number, min = 1) => {
+        const parsed = parseInt(String(value), 10);
+        if (!Number.isFinite(parsed) || parsed < min) return String(min);
+        return String(parsed);
+    };
+
+    const toPositiveInt = (value: string | number, min = 1) => {
+        return parseInt(normalizeIntInput(value, min), 10);
+    };
+
+    const walltimeToSeconds = (value: string) => {
+        const parts = value.split(':').map((part) => parseInt(part, 10));
+        if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return 0;
+        return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    };
+
+    const secondsToWalltime = (seconds: number) => {
+        const safeSeconds = Math.max(60, Math.floor(seconds));
+        const hours = Math.floor(safeSeconds / 3600);
+        const minutes = Math.floor((safeSeconds % 3600) / 60);
+        const secs = safeSeconds % 60;
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    };
+
+    const normalizeWalltime = (value: string, minSeconds: number) => {
+        const timeRegex = /^([0-9]{2}):([0-9]{2}):([0-9]{2})$/;
+        if (!timeRegex.test(value)) return secondsToWalltime(minSeconds);
+        return secondsToWalltime(Math.max(walltimeToSeconds(value), minSeconds));
+    };
 
     // Click outside handler
     useEffect(() => {
@@ -258,6 +288,7 @@ export default function JobsPage() {
 
         // Wall Time Validation
         const timeRegex = /^([0-9]{2}):([0-9]{2}):([0-9]{2})$/;
+        const normalizedBatchWalltime = normalizeWalltime(formData.walltime, 60);
         if (!timeRegex.test(formData.walltime)) {
             toast.error("Invalid Wall Time format. Please use HH:MM:SS (e.g., 01:00:00).");
             return;
@@ -268,9 +299,10 @@ export default function JobsPage() {
             setSubmitting(true);
             await jobsApi.submitJob(token!, {
                 ...formData,
-                total_cpu: Number(formData.total_cpu),
-                total_ram: Number(formData.total_ram),
-                gpu_count: Number(formData.gpu_count),
+                total_cpu: toPositiveInt(formData.total_cpu, 1),
+                total_ram: toPositiveInt(formData.total_ram, 1),
+                gpu_count: toPositiveInt(formData.gpu_count, 0),
+                walltime: normalizedBatchWalltime,
                 job_type: formData.job_type || 'distributed'
             });
             
@@ -280,10 +312,10 @@ export default function JobsPage() {
                 script_path: '', 
                 requirements_path: '', 
                 dependency_path: '',
-                total_cpu: 1,
-                total_ram: 1,
+                total_cpu: '1',
+                total_ram: '1',
                 walltime: '01:00:00',
-                gpu_count: 0,
+                gpu_count: '0',
                 job_type: 'distributed'
             });
             fetchJobs(true);
@@ -399,10 +431,17 @@ export default function JobsPage() {
             }
 
             // Advisory warnings only — never block submission
-            if (!isAdmin && jupyterResources.total_cpu > quotas.cpu_limit) {
+            const requestedCpu = toPositiveInt(jupyterResources.total_cpu, 1);
+            const requestedRam = toPositiveInt(jupyterResources.total_ram, 1);
+            const normalizedJupyterWalltime = normalizeWalltime(jupyterResources.walltime, 1800);
+            if (normalizedJupyterWalltime !== jupyterResources.walltime) {
+                setJupyterResources(prev => ({...prev, walltime: normalizedJupyterWalltime}));
+                toast.info(`Jupyter wall time adjusted to ${normalizedJupyterWalltime} for a stable interactive session.`);
+            }
+            if (!isAdmin && requestedCpu > quotas.cpu_limit) {
                 toast.warning(`CPU request (${jupyterResources.total_cpu}) exceeds your quota (${quotas.cpu_limit}). Job will queue until resources are available.`);
             }
-            if (!isAdmin && jupyterResources.total_ram > quotas.memory_limit_gb) {
+            if (!isAdmin && requestedRam > quotas.memory_limit_gb) {
                 toast.warning(`RAM request (${jupyterResources.total_ram}GB) exceeds your quota (${quotas.memory_limit_gb}GB). Job will queue until resources are available.`);
             }
 
@@ -411,9 +450,9 @@ export default function JobsPage() {
                 script_path: '__jupyter__',
                 requirements_path: '',
                 dependency_path: '',
-                total_cpu: Number(jupyterResources.total_cpu),
-                total_ram: Number(jupyterResources.total_ram),
-                walltime: jupyterResources.walltime,
+                total_cpu: requestedCpu,
+                total_ram: requestedRam,
+                walltime: normalizedJupyterWalltime,
                 job_type: 'jupyter'
             };
             await jobsApi.submitJob(token!, jupyterData);
@@ -502,6 +541,15 @@ export default function JobsPage() {
         </div>
     );
 
+    const infoStatus = infoJob?.status?.toUpperCase() || '';
+    const infoTrace = infoJob
+        ? [
+            infoStatus === 'FAILED' ? infoJob.error_log : undefined,
+            infoJob.output_log,
+            infoStatus !== 'FAILED' ? infoJob.error_log : undefined,
+        ].filter(Boolean).join('\n\n')
+        : '';
+
     const JobList = ({ showHeader = true }) => (
         <div className="flex flex-col h-full gap-3">
             {showHeader && (
@@ -589,7 +637,7 @@ export default function JobsPage() {
                                         <td className="px-3 py-2.5">
                                             <div className="flex items-center gap-2.5">
                                                 <div className="h-8 w-8 flex items-center justify-center bg-white/5 rounded-md">
-                                                    <Terminal className={cn("h-4 w-4", j.status === 'running' ? "text-primary animate-pulse" : "text-muted-foreground")} />
+                                                    <Terminal className={cn("h-4 w-4", j.status === 'RUNNING' ? "text-primary animate-pulse" : "text-muted-foreground")} />
                                                 </div>
                                                 <div>
                                                     <div className="text-sm font-medium text-gray-900">{j.job_name}</div>
@@ -611,8 +659,8 @@ export default function JobsPage() {
                                                 j.status === 'FAILED' ? "bg-rose-500/10 text-rose-500" : 
                                                 j.status === 'CANCELLED' ? "bg-white/5 text-muted-foreground" : "bg-white/5 text-muted-foreground"
                                             )}>
-                                                {j.status === 'PENDING' ? 'Waiting for cluster' : 
-                                                 j.status === 'WAITING' ? 'Waiting for quota' : 
+                                                {j.status === 'PENDING' ? 'Queued / starting' :
+                                                 j.status === 'WAITING' ? 'Waiting for quota' :
                                                  j.status}
                                             </span>
                                         </td>
@@ -788,23 +836,27 @@ export default function JobsPage() {
                                 <div>
                                     <Label className="text-[9px] font-bold text-black/50 uppercase">CPU Cores</Label>
                                     <Input 
-                                        type="number"
+                                        type="text"
+                                        inputMode="numeric"
                                         min={1}
                                         max={isAdmin ? 128 : quotas.cpu_limit}
                                         value={jupyterResources.total_cpu}
-                                        onChange={(e) => setJupyterResources({...jupyterResources, total_cpu: parseInt(e.target.value) || 1})}
-                                        className="h-8 bg-black/5 border-black/10 text-xs text-black font-bold focus:ring-black"
+                                        onChange={(e) => setJupyterResources({...jupyterResources, total_cpu: e.target.value.replace(/[^\d]/g, '')})}
+                                        onBlur={(e) => setJupyterResources({...jupyterResources, total_cpu: normalizeIntInput(e.target.value, 1)})}
+                                        className="h-9 sm:h-8 min-w-0 rounded-lg bg-black/5 border-black/10 text-xs text-black font-bold focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:border-black/30"
                                     />
                                 </div>
                                 <div>
                                     <Label className="text-[9px] font-bold text-black/50 uppercase">RAM (GB)</Label>
                                     <Input 
-                                        type="number"
+                                        type="text"
+                                        inputMode="numeric"
                                         min={1}
                                         max={isAdmin ? 512 : quotas.memory_limit_gb}
                                         value={jupyterResources.total_ram}
-                                        onChange={(e) => setJupyterResources({...jupyterResources, total_ram: parseInt(e.target.value) || 1})}
-                                        className="h-8 bg-black/5 border-black/10 text-xs text-black font-bold focus:ring-black"
+                                        onChange={(e) => setJupyterResources({...jupyterResources, total_ram: e.target.value.replace(/[^\d]/g, '')})}
+                                        onBlur={(e) => setJupyterResources({...jupyterResources, total_ram: normalizeIntInput(e.target.value, 1)})}
+                                        className="h-9 sm:h-8 min-w-0 rounded-lg bg-black/5 border-black/10 text-xs text-black font-bold focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:border-black/30"
                                     />
                                 </div>
                                 <div className="col-span-2">
@@ -813,7 +865,8 @@ export default function JobsPage() {
                                         placeholder="HH:MM:SS"
                                         value={jupyterResources.walltime}
                                         onChange={(e) => setJupyterResources({...jupyterResources, walltime: e.target.value})}
-                                        className="h-8 bg-black/5 border-black/10 text-xs text-black font-bold focus:ring-black font-mono"
+                                        onBlur={(e) => setJupyterResources({...jupyterResources, walltime: normalizeWalltime(e.target.value, 1800)})}
+                                        className="h-9 sm:h-8 min-w-0 rounded-lg bg-black/5 border-black/10 text-xs text-black font-bold focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:border-black/30 font-mono"
                                     />
                                 </div>
                             </div>
@@ -837,7 +890,7 @@ export default function JobsPage() {
                         )}
 
                         {selectedApp === 'python' && (
-                        <Card className="p-4 border-white/5 bg-white/[0.02] flex-1">
+                        <Card className="p-4 border border-gray-100 bg-white flex-1 shadow-sm">
                             <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between">
                                 <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                                     <Terminal className="h-4 w-4 text-emerald-500" />
@@ -847,10 +900,10 @@ export default function JobsPage() {
                             </CardHeader>
                             <form onSubmit={handleSubmit} className="space-y-3">
                                 <div>
-                                    <Label className="text-[10px] font-medium text-muted-foreground uppercase">Job Name</Label>
+                                    <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Job Name</Label>
                                     <Input 
-                                        placeholder="job_name"
-                                        className="h-8 bg-white/5 border-white/5 text-xs mt-1"
+                                        placeholder="Example: training_run_01"
+                                        className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 transition-colors placeholder:text-gray-400 focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
                                         value={formData.job_name}
                                         onChange={(e) => setFormData({...formData, job_name: e.target.value})}
                                         required
@@ -858,29 +911,29 @@ export default function JobsPage() {
                                 </div>
 
                                 <div ref={dropdownRef}>
-                                    <Label className="text-[10px] font-medium text-muted-foreground uppercase">Script</Label>
+                                    <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Script</Label>
                                     <div className="relative mt-1">
                                         <div 
                                             className={cn(
-                                                "w-full bg-white/5 border border-white/5 rounded-md h-8 flex items-center justify-between px-3 cursor-pointer text-xs",
-                                                openDropdown === 'script' ? "border-primary" : ""
+                                                "w-full min-w-0 bg-gray-50 border border-gray-200 rounded-lg h-10 sm:h-9 flex items-center justify-between gap-2 px-3 cursor-pointer text-xs text-gray-900 transition-colors hover:bg-white hover:border-gray-300",
+                                                openDropdown === 'script' ? "border-primary/60 ring-2 ring-primary/10 bg-white" : ""
                                             )}
                                             onClick={() => setOpenDropdown(openDropdown === 'script' ? null : 'script')}
                                         >
-                                            <span className={formData.script_path ? "text-primary" : "text-muted-foreground"}>
+                                            <span className={cn("min-w-0 truncate font-medium", formData.script_path ? "text-gray-900" : "text-gray-400")}>
                                                 {formData.script_path ? formData.script_path.split('/').pop() : "Select script"}
                                             </span>
-                                            <ChevronRight className={cn("h-3.5 w-3.5", openDropdown === 'script' ? "rotate-90" : "")} />
+                                            <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform", openDropdown === 'script' ? "rotate-90 text-primary" : "")} />
                                         </div>
                                         
                                         {openDropdown === 'script' && (
-                                            <div className="absolute top-[calc(100%+4px)] left-0 w-full bg-[#0a0a0a] border border-white/10 rounded-md shadow-2xl z-50 max-h-48 overflow-y-auto py-1 ring-1 ring-black/50">
+                                            <div className="absolute top-[calc(100%+4px)] left-0 w-full bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto py-1 ring-1 ring-black/5">
                                                 {scripts.length === 0 ? (
-                                                    <div className="px-3 py-2 text-[10px] text-muted-foreground italic">No executable scripts discovered</div>
+                                                    <div className="px-3 py-2 text-[10px] text-gray-400 italic">No executable scripts discovered</div>
                                                 ) : scripts.map(s => (
                                                     <div 
                                                         key={s.path}
-                                                        className="px-3 py-1.5 hover:bg-primary/20 text-white transition-colors cursor-pointer text-xs truncate"
+                                                        className="px-3 py-2 hover:bg-primary/10 text-gray-900 transition-colors cursor-pointer text-xs truncate"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setFormData({...formData, script_path: s.path});
@@ -896,28 +949,28 @@ export default function JobsPage() {
                                 </div>
 
                                 <div ref={reqDropdownRef}>
-                                    <Label className="text-[10px] font-medium text-muted-foreground uppercase tracking-widest">Requirements (.txt)</Label>
+                                    <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Requirements (.txt)</Label>
                                     <div className="relative mt-1">
                                         <div 
                                             className={cn(
-                                                "w-full bg-white/5 border border-white/5 rounded-md h-8 flex items-center justify-between px-3 cursor-pointer text-xs transition-all",
-                                                openDropdown === 'req' ? "border-primary/50 ring-1 ring-primary/20" : ""
+                                                "w-full min-w-0 bg-gray-50 border border-gray-200 rounded-lg h-10 sm:h-9 flex items-center justify-between gap-2 px-3 cursor-pointer text-xs transition-all hover:bg-white hover:border-gray-300",
+                                                openDropdown === 'req' ? "border-primary/60 ring-2 ring-primary/10 bg-white" : ""
                                             )}
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 setOpenDropdown(openDropdown === 'req' ? null : 'req');
                                             }}
                                         >
-                                            <span className={formData.requirements_path ? "text-primary italic" : "text-muted-foreground font-mono opacity-50"}>
-                                                {formData.requirements_path ? formData.requirements_path.split('/').pop() : "optional/config.txt"}
+                                            <span className={cn("min-w-0 truncate font-medium", formData.requirements_path ? "text-gray-900" : "text-gray-400")}>
+                                                {formData.requirements_path ? formData.requirements_path.split('/').pop() : "Optional requirements.txt"}
                                             </span>
-                                            <ChevronRight className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform duration-200", openDropdown === 'req' ? "rotate-90" : "")} />
+                                            <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform duration-200", openDropdown === 'req' ? "rotate-90 text-primary" : "")} />
                                         </div>
                                         
                                         {openDropdown === 'req' && (
-                                            <div className="absolute top-[calc(100%+4px)] left-0 w-full bg-[#0a0a0a] border border-white/10 rounded-md shadow-2xl z-50 max-h-48 overflow-y-auto py-1 ring-1 ring-black/50">
+                                            <div className="absolute top-[calc(100%+4px)] left-0 w-full bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto py-1 ring-1 ring-black/5">
                                                 <div 
-                                                    className="px-3 py-1.5 hover:bg-white/10 text-rose-400 font-bold italic cursor-pointer text-[10px] uppercase tracking-tighter"
+                                                    className="px-3 py-2 hover:bg-rose-50 text-rose-500 font-bold cursor-pointer text-[10px] uppercase tracking-wide"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         setFormData({...formData, requirements_path: ''});
@@ -927,11 +980,11 @@ export default function JobsPage() {
                                                     -- Skip Dependency Injection --
                                                 </div>
                                                 {textFiles.length === 0 ? (
-                                                    <div className="px-3 py-2 text-[10px] text-muted-foreground italic opacity-40">No configuration logs found</div>
+                                                    <div className="px-3 py-2 text-[10px] text-gray-400 italic">No requirements files found</div>
                                                 ) : textFiles.map(s => (
                                                     <div 
                                                         key={s.path}
-                                                        className="px-3 py-1.5 hover:bg-primary/20 text-white transition-colors cursor-pointer text-xs truncate border-t border-white/5"
+                                                        className="px-3 py-2 hover:bg-primary/10 text-gray-900 transition-colors cursor-pointer text-xs truncate border-t border-gray-100"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             setFormData({...formData, requirements_path: s.path});
@@ -948,51 +1001,59 @@ export default function JobsPage() {
 
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
-                                        <Label className="text-[10px] font-medium text-muted-foreground uppercase">CPU Cores</Label>
+                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">CPU Cores</Label>
                                         <Input 
-                                            type="number"
+                                            type="text"
                                             min={1}
-                                            className="h-8 bg-white/5 border-white/5 text-xs mt-1"
+                                            inputMode="numeric"
+                                            className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 transition-colors focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
                                             value={formData.total_cpu}
-                                            onChange={(e) => setFormData({...formData, total_cpu: parseInt(e.target.value) || 1})}
+                                            onChange={(e) => setFormData({...formData, total_cpu: e.target.value.replace(/[^\d]/g, '')})}
+                                            onBlur={(e) => setFormData({...formData, total_cpu: normalizeIntInput(e.target.value, 1)})}
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <Label className="text-[10px] font-medium text-muted-foreground uppercase">RAM (GB)</Label>
+                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">RAM (GB)</Label>
                                         <Input 
-                                            type="number"
+                                            type="text"
                                             min={1}
-                                            className="h-8 bg-white/5 border-white/5 text-xs mt-1"
+                                            inputMode="numeric"
+                                            className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 transition-colors focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
                                             value={formData.total_ram}
-                                            onChange={(e) => setFormData({...formData, total_ram: parseInt(e.target.value) || 1})}
+                                            onChange={(e) => setFormData({...formData, total_ram: e.target.value.replace(/[^\d]/g, '')})}
+                                            onBlur={(e) => setFormData({...formData, total_ram: normalizeIntInput(e.target.value, 1)})}
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <Label className="text-[10px] font-medium text-muted-foreground uppercase">Wall Time</Label>
+                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Wall Time</Label>
                                         <Input 
                                             placeholder="HH:MM:SS"
-                                            className="h-8 bg-white/5 border-white/5 text-xs mt-1 font-mono"
+                                            pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
+                                            className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 font-mono transition-colors focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
                                             value={formData.walltime}
                                             onChange={(e) => setFormData({...formData, walltime: e.target.value})}
+                                            onBlur={(e) => setFormData({...formData, walltime: normalizeWalltime(e.target.value, 60)})}
                                             required
                                         />
                                     </div>
                                     <div>
-                                        <Label className="text-[10px] font-medium text-muted-foreground uppercase">GPU (Optional)</Label>
+                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">GPU (Optional)</Label>
                                         <Input 
-                                            type="number"
+                                            type="text"
                                             min={0}
-                                            className="h-8 bg-white/5 border-white/5 text-xs mt-1"
+                                            inputMode="numeric"
+                                            className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 transition-colors focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
                                             value={formData.gpu_count}
-                                            onChange={(e) => setFormData({...formData, gpu_count: parseInt(e.target.value) || 0})}
+                                            onChange={(e) => setFormData({...formData, gpu_count: e.target.value.replace(/[^\d]/g, '')})}
+                                            onBlur={(e) => setFormData({...formData, gpu_count: normalizeIntInput(e.target.value, 0)})}
                                         />
                                     </div>
                                     <div className="col-span-2">
-                                        <Label className="text-[10px] font-medium text-muted-foreground uppercase">Job Type</Label>
+                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Job Type</Label>
                                         <select 
-                                            className="w-full h-8 bg-white/5 border border-white/5 rounded-md text-xs px-2 text-white outline-none focus:border-primary/50 mt-1"
+                                            className="w-full h-10 sm:h-9 min-w-0 bg-gray-50 border border-gray-200 rounded-lg text-xs px-3 text-gray-900 outline-none transition-colors focus:bg-white focus:border-primary/60 focus:ring-2 focus:ring-primary/20 mt-1"
                                             value={formData.job_type}
                                             onChange={(e) => setFormData({...formData, job_type: e.target.value})}
                                         >
@@ -1054,7 +1115,7 @@ export default function JobsPage() {
                                 </div>
                             </div>
                              <div className="flex items-center gap-3">
-                                {monitoringJob?.script_path === "__jupyter__" && monitoringJob?.status === 'running' && (
+                                {monitoringJob?.script_path === "__jupyter__" && monitoringJob?.status === 'RUNNING' && (
                                     <Button 
                                         onClick={() => handleOpenJupyter(monitoringJob)}
                                         size="sm"
@@ -1258,53 +1319,54 @@ export default function JobsPage() {
 
             {/* Job Info Modal */}
             <AlertDialog open={!!infoJob} onOpenChange={(o) => !o && setInfoJob(null)}>
-                <AlertDialogContent className="bg-white rounded-2xl border-none shadow-2xl p-6 max-w-sm">
-                    <AlertDialogHeader className="mb-4">
+                <AlertDialogContent className="bg-white rounded-2xl border-none shadow-2xl p-0 gap-0 w-[calc(100vw-2rem)] max-w-md sm:max-w-lg max-h-[calc(100dvh-2rem)] overflow-hidden flex flex-col">
+                    <AlertDialogHeader className="px-5 sm:px-6 pt-5 sm:pt-6 pb-3 shrink-0 min-w-0">
                         <AlertDialogTitle className="text-xl font-black text-gray-900">
                             Job Details
                         </AlertDialogTitle>
                     </AlertDialogHeader>
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">Job ID</span>
-                            <span className="text-sm font-mono text-gray-900 font-semibold">{infoJob?.slurm_job_id || infoJob?.id}</span>
+                    <div className="space-y-3 px-5 sm:px-6 pb-2 overflow-y-auto min-h-0 max-w-full">
+                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
+                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">Job ID</span>
+                            <span className="text-sm font-mono text-gray-900 font-semibold min-w-0 text-right break-all">{infoJob?.slurm_job_id || infoJob?.id}</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">Status</span>
+                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
+                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">Status</span>
                             <Badge className={cn("border-none capitalize", 
-                                infoJob?.status === 'running' ? "bg-primary/20 text-primary" :
-                                infoJob?.status === 'pending' ? "bg-amber-100 text-amber-600" :
-                                infoJob?.status === 'completed' ? "bg-emerald-100 text-emerald-600" :
-                                infoJob?.status === 'failed' ? "bg-rose-100 text-rose-600" :
+                                infoStatus === 'RUNNING' ? "bg-primary/20 text-primary" :
+                                infoStatus === 'PENDING' ? "bg-amber-100 text-amber-600" :
+                                infoStatus === 'COMPLETED' ? "bg-emerald-100 text-emerald-600" :
+                                infoStatus === 'FAILED' ? "bg-rose-100 text-rose-600" :
                                 "bg-gray-100 text-gray-600"
                             )}>
-                                {infoJob?.status === 'pending' ? 'Queued' : infoJob?.status}
+                                {infoStatus === 'PENDING' ? 'Queued / starting' : (infoStatus || infoJob?.status)}
                             </Badge>
                         </div>
-                        <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">CPU</span>
-                            <span className="text-sm font-mono text-gray-900 font-semibold">{(infoJob as any)?.total_cpu || 1}</span>
+                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
+                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">CPU</span>
+                            <span className="text-sm font-mono text-gray-900 font-semibold min-w-0 text-right break-all">{(infoJob as any)?.total_cpu || 1}</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">RAM</span>
-                            <span className="text-sm font-mono text-gray-900 font-semibold">{(infoJob as any)?.total_ram || 1} GB</span>
+                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
+                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">RAM</span>
+                            <span className="text-sm font-mono text-gray-900 font-semibold min-w-0 text-right break-all">{(infoJob as any)?.total_ram || 1} GB</span>
                         </div>
-                        <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">Time</span>
-                            <span className="text-sm font-mono text-gray-900 font-semibold">{infoJob?.status === 'RUNNING' ? (elapsedTimes[infoJob.id] || '00:00:00') : ((infoJob as any)?.walltime || '04:00:00')}</span>
+                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
+                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">Time</span>
+                            <span className="text-sm font-mono text-gray-900 font-semibold min-w-0 text-right break-all">{infoStatus === 'RUNNING' && infoJob ? (elapsedTimes[infoJob.id] || '00:00:00') : ((infoJob as any)?.walltime || '04:00:00')}</span>
                         </div>
 
-                        <div className="mt-4 break-words">
+                        <div className="mt-4 min-w-0">
                             <span className="text-[10px] text-gray-400 uppercase font-black tracking-widest block mb-2">Primary Output / Environment Trace</span>
-                            <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-[11px] font-mono whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed text-gray-700">
-                                {infoJob?.status === 'WAITING' ? 'Queued due to quota. Waiting for resources to become available.' : 
-                                 infoJob?.status === 'PENDING' ? 'Job accepted by Slurm. Waiting in cluster queue.' :
-                                 (infoJob?.output_log || infoJob?.error_log || "No trace data recorded.")}
+                            <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 sm:p-4 text-[11px] font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] max-w-full max-h-[34dvh] sm:max-h-56 overflow-auto leading-relaxed text-gray-700 overscroll-contain">
+                                {infoTrace ||
+                                 (infoStatus === 'WAITING' ? 'Queued due to quota. Waiting for resources to become available.' :
+                                  infoStatus === 'PENDING' ? 'Job accepted by Slurm. It is queued or starting.' :
+                                  "No trace data recorded.")}
                             </div>
                         </div>
                     </div>
-                    <AlertDialogFooter className="mt-6">
-                        <AlertDialogCancel className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 border-none h-10 rounded-xl font-bold transition-colors">Close</AlertDialogCancel>
+                    <AlertDialogFooter className="px-5 sm:px-6 pt-4 pb-5 sm:pb-6 shrink-0">
+                        <AlertDialogCancel className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 border-none h-10 rounded-xl font-bold transition-colors mt-0">Close</AlertDialogCancel>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

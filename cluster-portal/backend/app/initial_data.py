@@ -7,6 +7,8 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import settings
 from app.db import base # Ensures all models (User, Job, Node, etc.) are registered
@@ -17,6 +19,24 @@ from app.core.security import get_password_hash
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def apply_lightweight_migrations() -> None:
+    inspector = inspect(engine)
+    if "dev_nodes" not in inspector.get_table_names():
+        return
+
+    existing_columns = {column["name"] for column in inspector.get_columns("dev_nodes")}
+    if "os_family" not in existing_columns:
+        logger.info("Migrating dev_nodes: adding os_family column...")
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE dev_nodes ADD COLUMN os_family VARCHAR(32) NOT NULL DEFAULT 'auto'"))
+        except SQLAlchemyError as exc:
+            message = str(exc).lower()
+            if "duplicate column" not in message and "1060" not in message:
+                raise
+            logger.info("dev_nodes.os_family already exists; continuing startup.")
 
 def create_database():
     try:
@@ -38,6 +58,7 @@ def init_db(db: Session) -> None:
     # Create tables
     logger.info("Creating tables...")
     base.Base.metadata.create_all(bind=engine)
+    apply_lightweight_migrations()
     
     # 1. Create Default Admin User
     admin = db.query(User).filter(User.username == "admin").first()

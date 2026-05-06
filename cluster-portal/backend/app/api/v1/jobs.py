@@ -14,6 +14,15 @@ import os
 
 router = APIRouter()
 
+def _safe_int(value, default=0):
+    try:
+        raw = str(value).strip()
+        if not raw or raw.upper() in {"N/A", "NA", "NONE", "NULL", "UNKNOWN", "(NULL)"}:
+            return default
+        return int(float(raw.rstrip("M").rstrip("G")))
+    except Exception:
+        return default
+
 @router.get("", response_model=List[JobSchema])
 def read_jobs(
     db: Session = Depends(deps.get_db),
@@ -38,15 +47,6 @@ def read_jobs(
             continue
 
         if job.status in [JobStatus.PENDING, JobStatus.WAITING, JobStatus.RUNNING] and job.slurm_job_id:
-            # 3. Fail-safe for stale jobs stuck in queue > 10 mins without being noticed by backend
-            if job.status == JobStatus.PENDING and job.created_at:
-                now = datetime.utcnow()
-                if (now - job.created_at) > timedelta(minutes=10):
-                    job.status = JobStatus.FAILED
-                    job.error_log = "Job orphaned. Sync exceeded 10m threshold without updates."
-                    sync_needed = True
-                    continue
-
             try:
                 # Call external API: GET /status/{job.slurm_job_id}
                 print(f"DEBUG: Syncing Job {job.id} (Slurm ID: {job.slurm_job_id})")
@@ -74,10 +74,10 @@ def read_jobs(
                         elif normalized_status != job.status.value:
                             if any(x in normalized_status for x in ["complete", "compl"]):
                                 job.status = JobStatus.COMPLETED
-                            elif any(x in normalized_status for x in ["fail", "timeout", "node_fail", "out_of_mem", "boot_fail", "revoked", "preempt"]):
-                                job.status = JobStatus.FAILED
-                            elif any(x in normalized_status for x in ["cancel", "cncl"]):
+                            elif any(x in normalized_status for x in ["cancel", "cncl", "timeout"]):
                                 job.status = JobStatus.CANCELLED
+                            elif any(x in normalized_status for x in ["fail", "node_fail", "out_of_mem", "boot_fail", "revoked", "preempt"]):
+                                job.status = JobStatus.FAILED
                             elif any(x in normalized_status for x in ["run", "exec"]):
                                 job.status = JobStatus.RUNNING
                             elif any(x in normalized_status for x in ["pend", "subm", "queue"]):
@@ -95,6 +95,20 @@ def read_jobs(
                             # Update Quota Info
                             if isinstance(data, dict) and data.get("quota_status"):
                                 job.quota_status = data.get("quota_status")
+
+                            if isinstance(data, dict) and job.status == JobStatus.FAILED:
+                                reason = data.get("reason") or data.get("detail") or "Slurm reported job failure."
+                                exit_code = data.get("exit_code") or ""
+                                node = data.get("node_list") or data.get("batch_host") or ""
+                                stdout = data.get("stdout") or ""
+                                stderr = data.get("stderr") or ""
+                                job.error_log = "\n".join([
+                                    f"Slurm job failed: {reason}",
+                                    f"Exit code: {exit_code}" if exit_code else "",
+                                    f"Node: {node}" if node else "",
+                                    f"Stdout: {stdout}" if stdout else "",
+                                    f"Stderr: {stderr}" if stderr else "",
+                                ]).strip()
                                 
                             sync_needed = True
             except Exception as e:
@@ -191,10 +205,10 @@ def create_job(
                 if not line.strip(): continue
                 parts = line.split()
                 if len(parts) >= 2:
-                    current_cpu_sum += int(parts[0])
+                    current_cpu_sum += _safe_int(parts[0], 0)
                     ram_str = parts[1].rstrip('M').rstrip('G')
                     try:
-                        val = int(ram_str)
+                        val = _safe_int(ram_str, 0)
                         if 'G' in parts[1]: val *= 1024
                         current_ram_sum += float(val) / 1024.0
                     except:

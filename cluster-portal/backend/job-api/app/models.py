@@ -3,6 +3,15 @@ from app.database import get_db
 def insert_job_log(job_id: str, job, plan_data, status="PENDING"):
     import json
 
+    def to_int(value, default=0):
+        try:
+            raw = str(value).strip()
+            if not raw or raw.upper() in {"N/A", "NA", "NONE", "NULL", "UNKNOWN", "(NULL)"}:
+                return default
+            return int(float(raw))
+        except Exception:
+            return default
+
     db = get_db()
     cur = db.cursor()
 
@@ -20,7 +29,7 @@ def insert_job_log(job_id: str, job, plan_data, status="PENDING"):
         job.project_name,
         job.entry_point,
         job.total_cpu,
-        int(plan_data.get("mem", job.total_ram)),
+        to_int(plan_data.get("mem", job.total_ram), 1),
         job.resource_mode,
         job.time,
         job.command_args,

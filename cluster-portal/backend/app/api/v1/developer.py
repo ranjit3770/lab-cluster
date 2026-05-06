@@ -2,6 +2,7 @@ import os
 import paramiko
 import asyncio
 import socket
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
@@ -22,6 +23,36 @@ from app.models.system_setting import SystemSetting
 from app.db.session import SessionLocal
 
 router = APIRouter()
+
+ALLOWED_NODE_OS_FAMILIES = {"auto", "ubuntu", "windows"}
+WINDOWS_REMOTE_PORTS = (3389, 5985, 5986)
+WINDOWS_PLATFORM_PORTS = (
+    (3389, "RDP"),
+    (5985, "WinRM"),
+    (5986, "WinRM"),
+    (445, "SMB"),
+    (135, "RPC"),
+)
+WINDOWS_REMOTE_PORT_SET = set(WINDOWS_REMOTE_PORTS)
+NODE_OS_ALIASES = {
+    "": "auto",
+    "linux": "ubuntu",
+    "ubuntu-linux": "ubuntu",
+    "ubuntu/linux": "ubuntu",
+    "win": "windows",
+    "ms-windows": "windows",
+}
+
+
+def _normalize_node_os_family(value: Any) -> str:
+    normalized = str(value or "auto").strip().lower()
+    normalized = NODE_OS_ALIASES.get(normalized, normalized)
+    if normalized not in ALLOWED_NODE_OS_FAMILIES:
+        raise HTTPException(
+            status_code=400,
+            detail="os_family must be one of: auto, ubuntu, windows.",
+        )
+    return normalized
 
 # --- Config Logic (Existing) ---
 
@@ -224,6 +255,107 @@ def _test_ssh_connection(request: SSHTestRequest) -> bool:
         print(f"SSH Auth Test Failed: {e}")
         return False
 
+
+def _test_tcp_connection(ip_address: str, port: int, timeout: int = 5) -> bool:
+    try:
+        with socket.create_connection((ip_address, port), timeout=timeout):
+            return True
+    except Exception as e:
+        print(f"TCP Connectivity Test Failed: {e}")
+        return False
+
+
+def _test_node_access(node_data: dict) -> bool:
+    if node_data.get("os_family") == "windows" and int(node_data["ssh_port"]) in WINDOWS_REMOTE_PORT_SET:
+        return _test_tcp_connection(node_data["ip_address"], int(node_data["ssh_port"]))
+
+    test_req = SSHTestRequest(
+        ip_address=node_data["ip_address"],
+        port=node_data["ssh_port"],
+        username=node_data["ssh_username"],
+        password=node_data.get("ssh_password")
+    )
+    return _test_ssh_connection(test_req)
+
+
+def _probe_tcp_connection(ip_address: str, port: int, timeout: float = 1.25) -> bool:
+    try:
+        with socket.create_connection((ip_address, port), timeout=timeout):
+            return True
+    except Exception:
+        return False
+
+
+def _detect_node_runtime(node: DevNodeModel) -> dict:
+    ip_address = node.ip_address
+    saved_family = _normalize_node_os_family(getattr(node, "os_family", "auto"))
+    ssh_port = int(node.ssh_port or 22)
+
+    for port, label in WINDOWS_PLATFORM_PORTS:
+        if _probe_tcp_connection(ip_address, port):
+            return {
+                "detected_os_family": "windows",
+                "effective_os_family": "windows",
+                "detection_source": f"live windows probe: {label}:{port}",
+                "detected_access_label": label,
+                "detected_access_port": port,
+                "detected_reachable": True,
+            }
+
+    if saved_family in {"ubuntu", "windows"}:
+        saved_port_reachable = _probe_tcp_connection(ip_address, ssh_port)
+        return {
+            "detected_os_family": None,
+            "effective_os_family": saved_family,
+            "detection_source": (
+                f"saved admin setting; port {ssh_port} reachable"
+                if saved_port_reachable
+                else "saved admin setting; live platform probe unavailable"
+            ),
+            "detected_access_label": "RDP" if saved_family == "windows" and ssh_port == 3389 else "SSH",
+            "detected_access_port": ssh_port,
+            "detected_reachable": saved_port_reachable,
+        }
+
+    ssh_ports = [ssh_port]
+    if ssh_port != 22:
+        ssh_ports.append(22)
+
+    for port in ssh_ports:
+        if _probe_tcp_connection(ip_address, port):
+            return {
+                "detected_os_family": "ubuntu",
+                "effective_os_family": "ubuntu",
+                "detection_source": f"live ssh probe: {port}",
+                "detected_access_label": "SSH",
+                "detected_access_port": port,
+                "detected_reachable": True,
+            }
+
+    return {
+        "detected_os_family": None,
+        "effective_os_family": None,
+        "detection_source": "metadata fallback; live probe unavailable",
+        "detected_access_label": None,
+        "detected_access_port": None,
+        "detected_reachable": False,
+    }
+
+
+def _serialize_dev_node(node: DevNodeModel) -> dict:
+    payload = {
+        "id": node.id,
+        "name": node.name,
+        "ip_address": node.ip_address,
+        "ssh_port": node.ssh_port,
+        "ssh_username": node.ssh_username,
+        "ssh_password": node.ssh_password,
+        "os_family": getattr(node, "os_family", "auto") or "auto",
+        "created_at": node.created_at,
+    }
+    payload.update(_detect_node_runtime(node))
+    return payload
+
 @router.post("/nodes/test", response_model=SSHTestResponse)
 def test_node_ssh(
     request: SSHTestRequest,
@@ -240,7 +372,22 @@ def get_dev_nodes(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_active_superuser)
 ):
-    return db.query(DevNodeModel).all()
+    nodes = db.query(DevNodeModel).all()
+    if not nodes:
+        return []
+
+    max_workers = min(32, max(1, len(nodes)))
+    results_by_id = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {executor.submit(_serialize_dev_node, node): node.id for node in nodes}
+        for future in as_completed(future_map):
+            node_id = future_map[future]
+            try:
+                results_by_id[node_id] = future.result()
+            except Exception as exc:
+                print(f"Node runtime detection failed for {node_id}: {exc}")
+
+    return [results_by_id.get(node.id) or _serialize_dev_node(node) for node in nodes]
 
 @router.post("/nodes/bulk", response_model=DevNodeBulkResult)
 def create_dev_nodes_bulk(
@@ -264,6 +411,7 @@ def create_dev_nodes_bulk(
         node_data["name"] = node_data["name"].strip()
         node_data["ip_address"] = node_data["ip_address"].strip()
         node_data["ssh_username"] = node_data["ssh_username"].strip()
+        node_data["os_family"] = _normalize_node_os_family(node_data.get("os_family"))
 
         if not node_data["name"] or not node_data["ip_address"] or not node_data["ssh_username"]:
             skipped.append(f"{raw_node.name or raw_node.ip_address}: missing node name, IP address, or SSH username.")
@@ -287,14 +435,8 @@ def create_dev_nodes_bulk(
             continue
 
         if bulk_in.test_connections:
-            test_req = SSHTestRequest(
-                ip_address=node_data["ip_address"],
-                port=node_data["ssh_port"],
-                username=node_data["ssh_username"],
-                password=node_data.get("ssh_password")
-            )
-            if not _test_ssh_connection(test_req):
-                failed.append(f"{node_data['name']}: SSH connection failed.")
+            if not _test_node_access(node_data):
+                failed.append(f"{node_data['name']}: access connection failed.")
                 continue
 
         node = DevNodeModel(**node_data)
@@ -322,17 +464,12 @@ def create_dev_node(
     if existing:
         raise HTTPException(status_code=400, detail=f"A node with name '{node_in.name}' or IP '{node_in.ip_address}' is already registered.")
 
-    # Verify SSH first
-    test_req = SSHTestRequest(
-        ip_address=node_in.ip_address,
-        port=node_in.ssh_port,
-        username=node_in.ssh_username,
-        password=node_in.ssh_password
-    )
-    if not _test_ssh_connection(test_req):
-         raise HTTPException(status_code=400, detail="SSH Connection failed. Ensure credentials are correct and port 22 is open.")
+    node_data = node_in.dict()
+    node_data["os_family"] = _normalize_node_os_family(node_data.get("os_family"))
+    if not _test_node_access(node_data):
+         raise HTTPException(status_code=400, detail="Connection failed. Ensure credentials/port are correct and reachable.")
 
-    node = DevNodeModel(**node_in.dict())
+    node = DevNodeModel(**node_data)
     db.add(node)
     db.commit()
     db.refresh(node)
@@ -350,6 +487,8 @@ def update_dev_node(
         raise HTTPException(status_code=404, detail="Node not found")
 
     update_data = node_in.dict(exclude_unset=True)
+    if "os_family" in update_data:
+        update_data["os_family"] = _normalize_node_os_family(update_data.get("os_family"))
     for field, value in update_data.items():
         setattr(node, field, value)
 

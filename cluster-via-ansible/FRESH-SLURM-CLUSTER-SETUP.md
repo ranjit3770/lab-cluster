@@ -41,6 +41,12 @@ You can run the full setup playbook directly:
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass
 ```
 
+Before `slurm.conf` is written, the setup displays detected CPU and RAM for every Slurm node and asks what CPU/RAM should be advertised to Slurm. Press Enter to use detected values, enter caps at the prompts, or pass caps non-interactively:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass -e slurm_cpu_cap_per_node=12 -e slurm_memory_cap_mb_per_node=12288
+```
+
 The guided `cluster_manage.yml` command is preferred because it gives one consistent operator entrypoint for both setup and append operations.
 
 ## Prerequisites
@@ -143,8 +149,13 @@ If a playbook asks whether to reboot after cleanup, choose the option that match
 
 Important details:
 
-- `ProctrackType` is set to `proctrack/linuxproc`.
-- CPU, core, thread, and memory values are generated from actual node topology.
+- `SelectType` is set to `select/cons_tres`.
+- `SelectTypeParameters` is set to `CR_Core_Memory`.
+- `ProctrackType` is set to `proctrack/cgroup`.
+- `TaskPlugin` is set to `task/cgroup`.
+- `JobAcctGatherType` is set to `jobacct_gather/cgroup`.
+- CPU, core, thread, and memory values are generated from actual node topology unless explicit CPU/RAM caps are provided.
+- `cgroup.conf` enables CPU, RAM, swap, and device constraints.
 - GPU GRES is only configured when the expected render device exists.
 - Windows inventory groups are not used for Slurm node definitions.
 
@@ -282,4 +293,3 @@ After setup:
 - Confirm the final Slurm state is printed.
 - Confirm worker `slurmd` verification reports `active`.
 - Save or commit the final inventory and playbook changes.
-

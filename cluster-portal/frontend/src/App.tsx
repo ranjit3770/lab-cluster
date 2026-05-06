@@ -23,6 +23,7 @@ import api from '@/lib/api';
 import PlatformConfigPage from '@/pages/management/PlatformConfigPage';
 import JobSettingPage from '@/pages/management/JobSettingPage';
 import AdminToolsPage from '@/pages/management/AdminToolsPage';
+import NodeManagementPage from '@/pages/management/NodeManagementPage';
 import DiagnosticConsolePage from '@/pages/management/DiagnosticConsolePage';
 
 function MaintenanceBanner({ active }: { active: boolean }) {
@@ -118,6 +119,10 @@ function AppContent() {
                 <Route 
                     path="admin-tools" 
                     element={<ProtectedRoute roles={['admin', 'developer']}><AdminToolsPage /></ProtectedRoute>} 
+                />
+                <Route
+                    path="node-management"
+                    element={<ProtectedRoute roles={['admin']}><NodeManagementPage /></ProtectedRoute>}
                 />
                 <Route 
                     path="admin-tools/diagnostic-console" 

@@ -87,6 +87,27 @@ def _parse_int(value: Any, default: int = 1) -> int:
         return default
 
 
+def _to_int(value: Any, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float)):
+        return int(value)
+
+    raw = str(value).strip()
+    if not raw or raw.upper() in {"N/A", "NA", "NONE", "NULL", "UNKNOWN", "(NULL)"}:
+        return default
+
+    match = re.match(r"^-?\d+", raw)
+    if not match:
+        return default
+    try:
+        return int(match.group(0))
+    except Exception:
+        return default
+
+
 def _parse_scontrol_nodes(output: str) -> List[Dict[str, Any]]:
     nodes: List[Dict[str, Any]] = []
     for line in output.splitlines():
@@ -104,13 +125,15 @@ def _parse_scontrol_nodes(output: str) -> List[Dict[str, Any]]:
         if not name:
             continue
 
-        total_cpu = int(fields.get("CPUTot") or fields.get("CPUEfctv") or 0)
-        allocated_cpu = int(fields.get("CPUAlloc") or 0)
-        real_memory = int(fields.get("RealMemory") or 0)
-        allocated_memory = int(fields.get("AllocMem") or 0)
-        free_memory = int(fields.get("FreeMem") or 0)
+        total_cpu = _to_int(fields.get("CPUTot"), _to_int(fields.get("CPUEfctv"), 0))
+        allocated_cpu = _to_int(fields.get("CPUAlloc"), 0)
+        real_memory = _to_int(fields.get("RealMemory"), 0)
+        allocated_memory = _to_int(fields.get("AllocMem"), 0)
+        free_memory = _to_int(fields.get("FreeMem"), 0)
         usable_memory = free_memory if free_memory > 0 else max(0, real_memory - allocated_memory)
         state = fields.get("State", "UNKNOWN").split("+")[0].upper()
+        boot_time = fields.get("BootTime", "")
+        slurmd_start_time = fields.get("SlurmdStartTime", "")
 
         nodes.append({
             "name": name,
@@ -125,6 +148,8 @@ def _parse_scontrol_nodes(output: str) -> List[Dict[str, Any]]:
             "features": fields.get("AvailableFeatures", ""),
             "gres": fields.get("Gres", ""),
             "load": fields.get("CPULoad", "0"),
+            "boot_time": boot_time,
+            "slurmd_start_time": slurmd_start_time,
         })
     return nodes
 
@@ -136,10 +161,10 @@ def _parse_sinfo_nodes(output: str) -> List[Dict[str, Any]]:
         if len(parts) < 5:
             continue
         name, state, cpus, memory, cpu_state = parts[:5]
-        cpu_parts = [int(x) if x.isdigit() else 0 for x in cpu_state.split("/")]
+        cpu_parts = [_to_int(x, 0) for x in cpu_state.split("/")]
         allocated = cpu_parts[0] if len(cpu_parts) >= 1 else 0
-        idle = cpu_parts[1] if len(cpu_parts) >= 2 else max(0, int(cpus or 0) - allocated)
-        total = cpu_parts[3] if len(cpu_parts) >= 4 else int(cpus or 0)
+        idle = cpu_parts[1] if len(cpu_parts) >= 2 else max(0, _to_int(cpus, 0) - allocated)
+        total = cpu_parts[3] if len(cpu_parts) >= 4 else _to_int(cpus, 0)
         nodes.append({
             "name": name,
             "state": state.split("+")[0].upper(),
@@ -147,9 +172,9 @@ def _parse_sinfo_nodes(output: str) -> List[Dict[str, Any]]:
             "total_cpus": total,
             "allocated_cpus": allocated,
             "free_cpus": idle,
-            "real_memory_mb": int(memory or 0),
+            "real_memory_mb": _to_int(memory, 0),
             "allocated_memory_mb": 0,
-            "free_memory_mb": int(memory or 0),
+            "free_memory_mb": _to_int(memory, 0),
             "features": "",
             "gres": "",
             "load": "0",
@@ -164,7 +189,12 @@ def get_cluster_snapshot() -> Dict[str, Any]:
         nodes = _parse_sinfo_nodes(_run_slurm_command(["sinfo", "-N", "-h", "-o", "%N|%T|%c|%m|%C|%P"], timeout=8))
         source = "sinfo"
 
-    healthy_nodes = [n for n in nodes if n["state"] not in UNHEALTHY_STATES and n["total_cpus"] > 0]
+    healthy_nodes = [
+        n for n in nodes
+        if n["state"] not in UNHEALTHY_STATES
+        and n["total_cpus"] > 0
+        and str(n.get("slurmd_start_time", "")).lower() not in {"none", "n/a", "unknown"}
+    ]
     queue_summary = get_queue_summary()
     return {
         "source": source,
@@ -198,10 +228,20 @@ def get_queue_summary() -> Dict[str, int]:
 
 def _load_policy_defaults() -> Dict[str, Any]:
     defaults = {
-        "max_cpu_per_submission": int(os.getenv("JOB_MAX_CPU_PER_SUBMISSION", "0") or 0),
-        "max_memory_gb_per_submission": int(os.getenv("JOB_MAX_MEMORY_GB_PER_SUBMISSION", "0") or 0),
+        "max_cpu_per_submission": _to_int(os.getenv("JOB_MAX_CPU_PER_SUBMISSION", "0"), 0),
+        "max_memory_gb_per_submission": _to_int(os.getenv("JOB_MAX_MEMORY_GB_PER_SUBMISSION", "0"), 0),
         "default_partition": os.getenv("JOB_DEFAULT_PARTITION", ""),
-        "fair_share_weight": int(os.getenv("JOB_FAIR_SHARE_WEIGHT", "0") or 0),
+        "fair_share_weight": _to_int(os.getenv("JOB_FAIR_SHARE_WEIGHT", "0"), 0),
+        "portal_node_allowlist": [
+            node.strip()
+            for node in os.getenv("PORTAL_SLURM_NODELIST", os.getenv("SLURM_PORTAL_NODELIST", "")).split(",")
+            if node.strip()
+        ],
+        "portal_node_exclude": [
+            node.strip()
+            for node in os.getenv("PORTAL_SLURM_EXCLUDE_NODES", "").split(",")
+            if node.strip()
+        ],
     }
     try:
         import mysql.connector
@@ -223,10 +263,10 @@ def _load_policy_defaults() -> Dict[str, Any]:
             value = row["value"]
             if key == "job_default_partition":
                 defaults["default_partition"] = value or ""
-            elif key == "job_max_cpu_per_submission" and str(value).isdigit():
-                defaults["max_cpu_per_submission"] = int(value)
-            elif key == "job_max_memory_gb_per_submission" and str(value).isdigit():
-                defaults["max_memory_gb_per_submission"] = int(value)
+            elif key == "job_max_cpu_per_submission":
+                defaults["max_cpu_per_submission"] = _to_int(value, 0)
+            elif key == "job_max_memory_gb_per_submission":
+                defaults["max_memory_gb_per_submission"] = _to_int(value, 0)
         cursor.close()
         db.close()
     except Exception as exc:
@@ -237,13 +277,17 @@ def _load_policy_defaults() -> Dict[str, Any]:
 def _pack_tasks(nodes: List[Dict[str, Any]], ntasks: int, cpus_per_task: int, mem_per_task_mb: int) -> Tuple[List[Dict[str, Any]], int]:
     distribution: List[Dict[str, Any]] = []
     remaining = ntasks
+
+    def node_capacity(node: Dict[str, Any]) -> int:
+        cpu_capacity = node["free_cpus"] // max(1, cpus_per_task)
+        if node["free_memory_mb"] <= 0:
+            return cpu_capacity
+        return min(cpu_capacity, node["free_memory_mb"] // max(1, mem_per_task_mb))
+
     sorted_nodes = sorted(
         nodes,
         key=lambda n: (
-            min(
-                n["free_cpus"] // max(1, cpus_per_task),
-                n["free_memory_mb"] // max(1, mem_per_task_mb),
-            ),
+            node_capacity(n),
             n["free_cpus"],
             n["free_memory_mb"],
         ),
@@ -253,10 +297,7 @@ def _pack_tasks(nodes: List[Dict[str, Any]], ntasks: int, cpus_per_task: int, me
     for node in sorted_nodes:
         if remaining <= 0:
             break
-        task_capacity = min(
-            node["free_cpus"] // max(1, cpus_per_task),
-            node["free_memory_mb"] // max(1, mem_per_task_mb),
-        )
+        task_capacity = node_capacity(node)
         if task_capacity <= 0:
             continue
         assigned = min(remaining, task_capacity)
@@ -278,10 +319,11 @@ def _min_nodes_for_capacity(nodes: List[Dict[str, Any]], ntasks: int, cpus_per_t
     for node in nodes:
         cpu_key = "total_cpus" if use_total else "free_cpus"
         mem_key = "real_memory_mb" if use_total else "free_memory_mb"
-        capacities.append(min(
-            node[cpu_key] // max(1, cpus_per_task),
-            node[mem_key] // max(1, mem_per_task_mb),
-        ))
+        cpu_capacity = node[cpu_key] // max(1, cpus_per_task)
+        if node[mem_key] <= 0:
+            capacities.append(cpu_capacity)
+        else:
+            capacities.append(min(cpu_capacity, node[mem_key] // max(1, mem_per_task_mb)))
     remaining = ntasks
     used = 0
     for capacity in sorted(capacities, reverse=True):
@@ -357,6 +399,29 @@ def plan_resources(job_req) -> Dict[str, Any]:
     nodes = snapshot["nodes"]
     partition = getattr(job_req, "partition", None) or policies["default_partition"] or None
 
+    if policies["portal_node_allowlist"]:
+        allowed = set(policies["portal_node_allowlist"])
+        filtered_nodes = [node for node in nodes if node["name"] in allowed]
+        if filtered_nodes:
+            nodes = filtered_nodes
+            explanations.append(
+                "Portal storage-safe node policy applied: jobs are limited to nodes with shared portal storage."
+            )
+        else:
+            raise ValueError(
+                "No healthy Slurm nodes from PORTAL_SLURM_NODELIST are currently available. "
+                "Check node health or update the portal node allowlist."
+            )
+
+    if policies["portal_node_exclude"]:
+        excluded = set(policies["portal_node_exclude"])
+        nodes = [node for node in nodes if node["name"] not in excluded]
+        if not nodes:
+            raise ValueError("All healthy Slurm nodes were excluded by PORTAL_SLURM_EXCLUDE_NODES.")
+
+    if nodes and any(node["real_memory_mb"] <= 0 for node in nodes):
+        warnings.append("Some Slurm nodes reported memory as N/A; planner used CPU availability and left final memory enforcement to Slurm.")
+
     if partition:
         partition_nodes = [
             node for node in nodes
@@ -377,7 +442,7 @@ def plan_resources(job_req) -> Dict[str, Any]:
             max_single_node_tasks,
             min(
                 node["total_cpus"] // max(1, cpus_per_task),
-                node["real_memory_mb"] // max(1, mem_per_task_mb),
+                (node["real_memory_mb"] // max(1, mem_per_task_mb)) if node["real_memory_mb"] > 0 else node["total_cpus"] // max(1, cpus_per_task),
             ),
         )
     if ntasks > max_single_node_tasks and job_type in {"single_node", "python", "distributed", "mpi", "batch"}:
@@ -407,12 +472,16 @@ def plan_resources(job_req) -> Dict[str, Any]:
         "#SBATCH --distribution=block:block",
         "#SBATCH --hint=nomultithread",
     ]
-    if min_nodes and min_nodes > 0:
+    if min_nodes and min_nodes > 1:
         directives.append(f"#SBATCH --nodes={min_nodes}-{max(min_nodes, len(nodes) or min_nodes)}")
+    if policies["portal_node_allowlist"]:
+        directives.append(f"#SBATCH --nodelist={','.join(policies['portal_node_allowlist'])}")
+    if policies["portal_node_exclude"]:
+        directives.append(f"#SBATCH --exclude={','.join(policies['portal_node_exclude'])}")
     if partition:
         directives.append(f"#SBATCH --partition={partition}")
     if getattr(job_req, "gpu_count", 0):
-        directives.append(f"#SBATCH --gres=gpu:{int(getattr(job_req, 'gpu_count', 0))}")
+        directives.append(f"#SBATCH --gres=gpu:{_to_int(getattr(job_req, 'gpu_count', 0), 0)}")
     if getattr(job_req, "constraint", None):
         directives.append(f"#SBATCH --constraint={getattr(job_req, 'constraint')}")
 
@@ -426,7 +495,7 @@ def plan_resources(job_req) -> Dict[str, Any]:
         "total_memory_mb": total_memory_mb,
         "mem_per_cpu": mem_per_cpu_mb,
         "mem_per_task_mb": mem_per_task_mb,
-        "gpu_count": int(getattr(job_req, "gpu_count", 0) or 0),
+        "gpu_count": _to_int(getattr(job_req, "gpu_count", 0), 0),
         "partition": partition,
         "job_type": job_type,
         "allocation_mode": allocation_mode,

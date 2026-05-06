@@ -14,11 +14,37 @@ A professional, high-density control plane for modern HPC clusters. Designed for
 - **Job Registry Enforcement**: Administrative caps for concurrent batch and interactive sessions per user.
 - **Maintenance Governance**: Global system lock with IP-based whitelisting for seamless infrastructure upgrades.
 - **Admin Diagnostic Tools**: Integrated terminal console for direct node access and fabric troubleshooting.
+- **Node Management**: Admin-only two-column inventory view that groups registered access nodes into Ubuntu and Windows pools without changing Slurm or Ansible state.
 
 ### 3. Resource & Identity Governance
 - **Quota Management**: Individualized CPU, RAM, and Storage allocations per researcher.
 - **Cluster Inventory**: Federated view of Slurm compute nodes and administrative gateway nodes.
 - **Audit & Feedback**: Integrated system feedback loop for researcher-administrator communication.
+
+## 🧭 Operator Workflow
+
+1. **Register access nodes** in `Management -> Slurm Nodes`. This is the portal-owned inventory used for SSH/RDP/WinRM access and diagnostics.
+2. **Review grouped inventory** in `Management -> Node Management`. Ubuntu/Linux nodes and Windows nodes are grouped from live SSH/RDP/WinRM probes first, then saved OS Family, then metadata fallback.
+3. **Monitor Slurm resources** from `Nodes`, `Dashboard`, and `Jobs`. Slurm resource counts come from the Slurm integration, while Node Management only shows portal-registered access targets.
+4. **Submit workloads** from the user or admin job workflows. The Job-API dynamically plans CPU, memory, walltime, and submission scripts from live Slurm state.
+
+Keep infrastructure changes in the Ansible project. The portal should manage user-facing workflows, inventory visibility, job submission, and operational observability.
+
+For dual-boot or repurposed nodes, refresh `Node Management` after changing the machine state. If Windows remote ports are blocked, update the portal OS Family in `Management -> Slurm Nodes` as a fallback.
+
+## Resource Enforcement Contract
+
+The portal and Job-API request CPU/RAM through Slurm; they do not enforce kernel resource limits by themselves. Strict runtime enforcement must be configured by the Ansible Slurm setup:
+
+- `SelectType=select/cons_tres`
+- `SelectTypeParameters=CR_Core_Memory`
+- `ProctrackType=proctrack/cgroup`
+- `TaskPlugin=task/cgroup`
+- `JobAcctGatherType=jobacct_gather/cgroup`
+- `ConstrainCores=yes`
+- `ConstrainRAMSpace=yes`
+
+With that contract in place, a portal job requesting 1 CPU and 1 GB RAM is submitted as a Slurm allocation and enforced by Slurm cgroups on the compute node.
 
 ## 🛠️ Technology Stack
 
@@ -52,6 +78,15 @@ docker-compose up -d --build
 # 🛑 AVOID deleting existing data:
 # DO NOT use 'docker-compose down -v' as it will destroy persistent volumes.
 # Use 'docker-compose down' (without -v) to stop services while keeping data.
+```
+
+For Docker Compose v1 recreate errors such as `KeyError: 'ContainerConfig'`, stop and remove only the affected portal containers, keep the database volume, then recreate services:
+
+```bash
+docker-compose stop backend job-api frontend
+docker rm -f portal_backend portal_job_api portal_frontend 2>/dev/null || true
+docker-compose up -d database
+docker-compose up -d --no-deps --force-recreate backend job-api frontend
 ```
 
 ## 🔐 Administrative Credentials

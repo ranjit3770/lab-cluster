@@ -1,0 +1,76 @@
+---
+- name: Set Ubuntu as default GRUB boot entry on selected Linux nodes
+  hosts: "{{ target_hosts | default('NO_TARGET_PROVIDED') }}"
+  become: yes
+  gather_facts: no
+  serial: "{{ batch_size | default(10) }}"
+
+  vars:
+    grub_default_entry: "{{ grub_default | default('0') }}"
+    reboot_nodes: "{{ reboot | default('prompt') }}"
+
+  pre_tasks:
+    - name: Validate target_hosts was provided
+      assert:
+        that:
+          - target_hosts is defined
+          - target_hosts | length > 0
+          - target_hosts != 'NO_TARGET_PROVIDED'
+        fail_msg: >-
+          No target hosts were provided. Run with
+          -e target_hosts=worker_node28 or -e target_hosts='worker_node1:worker_node2'.
+      run_once: true
+
+    - name: Prevent accidental Windows inventory targeting
+      assert:
+        that:
+          - "'windows_' not in inventory_hostname"
+          - ansible_connection | default('ssh') != 'winrm'
+        fail_msg: >-
+          {{ inventory_hostname }} is a Windows inventory entry. This playbook only edits Linux GRUB.
+
+  tasks:
+    - name: Ensure GRUB_DEFAULT is set
+      lineinfile:
+        path: /etc/default/grub
+        regexp: '^GRUB_DEFAULT='
+        line: 'GRUB_DEFAULT={{ grub_default_entry }}'
+        backup: yes
+      register: grub_change
+
+    - name: Update GRUB configuration
+      command: update-grub
+      when: grub_change.changed
+
+    - name: Show targeted GRUB result
+      debug:
+        msg: >-
+          {{ inventory_hostname }} GRUB_DEFAULT={{ grub_default_entry }}
+          changed={{ grub_change.changed }}
+
+    - name: Confirm reboot for changed selected nodes
+      pause:
+        prompt: |
+
+          ================================================================================
+          [ATTENTION REQUIRED] GRUB changed on selected nodes.
+          Target pattern: {{ target_hosts }}
+          Type 'yes' to reboot changed nodes now.
+          Type 'no' to skip rebooting.
+          ================================================================================
+          Your choice:
+      register: reboot_prompt
+      run_once: true
+      when:
+        - reboot_nodes == 'prompt'
+        - ansible_play_hosts | length > 0
+
+    - name: Reboot selected nodes when requested
+      reboot:
+        msg: "Rebooting to apply targeted GRUB default"
+        test_command: whoami
+      when:
+        - grub_change.changed
+        - reboot_nodes == true or
+          reboot_nodes | string | lower in ['true', 'yes', 'y'] or
+          (reboot_nodes == 'prompt' and (reboot_prompt.user_input | default('no') | lower) in ['y', 'yes'])

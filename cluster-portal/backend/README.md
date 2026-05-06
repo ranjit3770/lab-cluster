@@ -16,6 +16,21 @@ FastAPI-powered core registry for identity, resource quotas, and platform govern
 - `seed_cluster.py`: Clean cluster initialization (Purges dummy data).
 - `initial_data.py`: Administrative user and system settings provisioning.
 
+## 🧭 Portal Inventory Contract
+
+The portal backend owns the registered access-node inventory exposed through `/api/v1/developer/nodes`.
+
+- `GET /api/v1/developer/nodes`: Returns the admin-managed node list used by Slurm Nodes and Node Management.
+- `POST /api/v1/developer/nodes`: Adds one access target.
+- `POST /api/v1/developer/nodes/bulk`: Adds many access targets in one operation.
+- `PUT /api/v1/developer/nodes/{id}` and `DELETE /api/v1/developer/nodes/{id}`: Maintain existing entries.
+
+Each node supports `os_family`: `auto`, `ubuntu`, or `windows`. The startup initializer applies a lightweight migration for existing databases so older `dev_nodes` tables receive the `os_family` column without dropping data.
+
+`GET /api/v1/developer/nodes` also returns live runtime detection fields for the Node Management page. The backend probes Windows RDP/WinRM/SMB/RPC ports (`3389`, `5985`, `5986`, `445`, `135`) and SSH concurrently so dual-boot nodes can move between Ubuntu and Windows columns after refresh.
+
+This inventory is separate from Ansible host setup and from Slurm scheduler discovery. It should contain only the nodes that administrators want visible for portal access, diagnostics, and grouped Node Management views.
+
 ## 🚀 Deployment & Initialization
 The backend automatically initializes the database on startup via `initial_data.py`.
 

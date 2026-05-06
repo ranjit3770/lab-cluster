@@ -35,6 +35,12 @@ When prompted, choose:
 - `step4_main.yml`
   Full Slurm deployment sequence.
 
+- `set_grub_default_targeted.yml`
+  Sets Ubuntu/GRUB default only on selected Linux inventory hosts passed with `target_hosts`.
+
+- `set_ubuntu_boot_from_windows_targeted.yml`
+  Sets the next Ubuntu boot target from selected Windows inventory hosts over WinRM.
+
 - `finally/append_slurm_node.yml`
   Appends one new worker node.
 
@@ -66,6 +72,15 @@ worker_node1  -> worker-node1
 
 Keep this pattern consistent when adding new workers.
 
+Dual-boot nodes have two inventory names for the same machine/IP:
+
+```text
+worker_node28          -> Linux/Ubuntu SSH inventory entry
+windows_worker_node28  -> Windows WinRM inventory entry
+```
+
+Use the entry that matches the operating system currently running on the node. If the node is currently Windows, `worker_node28` will fail because SSH port `22` is not available.
+
 ## Common Commands
 
 Run the guided setup/append entrypoint:
@@ -80,6 +95,18 @@ Run full Slurm setup directly:
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass
 ```
 
+During full setup, the playbook displays detected CPU and RAM for every Slurm node before writing `slurm.conf`. Press Enter to use detected values, or enter CPU/RAM caps directly at the prompts. You can also pass caps non-interactively:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass -e slurm_cpu_cap_per_node=12 -e slurm_memory_cap_mb_per_node=12288
+```
+
+For unattended automation only, skip the confirmation prompt:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass -e confirm_slurm_resources=false
+```
+
 Append one worker directly:
 
 ```bash
@@ -90,6 +117,60 @@ Repair unhealthy Slurm nodes:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini finally/repair_unknown_slurm_nodes.yml --ask-vault-pass
+```
+
+Set Ubuntu as default GRUB entry on one selected Linux node:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_grub_default_targeted.yml -e target_hosts=worker_node28
+```
+
+Set Ubuntu as default GRUB entry on multiple selected Linux nodes:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_grub_default_targeted.yml -e "target_hosts=worker_node27:worker_node28"
+```
+
+Run without rebooting:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_grub_default_targeted.yml -e target_hosts=worker_node28 -e reboot=no
+```
+
+Force reboot without prompt when GRUB changed:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_grub_default_targeted.yml -e target_hosts=worker_node28 -e reboot=yes
+```
+
+Set a currently-Windows dual-boot node to boot Ubuntu next:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_ubuntu_boot_from_windows_targeted.yml -e target_hosts=windows_worker_node28 --ask-vault-pass
+```
+
+Force the Windows-to-Ubuntu reboot without the confirmation prompt:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_ubuntu_boot_from_windows_targeted.yml -e target_hosts=windows_worker_node28 -e reboot=yes --ask-vault-pass
+```
+
+Target multiple currently-Windows dual-boot nodes:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_ubuntu_boot_from_windows_targeted.yml -e "target_hosts=windows_worker_node27:windows_worker_node28" --ask-vault-pass
+```
+
+Skip waiting for Ubuntu SSH after reboot:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_ubuntu_boot_from_windows_targeted.yml -e target_hosts=windows_worker_node28 -e wait_for_linux=false --ask-vault-pass
+```
+
+After the node is back in Ubuntu, use the Linux inventory entry if you want to make Ubuntu the persistent GRUB default:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini set_grub_default_targeted.yml -e target_hosts=worker_node28 -e reboot=no
 ```
 
 Syntax-check the main entrypoint without changing cluster machines:
@@ -106,6 +187,39 @@ ANSIBLE_LOCAL_TEMP=/tmp/ansible-local ansible-playbook -i hosts.ini cluster_mana
 - Use `setup` mode only for fresh setup or full rebuild.
 - Keep `hosts.ini` current and backed up with the cluster configuration.
 - Review playbook output at the end for final `sinfo` and `slurmd` status.
+
+## Slurm Resource Enforcement
+
+The generated Slurm configuration is designed for production-style resource accounting:
+
+- `SelectType=select/cons_tres`
+- `SelectTypeParameters=CR_Core_Memory`
+- `ProctrackType=proctrack/cgroup`
+- `TaskPlugin=task/cgroup`
+- `JobAcctGatherType=jobacct_gather/cgroup`
+- `ConstrainCores=yes`
+- `ConstrainRAMSpace=yes`
+- `ConstrainSwapSpace=yes`
+- `ConstrainDevices=yes`
+
+This means Slurm schedules CPU and memory as consumable resources and Linux cgroups enforce the allocation at runtime. A job requesting `--cpus-per-task=2 --mem=2G` should be restricted to that allocation instead of being able to consume the whole node.
+
+Quick runtime verification after deployment:
+
+```bash
+scontrol show config | egrep 'SelectType|SelectTypeParameters|ProctrackType|TaskPlugin|JobAcctGatherType'
+cat /etc/slurm/cgroup.conf
+scontrol show node worker-node28
+```
+
+## Portal Relationship
+
+Keep Ansible and the portal responsibilities separate:
+
+- **Ansible** provisions operating systems, Slurm, Munge, controller services, workers, and repair actions.
+- **Cluster Portal** manages users, quotas, job submission, registered access nodes, dashboards, and the admin-only Node Management view.
+- **Node naming** should remain consistent between `hosts.ini`, Slurm node names, and portal-registered access nodes so operators can quickly match scheduler state with portal inventory.
+- **Windows nodes** should stay in the appropriate Ansible inventory/vault workflow. The portal Node Management page can display Windows access targets after they are registered in the portal, but it does not provision them.
 
 ## Full Setup Flow
 
@@ -132,4 +246,3 @@ See [Fresh Slurm Cluster Setup](FRESH-SLURM-CLUSTER-SETUP.md) for the full opera
 The append path is managed by `finally/append_slurm_node.yml`. It prepares only the requested new worker, regenerates controller configuration from inventory, starts `slurmd` on the new worker, resumes it in Slurm, and verifies all workers.
 
 See [Append a New Slurm Worker Node](APPEND-NEW-NODE.md) for the detailed procedure.
-

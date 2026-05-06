@@ -54,11 +54,17 @@
   gather_facts: no
 
   tasks:
-    - name: Avoid cgroup proctrack on head node config
-      ansible.builtin.replace:
+    - name: Keep production cgroup proctrack on head node config
+      ansible.builtin.lineinfile:
         path: /etc/slurm/slurm.conf
-        regexp: '^\s*ProctrackType\s*=\s*proctrack/(cgroup|linux)\s*$'
-        replace: 'ProctrackType=proctrack/linuxproc'
+        regexp: '^\s*ProctrackType\s*='
+        line: 'ProctrackType=proctrack/cgroup'
+
+    - name: Keep production cgroup task plugin on head node config
+      ansible.builtin.lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^\s*TaskPlugin\s*='
+        line: 'TaskPlugin=task/cgroup'
 
     - name: Reconfigure slurmctld after config repair
       ansible.builtin.command: /usr/local/slurm/bin/scontrol reconfigure
@@ -123,11 +129,18 @@
         enabled: yes
       when: needs_slurmd_repair
 
-    - name: Avoid cgroup proctrack on nodes without mounted cgroup v1 controllers
-      ansible.builtin.replace:
+    - name: Keep production cgroup proctrack on repaired worker config
+      ansible.builtin.lineinfile:
         path: /etc/slurm/slurm.conf
-        regexp: '^\s*ProctrackType\s*=\s*proctrack/(cgroup|linux)\s*$'
-        replace: 'ProctrackType=proctrack/linuxproc'
+        regexp: '^\s*ProctrackType\s*='
+        line: 'ProctrackType=proctrack/cgroup'
+      when: needs_slurmd_repair
+
+    - name: Keep production cgroup task plugin on repaired worker config
+      ansible.builtin.lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^\s*TaskPlugin\s*='
+        line: 'TaskPlugin=task/cgroup'
       when: needs_slurmd_repair
 
     - name: Restart slurmd on worker that needs repair

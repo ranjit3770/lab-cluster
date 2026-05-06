@@ -8,6 +8,7 @@ class DevNodeBase(BaseModel):
     ssh_port: int = 22
     ssh_username: str
     ssh_password: Optional[str] = None
+    os_family: Optional[str] = "auto"
 
 class DevNodeCreate(DevNodeBase):
     pass
@@ -18,10 +19,17 @@ class DevNodeUpdate(BaseModel):
     ssh_port: Optional[int] = None
     ssh_username: Optional[str] = None
     ssh_password: Optional[str] = None
+    os_family: Optional[str] = None
 
 class DevNode(DevNodeBase):
     id: int
     created_at: datetime
+    detected_os_family: Optional[str] = None
+    effective_os_family: Optional[str] = None
+    detection_source: Optional[str] = None
+    detected_access_label: Optional[str] = None
+    detected_access_port: Optional[int] = None
+    detected_reachable: Optional[bool] = None
 
     class Config:
         from_attributes = True

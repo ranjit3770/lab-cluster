@@ -10,7 +10,7 @@ from app.schemas import JobRequest, JobResponse
 from app.slurm import submit_job, get_slurm_env, get_slurm_jwt
 from app.planner import plan_resources
 from app.streamer import combined_log_stream
-from app.status import job_status, cancel_job
+from app.status import job_status, cancel_job, job_status_detail
 from app.models import insert_job_log, update_job_status, get_job_log_status
 from app.config import MYSQL_CONFIG, SLURM_REST_URL, SLURM_JWT_USER
 import mysql.connector
@@ -39,13 +39,16 @@ def setup_database():
             # Try CLI with portal's default root password (Amma@123)
             root_p = os.getenv("MYSQL_ROOT_PASSWORD", "Amma@123")
             
-            # Helper to run mysql command with optional password
+            # Helper to run mysql command with the configured root password only.
             def run_mysql(cmd):
-                # Try with password and explicit host/port, disabling SSL for internal network
-                res = subprocess.run(["mysql", "-h", db_host, "-P", str(db_port), "--ssl=0", "-u", "root", f"-p{root_p}", "-e", cmd], capture_output=True, text=True)
+                res = subprocess.run(
+                    ["mysql", "-h", db_host, "-P", str(db_port), "--ssl=0", "-u", "root", f"-p{root_p}", "-e", cmd],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
                 if res.returncode != 0:
-                    # Try without password but with host/port
-                    subprocess.run(["mysql", "-h", db_host, "-P", str(db_port), "--ssl=0", "-u", "root", "-e", cmd], check=False)
+                    print(f"CLI DB setup command skipped: {res.stderr.strip()}")
 
             run_mysql(f"CREATE DATABASE IF NOT EXISTS {db_name};")
             run_mysql(f"CREATE USER IF NOT EXISTS '{db_user}'@'%' IDENTIFIED BY '{db_pass}';")
@@ -53,13 +56,6 @@ def setup_database():
             # CRITICAL: Grant access to strach_portal for maintenance and config checks
             run_mysql(f"GRANT ALL PRIVILEGES ON strach_portal.* TO '{db_user}'@'%';")
             run_mysql("FLUSH PRIVILEGES;")
-            
-            # Also try sudo as fallback (pointing to the database host/port, disabling SSL)
-            subprocess.run(["sudo", "mysql", "-h", db_host, "-P", str(db_port), "--ssl=0", "-e", f"CREATE DATABASE IF NOT EXISTS {db_name};"], check=False)
-            subprocess.run(["sudo", "mysql", "-h", db_host, "-P", str(db_port), "--ssl=0", "-e", f"CREATE USER IF NOT EXISTS '{db_user}'@'%' IDENTIFIED BY '{db_pass}';"], check=False)
-            subprocess.run(["sudo", "mysql", "-h", db_host, "-P", str(db_port), "--ssl=0", "-e", f"GRANT ALL PRIVILEGES ON {db_name}.* TO '{db_user}'@'%';"], check=False)
-            subprocess.run(["sudo", "mysql", "-h", db_host, "-P", str(db_port), "--ssl=0", "-e", f"GRANT ALL PRIVILEGES ON strach_portal.* TO '{db_user}'@'%';"], check=False)
-            subprocess.run(["sudo", "mysql", "-h", db_host, "-P", str(db_port), "--ssl=0", "-e", "FLUSH PRIVILEGES;"], check=False)
     except Exception as e:
         print(f"CLI DB setup attempt skipped: {e}")
 
@@ -627,6 +623,7 @@ def submit(job: JobRequest):
         "expected_node_distribution": orchestration_meta.get("expected_node_distribution"),
         "allocation": orchestration_meta.get("allocation"),
         "audit_log_path": orchestration_meta.get("audit_log_path"),
+        "submission_transport": orchestration_meta.get("submission_transport"),
     }
     if jupyter_port:
         result["jupyter_port"] = jupyter_port
@@ -679,7 +676,7 @@ def get_jupyter_url(job_id: str):
         if not node:
             return {
                 "status": "PENDING",
-                "message": "Job is waiting for resources. Jupyter URL will be available once running.",
+                "message": "Job is accepted by Slurm and is not running yet. Jupyter URL will be available once the session starts.",
                 "port": port
             }
         
@@ -709,6 +706,7 @@ def logs(username: str, job_id: str):
 @app.get("/status/{job_id}")
 def get_job_status_endpoint(job_id: str):
     s = job_status(job_id)
+    detail = job_status_detail(job_id)
     # Fetch Quota Meta from DB
     try:
         db = mysql.connector.connect(**MYSQL_CONFIG)
@@ -742,19 +740,21 @@ def get_job_status_endpoint(job_id: str):
                 return {
                     "job_id": job_id,
                     "status": db_s,
-                    "quota_status": q_s
+                    "quota_status": q_s,
+                    **detail,
                 }
             
             # Default fallback for missing jobs that aren't explicitly unfinished in DB
             return {
                 "job_id": job_id,
                 "status": "CANCELLED", 
-                "quota_status": q_s
+                "quota_status": q_s,
+                **detail,
             }
             
-        return {"job_id": job_id, "status": s, "quota_status": q_s}
+        return {"job_id": job_id, "status": s, "quota_status": q_s, **detail}
     except:
-        return {"job_id": job_id, "status": s, "quota_status": "NORMAL"}
+        return {"job_id": job_id, "status": s, "quota_status": "NORMAL", **detail}
 
 @app.post("/cancel/{job_id}")
 def cancel(job_id: str):

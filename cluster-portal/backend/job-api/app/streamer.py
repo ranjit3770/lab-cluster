@@ -12,7 +12,7 @@ def combined_log_stream(username, job_id):
     if not (os.path.exists(out) or os.path.exists(err)):
         status = job_status(job_id)
         if status == "PENDING":
-             yield "Job is waiting for resources (Slurm queue)."
+             yield "Job is accepted by Slurm and is queued or starting."
         elif status == "UNKNOWN":
              yield "Job status unknown. It may have failed or not submitted properly."
         elif status == "RUNNING":
@@ -37,4 +37,3 @@ def combined_log_stream(username, job_id):
                     yield f"[stderr] {line}"
     except Exception as e:
         yield f"[ERROR] Failed to read logs: {e}\n"
-

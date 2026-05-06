@@ -9,6 +9,7 @@
     cluster_name: "demo-cluster"
     jwt_key_path: "/var/spool/slurm/statesave/jwt_hs256.key"
     slurm_bin: "/usr/local/slurm/bin"
+    slurm_resource_confirmation: "{{ confirm_slurm_resources | default(true) }}"
 
   tasks:
     - name: 0. Refresh hardware and network facts for Slurm node definitions
@@ -35,6 +36,87 @@
       ansible.builtin.stat:
         path: /dev/dri/renderD128
       register: intel_gpu_render
+
+    - name: 0d. Show detected Slurm scheduling resources before generating slurm.conf
+      ansible.builtin.debug:
+        msg: |
+          Detected node resources that will be advertised to Slurm:
+          {% for host in groups['head_nodes'] + groups['cluster_nodes'] %}
+          {% set hvars = hostvars[host] %}
+          {% set topology = (hvars['slurmd_topology']['stdout'] | default('')).split() %}
+          {% set detected_cpus = (topology[0] if topology | length > 0 else hvars['ansible_processor_vcpus'] | default(0)) | int %}
+          {% set detected_mem = (topology[3] if topology | length > 3 else (hvars['ansible_memtotal_mb'] | default(0) * 0.9) | int) | int %}
+          - {{ host | replace('_', '-') }} ({{ hvars['ansible_host'] | default('unknown-ip') }}): {{ detected_cpus }} CPUs, {{ detected_mem }} MB RAM
+          {% endfor %}
+
+          Optional caps:
+          - slurm_cpu_cap_per_node={{ slurm_cpu_cap_per_node | default('detected') }}
+          - slurm_memory_cap_mb_per_node={{ slurm_memory_cap_mb_per_node | default('detected') }}
+
+          Slurm will enforce CPU/RAM with task/cgroup, proctrack/cgroup, select/cons_tres, and CR_Core_Memory.
+      run_once: true
+
+    - name: 0e. Ask operator for CPU cores to advertise per node
+      ansible.builtin.pause:
+        prompt: |
+
+          ================================================================================
+          [SLURM RESOURCE CONFIRMATION]
+          Review the detected CPU/RAM values above.
+
+          CPU cores per node to advertise to Slurm:
+          - Press Enter to use detected CPU count per node.
+          - Enter a number such as 12 to cap every node at that CPU count.
+          - Type 'abort' to stop before slurm.conf is written.
+          ================================================================================
+          CPU cores per node:
+      register: slurm_cpu_cap_prompt
+      run_once: true
+      when: slurm_resource_confirmation | bool
+
+    - name: 0f. Ask operator for RAM to advertise per node
+      ansible.builtin.pause:
+        prompt: |
+
+          ================================================================================
+          RAM per node to advertise to Slurm, in MB:
+          - Press Enter to use detected RAM per node.
+          - Enter a number such as 12288 to cap every node at 12 GB.
+          Type 'abort' to stop before slurm.conf is written.
+          ================================================================================
+          RAM MB per node:
+      register: slurm_memory_cap_prompt
+      run_once: true
+      when: slurm_resource_confirmation | bool
+
+    - name: 0g. Stop if Slurm resource policy was aborted
+      ansible.builtin.fail:
+        msg: "Slurm resource generation aborted by operator before writing slurm.conf."
+      when:
+        - slurm_resource_confirmation | bool
+        - (slurm_cpu_cap_prompt.user_input | default('') | lower) in ['abort', 'no', 'n', 'stop'] or
+          (slurm_memory_cap_prompt.user_input | default('') | lower) in ['abort', 'no', 'n', 'stop']
+      run_once: true
+
+    - name: 0h. Save operator resource caps for slurm.conf generation
+      ansible.builtin.set_fact:
+        slurm_operator_cpu_cap_per_node: >-
+          {{ slurm_cpu_cap_per_node | default((slurm_cpu_cap_prompt | default({})).user_input | default('')) | string | trim }}
+        slurm_operator_memory_cap_mb_per_node: >-
+          {{ slurm_memory_cap_mb_per_node | default((slurm_memory_cap_prompt | default({})).user_input | default('')) | string | trim }}
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: 0i. Validate operator CPU/RAM caps
+      ansible.builtin.assert:
+        that:
+          - hostvars['localhost']['slurm_operator_cpu_cap_per_node'] == '' or
+            hostvars['localhost']['slurm_operator_cpu_cap_per_node'] is match('^[1-9][0-9]*$')
+          - hostvars['localhost']['slurm_operator_memory_cap_mb_per_node'] == '' or
+            hostvars['localhost']['slurm_operator_memory_cap_mb_per_node'] is match('^[1-9][0-9]*$')
+        fail_msg: "CPU and RAM caps must be blank or positive integers."
+      run_once: true
 
     - name: 1. Ensure Slurm directory structure exists
       ansible.builtin.file:
@@ -73,7 +155,7 @@
           AccountingStorageType=accounting_storage/slurmdbd
           AccountingStorageHost=head-node
           AccountingStoragePort=6819
-          JobAcctGatherType=jobacct_gather/linux
+          JobAcctGatherType=jobacct_gather/cgroup
           JobAcctGatherFrequency=30
 
           # Paths & Daemons
@@ -83,7 +165,10 @@
           StateSaveLocation={{ slurm_state_dir }}
           SlurmUser=slurm
           SlurmdUser=root
-          ProctrackType=proctrack/linuxproc
+          ProctrackType=proctrack/cgroup
+          TaskPlugin=task/cgroup
+          SelectType=select/cons_tres
+          SelectTypeParameters=CR_Core_Memory
 
           # Logging
           SlurmctldLogFile=/var/log/slurm/slurmctld.log
@@ -96,10 +181,15 @@
           {% for host in groups['head_nodes'] + groups['cluster_nodes'] %}
           {% set hvars = hostvars[host] %}
           {% set topology = (hvars['slurmd_topology']['stdout'] | default('')).split() %}
-          {% set vcpus = (topology[0] if topology | length > 0 else hvars['ansible_processor_vcpus'] | default(12)) | int %}
-          {% set cores = (topology[1] if topology | length > 1 else (vcpus / (hvars['ansible_processor_threads_per_core'] | default(1))) | int) | int %}
-          {% set threads = (topology[2] if topology | length > 2 else hvars['ansible_processor_threads_per_core'] | default(1)) | int %}
-          {% set mem = (topology[3] if topology | length > 3 else (hvars['ansible_memtotal_mb'] | default(4000) * 0.9) | int) | int %}
+          {% set detected_vcpus = (topology[0] if topology | length > 0 else hvars['ansible_processor_vcpus'] | default(12)) | int %}
+          {% set detected_mem = (topology[3] if topology | length > 3 else (hvars['ansible_memtotal_mb'] | default(4000) * 0.9) | int) | int %}
+          {% set cpu_cap = hostvars['localhost']['slurm_operator_cpu_cap_per_node'] | default(0) | int %}
+          {% set mem_cap = hostvars['localhost']['slurm_operator_memory_cap_mb_per_node'] | default(0) | int %}
+          {% set vcpus = ([detected_vcpus, cpu_cap] | min) if cpu_cap > 0 else detected_vcpus %}
+          {% set mem = ([detected_mem, mem_cap] | min) if mem_cap > 0 else detected_mem %}
+          {% set detected_threads = (topology[2] if topology | length > 2 else hvars['ansible_processor_threads_per_core'] | default(1)) | int %}
+          {% set threads = detected_threads if detected_threads > 0 and vcpus >= detected_threads and vcpus % detected_threads == 0 else 1 %}
+          {% set cores = ((vcpus / threads) | int) if threads > 0 else vcpus %}
           NodeName={{ host | replace('_', '-') }} NodeAddr={{ hvars['ansible_host'] | default(hvars['ansible_default_ipv4']['address']) }} Sockets=1 CoresPerSocket={{ cores }} ThreadsPerCore={{ threads }} CPUs={{ vcpus }} RealMemory={{ mem }} State=UNKNOWN {% if 'cluster_nodes' in hvars['group_names'] and hvars['intel_gpu_render']['stat']['exists'] | default(false) %}Gres=gpu:intel:1{% endif %}
           
           {% endfor %}

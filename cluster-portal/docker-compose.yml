@@ -55,6 +55,9 @@ services:
       - SLURM_JWT_USER=slurmapi
       - SLURM_REST_TIMEOUT_SECONDS=2
       - SLURM_JWT_FAILURE_TTL_SECONDS=30
+      # Portal-submitted jobs need nodes that can read/write /data_storage.
+      # Override this env with a comma-separated list after mounting shared storage on workers.
+      - PORTAL_SLURM_NODELIST=${PORTAL_SLURM_NODELIST:-head-node}
     volumes:
       - /data_storage:/data_storage
       - /etc/slurm:/etc/slurm:ro

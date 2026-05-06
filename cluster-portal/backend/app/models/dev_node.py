@@ -11,5 +11,6 @@ class DevNode(Base):
     ssh_port = Column(Integer, default=22)
     ssh_username = Column(String(255), nullable=False)
     ssh_password = Column(String(255), nullable=True) # In production use encryption
+    os_family = Column(String(32), default="auto", nullable=False)
     
     created_at = Column(DateTime, default=datetime.utcnow)

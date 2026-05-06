@@ -7,6 +7,13 @@ export interface DevNode {
     ssh_port: number;
     ssh_username: string;
     ssh_password?: string;
+    os_family?: 'auto' | 'ubuntu' | 'windows';
+    detected_os_family?: 'ubuntu' | 'windows' | null;
+    effective_os_family?: 'ubuntu' | 'windows' | null;
+    detection_source?: string | null;
+    detected_access_label?: string | null;
+    detected_access_port?: number | null;
+    detected_reachable?: boolean | null;
     created_at: string;
 }
 
@@ -16,6 +23,7 @@ export interface DevNodeCreate {
     ssh_port: number;
     ssh_username: string;
     ssh_password?: string;
+    os_family?: 'auto' | 'ubuntu' | 'windows';
 }
 
 export interface DevNodeBulkCreate {
@@ -31,7 +39,8 @@ export interface DevNodeBulkResult {
 
 export const devNodesApi = {
     getNodes: (token: string) => api.get<DevNode[]>('/api/v1/developer/nodes', {
-         headers: { Authorization: `Bearer ${token}` }
+         headers: { Authorization: `Bearer ${token}` },
+         params: { _ts: Date.now() }
     }),
     
     testSSH: (token: string, data: {ip_address: string, port: number, username: string, password?: string}) => 

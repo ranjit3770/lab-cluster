@@ -26,6 +26,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
+type NodeOsFamily = 'auto' | 'ubuntu' | 'windows';
+
+const NODE_OS_OPTIONS: Array<{ value: NodeOsFamily; label: string }> = [
+    { value: 'auto', label: 'Auto Detect' },
+    { value: 'ubuntu', label: 'Ubuntu' },
+    { value: 'windows', label: 'Windows' },
+];
+
+const normalizeNodeOsFamily = (value?: string): NodeOsFamily => {
+    const normalized = (value || 'auto').trim().toLowerCase();
+    if (normalized === 'windows' || normalized === 'win') return 'windows';
+    if (normalized === 'ubuntu' || normalized === 'linux') return 'ubuntu';
+    return 'auto';
+};
+
 export default function AdminToolsPage() {
     const { token } = useAuth();
     const navigate = useNavigate();
@@ -35,7 +50,7 @@ export default function AdminToolsPage() {
     const [isBulkAdding, setIsBulkAdding] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [newNode, setNewNode] = useState<DevNodeCreate>({
-        name: '', ip_address: '', ssh_port: 22, ssh_username: '', ssh_password: ''
+        name: '', ip_address: '', ssh_port: 22, ssh_username: '', ssh_password: '', os_family: 'auto'
     });
     const [bulkText, setBulkText] = useState('');
     const [bulkUsername, setBulkUsername] = useState('');
@@ -67,9 +82,9 @@ export default function AdminToolsPage() {
         }
     };
 
-    const handleUpdateNode = async (id: number, field: string, value: string) => {
+    const handleUpdateNode = async (id: number, field: string, value: string | number) => {
         try {
-            await devNodesApi.updateNode(token!, id, { [field]: value });
+            await devNodesApi.updateNode(token!, id, { [field]: value } as Partial<DevNodeCreate>);
             toast.success("Node metadata updated.");
             fetchNodes();
             setEditingNodeId(null);
@@ -79,6 +94,12 @@ export default function AdminToolsPage() {
     };
 
     const handleTestConnection = async () => {
+        if (newNode.os_family === 'windows') {
+            setTestStatus('success');
+            toast.success("Windows endpoint will be checked by TCP when saved.");
+            return;
+        }
+
         setTestStatus('testing');
         try {
             const res = await devNodesApi.testSSH(token!, {
@@ -101,7 +122,7 @@ export default function AdminToolsPage() {
     };
 
     const handleAddNode = async () => {
-        if (testStatus !== 'success') {
+        if (newNode.os_family !== 'windows' && testStatus !== 'success') {
             toast.error("Please test the connection first.");
             return;
         }
@@ -110,7 +131,7 @@ export default function AdminToolsPage() {
             toast.success("Node added successfully.");
             setIsAddingNode(false);
             fetchNodes();
-            setNewNode({ name: '', ip_address: '', ssh_port: 22, ssh_username: '', ssh_password: '' });
+            setNewNode({ name: '', ip_address: '', ssh_port: 22, ssh_username: '', ssh_password: '', os_family: 'auto' });
             setTestStatus('idle');
         } catch (err: any) {
             toast.error(err.response?.data?.detail || "Failed to add node.");
@@ -126,10 +147,11 @@ export default function AdminToolsPage() {
         const parsedNodes = rows.map((line, index) => {
             const parts = (line.includes(",") ? line.split(",") : line.split(/\s+/))
                 .map(part => part.trim());
-            const [name, ipAddress, portValue, usernameValue, passwordValue] = parts;
+            const [name, ipAddress, portValue, usernameValue, passwordValue, osFamilyValue] = parts;
             const sshPort = portValue ? Number(portValue) : bulkPort;
             const sshUsername = usernameValue || bulkUsername.trim();
             const sshPassword = passwordValue ?? bulkPassword;
+            const osFamily = normalizeNodeOsFamily(osFamilyValue);
 
             if (!name || !ipAddress || !sshUsername || !Number.isInteger(sshPort) || sshPort < 1 || sshPort > 65535) {
                 invalidRows.push(`Line ${index + 1}`);
@@ -141,6 +163,7 @@ export default function AdminToolsPage() {
                 ssh_port: sshPort,
                 ssh_username: sshUsername,
                 ssh_password: sshPassword || undefined,
+                os_family: osFamily,
             };
         });
 
@@ -239,7 +262,7 @@ export default function AdminToolsPage() {
                                         Bulk Add Nodes
                                     </DialogTitle>
                                     <DialogDescription className="text-gray-500 font-medium text-xs mt-1">
-                                        Add one node per line using name, IP, optional port, username, and password.
+                                        Add one node per line using name, IP, optional port, username, password, and OS family.
                                     </DialogDescription>
                                 </DialogHeader>
 
@@ -249,7 +272,7 @@ export default function AdminToolsPage() {
                                         <Textarea
                                             value={bulkText}
                                             onChange={e => setBulkText(e.target.value)}
-                                            placeholder={"WORKER_NODE1,172.17.181.143\nWORKER_NODE2,172.17.181.144,22\nWORKER_NODE3,172.17.181.145,22,slurm"}
+                                            placeholder={"WORKER_NODE1,172.17.181.143,22,slurm,,ubuntu\nWIN_NODE1,172.17.181.210,3389,Administrator,,windows"}
                                             className="min-h-[180px] bg-gray-50 border-gray-100 rounded-2xl font-mono text-xs focus:bg-white focus:ring-1 focus:ring-black"
                                         />
                                     </div>
@@ -378,6 +401,22 @@ export default function AdminToolsPage() {
                                         </div>
                                     </div>
 
+                                    <div className="group">
+                                        <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1 mb-1.5 block">OS Family</Label>
+                                        <select
+                                            value={newNode.os_family || 'auto'}
+                                            onChange={e => {
+                                                setNewNode({...newNode, os_family: e.target.value as NodeOsFamily});
+                                                setTestStatus('idle');
+                                            }}
+                                            className="h-11 w-full rounded-xl border border-gray-100 bg-gray-50 px-4 text-sm font-bold text-gray-900 outline-none transition-all focus:bg-white focus:ring-1 focus:ring-black"
+                                        >
+                                            {NODE_OS_OPTIONS.map(option => (
+                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="group">
                                             <Label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1 mb-1.5 block">Username</Label>
@@ -421,14 +460,14 @@ export default function AdminToolsPage() {
                                         )}
                                     >
                                         {testStatus === 'testing' ? <RefreshCcw className="h-3 w-3 mr-2 animate-spin" /> : null}
-                                        {testStatus === 'testing' ? "Connecting..." : testStatus === 'success' ? "Connection OK" : testStatus === 'failed' ? "Failed" : "Test Connection"}
+                                        {testStatus === 'testing' ? "Connecting..." : testStatus === 'success' ? "Connection OK" : testStatus === 'failed' ? "Failed" : newNode.os_family === 'windows' ? "Mark Windows Endpoint" : "Test Connection"}
                                     </Button>
                                 </div>
 
                                 <DialogFooter className="pt-4">
                                     <Button 
                                         onClick={handleAddNode} 
-                                        disabled={testStatus !== 'success'} 
+                                        disabled={newNode.os_family !== 'windows' && testStatus !== 'success'}
                                         className="w-full h-14 rounded-2xl shadow-xl shadow-black/5 bg-black hover:bg-gray-900 text-white text-lg font-black tracking-tight"
                                     >
                                         Add Node
@@ -490,6 +529,16 @@ export default function AdminToolsPage() {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-1">
+                                        <select
+                                            value={node.os_family || 'auto'}
+                                            onChange={e => handleUpdateNode(node.id, 'os_family', e.target.value)}
+                                            className="h-7 rounded-full border border-gray-100 bg-gray-50 px-2 text-[9px] font-black uppercase tracking-widest text-gray-600 outline-none hover:bg-white focus:ring-1 focus:ring-black"
+                                            title="OS family"
+                                        >
+                                            {NODE_OS_OPTIONS.map(option => (
+                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                            ))}
+                                        </select>
                                         <Badge className="text-[8px] font-black tracking-widest bg-emerald-50 text-emerald-600 border-none px-2 py-0.5 animate-in fade-in zoom-in">STABLE</Badge>
                                         <Button 
                                             size="sm" 
@@ -508,8 +557,10 @@ export default function AdminToolsPage() {
                                         <p className="text-xs font-black text-gray-600">8.4ms</p>
                                     </div>
                                     <div className="p-3 bg-gray-50/50 rounded-2xl border border-gray-100/50">
-                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">Tunnel</p>
-                                        <p className="text-xs font-black text-gray-600">SSH:{node.ssh_port}</p>
+                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">Access</p>
+                                        <p className="text-xs font-black text-gray-600">
+                                            {node.os_family === 'windows' && node.ssh_port === 3389 ? 'RDP' : 'SSH'}:{node.ssh_port}
+                                        </p>
                                     </div>
                                 </div>
 

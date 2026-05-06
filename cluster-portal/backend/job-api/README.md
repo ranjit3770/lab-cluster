@@ -21,5 +21,11 @@ Deployed as a containerized service (Port 9000). Requires direct access to:
 - `/var/run/munge`: Integrity verification socket.
 - `/run/slurmrestd`: Slurm OpenAPI Unix socket.
 
+## 🧠 Resource Allocation Workflow
+
+The Job-API does not assume fixed cluster specifications. It reads live Slurm state, validates user requests, normalizes memory to `--mem-per-cpu`, and generates an auditable `sbatch` script for every job. Horizontal allocation is preferred for distributed workloads; vertical single-node allocation is used only when the workload type requires shared-memory execution, such as interactive Jupyter sessions.
+
+Every accepted submission writes a planner audit JSON under the user log directory. Use the audit file with Slurm accounting (`sacct`, `scontrol show job`, and cgroup data when enabled) to confirm assigned CPUs, memory, node placement, and final efficiency.
+
 ## 🔐 Security
 Uses a dedicated `slurm_user` identity for database registry access. Maintenance mode is enforced via cross-database verification against the portal's `strach_portal` system settings.
