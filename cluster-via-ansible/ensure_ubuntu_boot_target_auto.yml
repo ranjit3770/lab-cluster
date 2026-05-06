@@ -1,0 +1,348 @@
+---
+- name: Detect selected dual-boot nodes and route to the correct workflow
+  hosts: "{{ target_hosts | default('NO_TARGET_PROVIDED') }}"
+  gather_facts: no
+  become: no
+  serial: "{{ batch_size | default(10) }}"
+  vars:
+    linux_ssh_timeout: "{{ ssh_timeout | default(900) }}"
+
+  pre_tasks:
+    - name: Validate target_hosts was provided
+      ansible.builtin.assert:
+        that:
+          - target_hosts is defined
+          - target_hosts | length > 0
+          - target_hosts != 'NO_TARGET_PROVIDED'
+        fail_msg: >-
+          No target hosts were provided. Run with
+          -e target_hosts=worker_node28 or -e target_hosts='worker_node27:worker_node28'.
+      run_once: true
+
+    - name: Ensure Linux inventory names were provided
+      ansible.builtin.assert:
+        that:
+          - "'windows_' not in inventory_hostname"
+          - inventory_hostname in groups['cluster_nodes'] or inventory_hostname in groups['head_nodes']
+        fail_msg: >-
+          Use Linux inventory names such as worker_node28. This auto playbook maps to
+          windows_worker_nodeXX internally when the node is currently booted into Windows.
+
+  tasks:
+    - name: Check Ubuntu SSH reachability
+      ansible.builtin.shell:
+        cmd: |
+          timeout 3 bash -lc 'cat < /dev/null > /dev/tcp/{{ ansible_host }}/22'
+      delegate_to: localhost
+      become: no
+      register: auto_ssh_check
+      changed_when: false
+      failed_when: false
+
+    - name: Check Windows WinRM reachability
+      ansible.builtin.shell:
+        cmd: |
+          timeout 3 bash -lc 'cat < /dev/null > /dev/tcp/{{ ansible_host }}/{{ hostvars["windows_" + inventory_hostname]["ansible_port"] | default(5985) }}'
+      delegate_to: localhost
+      become: no
+      register: auto_winrm_check
+      changed_when: false
+      failed_when: false
+      when: "'windows_' + inventory_hostname in groups['windows_nodes']"
+
+    - name: Show detected live node access path
+      ansible.builtin.debug:
+        msg:
+          - "{{ inventory_hostname }} / {{ ansible_host }}"
+          - "Ubuntu SSH port 22: {{ 'open' if auto_ssh_check.rc == 0 else 'closed' }}"
+          - "Windows WinRM port {{ hostvars['windows_' + inventory_hostname]['ansible_port'] | default(5985) }}: {{ 'open' if (auto_winrm_check is defined and auto_winrm_check.rc == 0) else 'closed' }}"
+
+    - name: Add already-Ubuntu node to Linux GRUB group
+      ansible.builtin.add_host:
+        name: "{{ inventory_hostname }}"
+        groups: auto_linux_grub_targets
+        ansible_host: "{{ ansible_host }}"
+        ansible_user: "{{ ansible_user | default('root') }}"
+        ansible_connection: ssh
+        ansible_python_interpreter: "{{ ansible_python_interpreter | default('/usr/bin/python3') }}"
+      when: auto_ssh_check.rc == 0
+
+    - name: Add currently-Windows node to Windows boot group
+      ansible.builtin.add_host:
+        name: "windows_{{ inventory_hostname }}"
+        groups: auto_windows_boot_targets
+        linux_inventory_name: "{{ inventory_hostname }}"
+        ansible_host: "{{ ansible_host }}"
+        ansible_user: "{{ hostvars['windows_' + inventory_hostname]['ansible_user'] | default('Administrator') }}"
+        ansible_password: "{{ hostvars['windows_' + inventory_hostname]['ansible_password'] }}"
+        ansible_connection: winrm
+        ansible_winrm_server_cert_validation: "{{ hostvars['windows_' + inventory_hostname]['ansible_winrm_server_cert_validation'] | default('ignore') }}"
+        ansible_winrm_transport: "{{ hostvars['windows_' + inventory_hostname]['ansible_winrm_transport'] | default('ntlm') }}"
+        ansible_port: "{{ hostvars['windows_' + inventory_hostname]['ansible_port'] | default(5985) }}"
+        ansible_winrm_scheme: "{{ hostvars['windows_' + inventory_hostname]['ansible_winrm_scheme'] | default('http') }}"
+      when:
+        - auto_ssh_check.rc != 0
+        - auto_winrm_check is defined
+        - auto_winrm_check.rc == 0
+
+    - name: Fail when neither Ubuntu SSH nor Windows WinRM is reachable
+      ansible.builtin.fail:
+        msg: >-
+          {{ inventory_hostname }} / {{ ansible_host }} is not reachable through Ubuntu SSH port 22
+          or Windows WinRM. It may still be rebooting, powered off, blocked by firewall, or on a
+          different IP.
+      when:
+        - auto_ssh_check.rc != 0
+        - auto_winrm_check is not defined or auto_winrm_check.rc != 0
+
+- name: Automatically switch currently-Windows nodes to Ubuntu
+  hosts: auto_windows_boot_targets
+  gather_facts: no
+  become: no
+  serial: "{{ batch_size | default(5) }}"
+  vars:
+    ansible_become: false
+    linux_ssh_timeout: "{{ ssh_timeout | default(900) }}"
+    force_windows_bootmgr_path: "{{ force_bootmgr_path | default(true) }}"
+
+  tasks:
+    - name: Locate Ubuntu EFI loaders on Windows EFI system partition
+      ansible.windows.win_shell:
+        cmd: |
+          $ErrorActionPreference = "Continue"
+          $mount = "S:"
+          if (Test-Path 'S:\') { $mount = "T:" }
+          mountvol $mount /S | Out-Null
+          $candidates = @(
+              '\EFI\ubuntu\shimx64.efi',
+              '\EFI\ubuntu\grubx64.efi',
+              '\EFI\debian\shimx64.efi',
+              '\EFI\debian\grubx64.efi',
+              '\EFI\BOOT\BOOTX64.EFI'
+          )
+          foreach ($candidate in $candidates) {
+            if (Test-Path ($mount + $candidate)) {
+              Write-Output $candidate
+            }
+          }
+          mountvol $mount /D | Out-Null
+      register: ubuntu_efi_candidates
+
+    - name: Fail when no Ubuntu EFI loader exists
+      ansible.builtin.fail:
+        msg: "No Ubuntu/Linux EFI loader was found on {{ inventory_hostname }}."
+      when: ubuntu_efi_candidates.stdout_lines | length == 0
+
+    - name: Select Ubuntu EFI loader
+      ansible.builtin.set_fact:
+        selected_ubuntu_efi: "{{ ubuntu_efi_candidates.stdout_lines[0] | trim }}"
+
+    - name: Create managed Ubuntu firmware entry
+      ansible.windows.win_shell:
+        cmd: |
+          $ErrorActionPreference = "Continue"
+          $efiPath = "{{ selected_ubuntu_efi }}"
+          $mount = "S:"
+          if (Test-Path 'S:\') { $mount = "T:" }
+          mountvol $mount /S | Out-Null
+
+          $created = bcdedit /create /d "Ubuntu Managed" /application BOOTAPP 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            mountvol $mount /D | Out-Null
+            Write-Error $created
+            exit 1
+          }
+
+          $match = [regex]::Match($created, "\{[A-Fa-f0-9-]+\}")
+          if (-not $match.Success) {
+            mountvol $mount /D | Out-Null
+            Write-Error "Could not parse managed Ubuntu boot GUID from: $created"
+            exit 1
+          }
+
+          $guid = $match.Value
+          $device = bcdedit /set $guid device partition=$mount 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            mountvol $mount /D | Out-Null
+            Write-Error $device
+            exit 1
+          }
+
+          $path = bcdedit /set $guid path $efiPath 2>&1 | Out-String
+          mountvol $mount /D | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error $path
+            exit 1
+          }
+
+          Write-Output $guid
+      register: managed_ubuntu_guid
+
+    - name: Set firmware and Boot Manager to Ubuntu loader
+      ansible.windows.win_shell:
+        cmd: |
+          $ErrorActionPreference = "Continue"
+          $guid = "{{ managed_ubuntu_guid.stdout_lines[-1] | trim }}"
+          $efiPath = "{{ selected_ubuntu_efi }}"
+          $messages = @()
+
+          function Invoke-Bcdedit {
+            param([string[]]$Arguments)
+            $output = & bcdedit @Arguments 2>&1 | Out-String
+            $ok = ($LASTEXITCODE -eq 0 -or $output -match "successfully")
+            return @{
+              Ok = $ok
+              Text = ("bcdedit " + ($Arguments -join " ") + "`n" + $output)
+            }
+          }
+
+          $results = @()
+          $results += Invoke-Bcdedit @("/set", "{fwbootmgr}", "bootsequence", $guid)
+          $results += Invoke-Bcdedit @("/set", "{fwbootmgr}", "displayorder", $guid, "/addfirst")
+          $results += Invoke-Bcdedit @("/bootsequence", $guid, "/addfirst")
+          if ("{{ force_windows_bootmgr_path | bool }}" -eq "True") {
+            $results += Invoke-Bcdedit @("/set", "{bootmgr}", "path", $efiPath)
+            $results += Invoke-Bcdedit @("/set", "{fwbootmgr}", "bootsequence", "{bootmgr}")
+            $results += Invoke-Bcdedit @("/displayorder", "{bootmgr}", "/addfirst")
+          }
+
+          foreach ($result in $results) {
+            $messages += $result.Text
+          }
+
+          if (-not ($results | Where-Object { $_.Ok })) {
+            Write-Error ($messages -join "`n")
+            exit 1
+          }
+
+          Write-Output ($messages -join "`n")
+      register: boot_update
+
+    - name: Capture BCD diagnostics before reboot
+      ansible.windows.win_shell:
+        cmd: |
+          $ErrorActionPreference = "Continue"
+          Write-Output "===== bcdedit /enum {fwbootmgr} ====="
+          bcdedit /enum "{fwbootmgr}" 2>&1 | Out-String
+          Write-Output "===== bcdedit /enum firmware /v ====="
+          bcdedit /enum firmware /v 2>&1 | Out-String
+          Write-Output "===== bcdedit /enum {bootmgr} ====="
+          bcdedit /enum "{bootmgr}" 2>&1 | Out-String
+      register: bcd_diagnostics
+      changed_when: false
+
+    - name: Reboot Windows node toward Ubuntu
+      ansible.windows.win_shell:
+        cmd: shutdown /r /t 0 /f
+      async: 1
+      poll: 0
+
+    - name: Wait for Windows WinRM to go down
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ ansible_port | default(5985) }}"
+        state: stopped
+        delay: 10
+        timeout: 180
+      delegate_to: localhost
+      become: no
+      failed_when: false
+
+    - name: Detect whether node returns as Ubuntu SSH or Windows
+      ansible.builtin.shell:
+        cmd: |
+          set -u
+          host="{{ ansible_host }}"
+          deadline=$(($(date +%s) + {{ linux_ssh_timeout | int }}))
+
+          check_port() {
+            timeout 2 bash -c "cat < /dev/null > /dev/tcp/${host}/$1" >/dev/null 2>&1
+          }
+
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            if check_port 22; then
+              echo "LINUX_SSH_READY"
+              exit 0
+            fi
+
+            for port in 5985 5986 3389 445 135; do
+              if check_port "$port"; then
+                echo "WINDOWS_RETURNED port=${port}"
+                exit 3
+              fi
+            done
+
+            sleep 10
+          done
+
+          echo "TIMEOUT waiting for Ubuntu SSH on ${host}"
+          exit 2
+      delegate_to: localhost
+      become: no
+      register: boot_result
+      changed_when: false
+      failed_when: false
+
+    - name: Add node to Linux GRUB group after successful Ubuntu boot
+      ansible.builtin.add_host:
+        name: "{{ linux_inventory_name }}"
+        groups: auto_linux_grub_targets
+        ansible_host: "{{ ansible_host }}"
+        ansible_user: "{{ hostvars[linux_inventory_name]['ansible_user'] | default('root') }}"
+        ansible_connection: ssh
+        ansible_python_interpreter: "{{ hostvars[linux_inventory_name]['ansible_python_interpreter'] | default('/usr/bin/python3') }}"
+      when: boot_result.rc == 0
+
+    - name: Fail clearly when firmware returned to Windows
+      ansible.builtin.fail:
+        msg: |
+          {{ inventory_hostname }} / {{ ansible_host }} rebooted, but came back as Windows.
+          Detection result: {{ boot_result.stdout | default('unknown') }}
+
+          The playbook automatically applied Windows BCD and Boot Manager changes, then rebooted.
+          The remaining blocker is firmware policy choosing Windows again.
+
+          Captured BCD diagnostics:
+          {{ bcd_diagnostics.stdout | default('No BCD diagnostics captured') }}
+      when: boot_result.rc == 3
+
+    - name: Fail clearly when Ubuntu SSH did not become reachable
+      ansible.builtin.fail:
+        msg: "{{ inventory_hostname }} / {{ ansible_host }} did not expose Ubuntu SSH. Detection: {{ boot_result.stdout | default('unknown') }}"
+      when: boot_result.rc not in [0, 3]
+
+- name: Ensure Ubuntu GRUB default on nodes now reachable through Linux SSH
+  hosts: auto_linux_grub_targets
+  become: yes
+  gather_facts: no
+  serial: "{{ batch_size | default(10) }}"
+  vars:
+    grub_default_entry: "{{ grub_default | default('0') }}"
+    reboot_nodes: "{{ reboot_linux_after_grub | default(false) }}"
+
+  tasks:
+    - name: Ensure GRUB_DEFAULT is set
+      ansible.builtin.lineinfile:
+        path: /etc/default/grub
+        regexp: '^GRUB_DEFAULT='
+        line: 'GRUB_DEFAULT={{ grub_default_entry }}'
+        backup: yes
+      register: grub_change
+
+    - name: Update GRUB configuration
+      ansible.builtin.command: update-grub
+      when: grub_change.changed
+
+    - name: Show final Ubuntu GRUB result
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} is reachable through Ubuntu SSH.
+          GRUB_DEFAULT={{ grub_default_entry }} changed={{ grub_change.changed }}
+
+    - name: Reboot Linux node when requested
+      ansible.builtin.reboot:
+        msg: "Rebooting after automatic Ubuntu GRUB default update"
+        test_command: whoami
+      when:
+        - grub_change.changed
+        - reboot_nodes | bool

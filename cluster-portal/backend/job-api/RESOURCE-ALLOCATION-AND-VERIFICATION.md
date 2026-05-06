@@ -4,7 +4,24 @@ This document explains how the portal job-api converts user requests into Slurm 
 
 ## Production Rule
 
-Slurm is the source of truth for enforcement. The portal/job-api plans and submits efficient requests, but strict CPU and memory limits are enforced by Slurm plus the cluster cgroup configuration.
+Slurm is the source of truth for allocation. The portal/job-api plans and submits efficient requests, but hard CPU and memory limits require Slurm plus a compatible cluster cgroup configuration.
+
+The Ansible setup defaults to a stable service mode for demos and mixed lab hardware:
+
+```text
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+ProctrackType=proctrack/linuxproc
+TaskPlugin=task/affinity
+JobAcctGatherType=jobacct_gather/linux
+CgroupPlugin=cgroup/v1
+```
+
+This still schedules and accounts CPU/RAM as consumable Slurm resources. Strict Linux-level cgroup enforcement is opt-in with:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass -e enable_slurm_cgroups=true
+```
 
 For strict enforcement, the cluster should use Slurm cgroups:
 

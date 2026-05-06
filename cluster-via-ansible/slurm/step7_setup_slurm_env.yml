@@ -2,6 +2,8 @@
 - name: Setup Slurm User, Directory Structure, and Runtime Persistence
   hosts: head_nodes,cluster_nodes
   become: yes
+  vars:
+    slurm_enable_cgroups: "{{ enable_slurm_cgroups | default(false) }}"
 
   tasks:
     # --- SECTION 1: CREATE SLURM USER ---
@@ -64,11 +66,13 @@
         - /var/log/slurm
 
     # --- SECTION 4.5: CGROUP CONFIGURATION ---
-    - name: Create slurm cgroup.conf
+    - name: Create slurm cgroup.conf when strict cgroup enforcement is enabled
       copy:
         dest: /etc/slurm/cgroup.conf
         content: |
-          CgroupPlugin=cgroup/v2
+          CgroupPlugin=autodetect
+          EnableControllers=yes
+          IgnoreSystemd=no
           ConstrainCores=yes
           ConstrainRAMSpace=yes
           ConstrainSwapSpace=yes
@@ -78,6 +82,17 @@
         owner: slurm
         group: slurm
         mode: '0644'
+      when: slurm_enable_cgroups | bool
+
+    - name: Create slurm cgroup.conf for stable compatibility mode
+      copy:
+        dest: /etc/slurm/cgroup.conf
+        content: |
+          CgroupPlugin=cgroup/v1
+        owner: slurm
+        group: slurm
+        mode: '0644'
+      when: not (slurm_enable_cgroups | bool)
 
     # --- SECTION 5: VERIFICATION ---
     - name: Verify directory creation and permissions

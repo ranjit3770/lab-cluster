@@ -245,8 +245,8 @@ function NodeColumn({
         </div>
       </div>
 
-      <div className="max-h-[calc(100vh-260px)] space-y-3 overflow-y-auto p-4">
-        {nodes.length > 0 ? nodes.map((node) => <NodeTile key={node.id} node={node} />) : <EmptyColumn family={family} />}
+        <div className="max-h-[calc(100vh-260px)] grid grid-cols-2 gap-3 overflow-y-auto p-4">
+        {nodes.length > 0 ? nodes.map((node) => <NodeTile key={node.id} node={node} />) : <div className="col-span-2"><EmptyColumn family={family} /></div>}
       </div>
     </Card>
   );

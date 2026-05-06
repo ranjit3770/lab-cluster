@@ -38,6 +38,9 @@ When prompted, choose:
 - `set_grub_default_targeted.yml`
   Sets Ubuntu/GRUB default only on selected Linux inventory hosts passed with `target_hosts`.
 
+- `ensure_ubuntu_boot_target_auto.yml`
+  One-command dual-boot workflow. Accepts Linux inventory names, detects whether each node is currently Ubuntu or Windows, switches Windows nodes to Ubuntu through WinRM when possible, then applies the Ubuntu GRUB default through SSH.
+
 - `set_ubuntu_boot_from_windows_targeted.yml`
   Sets the next Ubuntu boot target from selected Windows inventory hosts over WinRM.
 
@@ -107,6 +110,12 @@ For unattended automation only, skip the confirmation prompt:
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass -e confirm_slurm_resources=false
 ```
 
+Strict cgroup enforcement is intentionally opt-in because some lab images do not expose a compatible cgroup hierarchy to the locally built Slurm daemons. The stable default still schedules CPU/RAM with `select/cons_tres` and `CR_Core_Memory`, using `proctrack/linuxproc` plus `task/affinity` so `slurmd` stays healthy during demos. Enable strict cgroups only after OS support is verified:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini step4_main.yml --ask-vault-pass -e enable_slurm_cgroups=true
+```
+
 Append one worker directly:
 
 ```bash
@@ -118,6 +127,20 @@ Repair unhealthy Slurm nodes:
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini finally/repair_unknown_slurm_nodes.yml --ask-vault-pass
 ```
+
+Automatically ensure selected dual-boot nodes boot Ubuntu, regardless of their current OS:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini ensure_ubuntu_boot_target_auto.yml -e target_hosts=worker_node28 --ask-vault-pass
+```
+
+Target multiple dual-boot nodes with the same automatic workflow:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i hosts.ini ensure_ubuntu_boot_target_auto.yml -e "target_hosts=worker_node27:worker_node28" --ask-vault-pass
+```
+
+This automatic playbook uses the Linux inventory name as the operator input. If the node is already Ubuntu, it applies the GRUB default directly. If the node is Windows, it maps to `windows_worker_nodeXX`, applies the Windows boot changes, reboots, waits for Ubuntu SSH, and then applies the Linux GRUB default.
 
 Set Ubuntu as default GRUB entry on one selected Linux node:
 
@@ -187,13 +210,24 @@ ANSIBLE_LOCAL_TEMP=/tmp/ansible-local ansible-playbook -i hosts.ini cluster_mana
 - Use `setup` mode only for fresh setup or full rebuild.
 - Keep `hosts.ini` current and backed up with the cluster configuration.
 - Review playbook output at the end for final `sinfo` and `slurmd` status.
+- Playbook output and failures are logged to `playbook-erros.log` in this directory.
 
 ## Slurm Resource Enforcement
 
-The generated Slurm configuration is designed for production-style resource accounting:
+The generated Slurm configuration always uses production-style consumable resource scheduling:
 
 - `SelectType=select/cons_tres`
 - `SelectTypeParameters=CR_Core_Memory`
+
+Stable default service mode:
+
+- `ProctrackType=proctrack/linuxproc`
+- `TaskPlugin=task/affinity`
+- `JobAcctGatherType=jobacct_gather/linux`
+- `CgroupPlugin=cgroup/v1`
+
+Strict cgroup mode with `-e enable_slurm_cgroups=true`:
+
 - `ProctrackType=proctrack/cgroup`
 - `TaskPlugin=task/cgroup`
 - `JobAcctGatherType=jobacct_gather/cgroup`
@@ -202,13 +236,12 @@ The generated Slurm configuration is designed for production-style resource acco
 - `ConstrainSwapSpace=yes`
 - `ConstrainDevices=yes`
 
-This means Slurm schedules CPU and memory as consumable resources and Linux cgroups enforce the allocation at runtime. A job requesting `--cpus-per-task=2 --mem=2G` should be restricted to that allocation instead of being able to consume the whole node.
+This means Slurm schedules CPU and memory as consumable resources. In stable default mode, Slurm reserves and accounts for resources while Linux process tracking keeps services reliable. In strict cgroup mode, Linux cgroups also enforce the allocation at runtime. A job requesting `--cpus-per-task=2 --mem=2G` should be scheduled against exactly that allocation, and with cgroups enabled it should also be hard-limited by the kernel.
 
 Quick runtime verification after deployment:
 
 ```bash
 scontrol show config | egrep 'SelectType|SelectTypeParameters|ProctrackType|TaskPlugin|JobAcctGatherType'
-cat /etc/slurm/cgroup.conf
 scontrol show node worker-node28
 ```
 

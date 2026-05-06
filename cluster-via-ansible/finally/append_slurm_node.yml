@@ -83,6 +83,7 @@
     slurm_prefix: "/usr/local/slurm"
     slurm_sysconfdir: "/etc/slurm"
     target_version: "25.11.4"
+    slurm_enable_cgroups: "{{ enable_slurm_cgroups | default(false) }}"
 
   tasks:
     - name: Ensure hostname matches the Slurm NodeName
@@ -277,20 +278,33 @@
           d     /run/slurm       0755 slurm slurm -   -
         mode: '0644'
 
-    - name: Deploy production Slurm cgroup enforcement on the new worker
+    - name: Deploy Slurm cgroup enforcement on the new worker when enabled
       ansible.builtin.copy:
         dest: /etc/slurm/cgroup.conf
         owner: slurm
         group: slurm
         mode: '0644'
         content: |
-          CgroupPlugin=cgroup/v2
+          CgroupPlugin=autodetect
+          EnableControllers=yes
+          IgnoreSystemd=no
           ConstrainCores=yes
           ConstrainRAMSpace=yes
           ConstrainSwapSpace=yes
           ConstrainDevices=yes
           AllowedRAMSpace=100
           AllowedSwapSpace=0
+      when: slurm_enable_cgroups | bool
+
+    - name: Deploy Slurm cgroup v1 compatibility config on the new worker in stable mode
+      ansible.builtin.copy:
+        dest: /etc/slurm/cgroup.conf
+        owner: slurm
+        group: slurm
+        mode: '0644'
+        content: |
+          CgroupPlugin=cgroup/v1
+      when: not (slurm_enable_cgroups | bool)
 
     - name: Deploy slurmd service on the new worker
       ansible.builtin.copy:

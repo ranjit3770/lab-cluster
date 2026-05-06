@@ -10,6 +10,7 @@
     jwt_key_path: "/var/spool/slurm/statesave/jwt_hs256.key"
     slurm_bin: "/usr/local/slurm/bin"
     slurm_resource_confirmation: "{{ confirm_slurm_resources | default(true) }}"
+    slurm_enable_cgroups: "{{ enable_slurm_cgroups | default(false) }}"
 
   tasks:
     - name: 0. Refresh hardware and network facts for Slurm node definitions
@@ -53,7 +54,10 @@
           - slurm_cpu_cap_per_node={{ slurm_cpu_cap_per_node | default('detected') }}
           - slurm_memory_cap_mb_per_node={{ slurm_memory_cap_mb_per_node | default('detected') }}
 
-          Slurm will enforce CPU/RAM with task/cgroup, proctrack/cgroup, select/cons_tres, and CR_Core_Memory.
+          Slurm resource plugin mode:
+          - enable_slurm_cgroups={{ slurm_enable_cgroups }}
+          - Default mode keeps slurmd stable with linuxproc/task affinity.
+          - Strict cgroup enforcement can be enabled after OS/kernel cgroup support is verified.
       run_once: true
 
     - name: 0e. Ask operator for CPU cores to advertise per node
@@ -155,7 +159,7 @@
           AccountingStorageType=accounting_storage/slurmdbd
           AccountingStorageHost=head-node
           AccountingStoragePort=6819
-          JobAcctGatherType=jobacct_gather/cgroup
+          JobAcctGatherType={{ 'jobacct_gather/cgroup' if slurm_enable_cgroups | bool else 'jobacct_gather/linux' }}
           JobAcctGatherFrequency=30
 
           # Paths & Daemons
@@ -165,8 +169,8 @@
           StateSaveLocation={{ slurm_state_dir }}
           SlurmUser=slurm
           SlurmdUser=root
-          ProctrackType=proctrack/cgroup
-          TaskPlugin=task/cgroup
+          ProctrackType={{ 'proctrack/cgroup' if slurm_enable_cgroups | bool else 'proctrack/linuxproc' }}
+          TaskPlugin={{ 'task/cgroup' if slurm_enable_cgroups | bool else 'task/affinity' }}
           SelectType=select/cons_tres
           SelectTypeParameters=CR_Core_Memory
 

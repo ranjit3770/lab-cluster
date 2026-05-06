@@ -48,23 +48,101 @@
             | list
           }}
 
+    - name: Capture head node epoch for worker clock repair
+      ansible.builtin.command: date +%s
+      register: head_epoch_cmd
+      changed_when: false
+
+    - name: Save head node epoch
+      ansible.builtin.set_fact:
+        head_epoch: "{{ head_epoch_cmd.stdout | int }}"
+
 - name: Keep head node Slurm config compatible with repaired workers
   hosts: head_nodes
   become: yes
   gather_facts: no
+  vars:
+    slurm_enable_cgroups: "{{ enable_slurm_cgroups | default(false) }}"
 
   tasks:
-    - name: Keep production cgroup proctrack on head node config
+    - name: Remove duplicate runtime plugin settings from head node config
+      ansible.builtin.lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^\s*{{ item }}\s*='
+        state: absent
+      loop:
+        - ProctrackType
+        - TaskPlugin
+        - JobAcctGatherType
+
+    - name: Write authoritative runtime plugin settings on head node config
+      ansible.builtin.blockinfile:
+        path: /etc/slurm/slurm.conf
+        marker: "# {mark} ANSIBLE MANAGED SLURM RUNTIME PLUGINS"
+        insertafter: '^SlurmdUser='
+        block: |
+          JobAcctGatherType={{ 'jobacct_gather/cgroup' if slurm_enable_cgroups | bool else 'jobacct_gather/linux' }}
+          ProctrackType={{ 'proctrack/cgroup' if slurm_enable_cgroups | bool else 'proctrack/linuxproc' }}
+          TaskPlugin={{ 'task/cgroup' if slurm_enable_cgroups | bool else 'task/affinity' }}
+
+    - name: Read effective runtime plugin settings on head node
+      ansible.builtin.shell: |
+        grep -E '^(JobAcctGatherType|ProctrackType|TaskPlugin)=' /etc/slurm/slurm.conf || true
+      register: head_runtime_plugins
+      changed_when: false
+
+    - name: Show effective runtime plugin settings on head node
+      ansible.builtin.debug:
+        msg: "{{ head_runtime_plugins.stdout_lines }}"
+
+    - name: Legacy cleanup for compatible proctrack on head node config
       ansible.builtin.lineinfile:
         path: /etc/slurm/slurm.conf
         regexp: '^\s*ProctrackType\s*='
-        line: 'ProctrackType=proctrack/cgroup'
+        line: "ProctrackType={{ 'proctrack/cgroup' if slurm_enable_cgroups | bool else 'proctrack/linuxproc' }}"
+      when: false
 
-    - name: Keep production cgroup task plugin on head node config
+    - name: Legacy cleanup for compatible task plugin on head node config
       ansible.builtin.lineinfile:
         path: /etc/slurm/slurm.conf
         regexp: '^\s*TaskPlugin\s*='
-        line: 'TaskPlugin=task/cgroup'
+        line: "TaskPlugin={{ 'task/cgroup' if slurm_enable_cgroups | bool else 'task/affinity' }}"
+      when: false
+
+    - name: Legacy cleanup for compatible accounting gather plugin on head node config
+      ansible.builtin.lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^\s*JobAcctGatherType\s*='
+        line: "JobAcctGatherType={{ 'jobacct_gather/cgroup' if slurm_enable_cgroups | bool else 'jobacct_gather/linux' }}"
+      when: false
+
+    - name: Deploy Slurm cgroup autodetect config on head node when enabled
+      ansible.builtin.copy:
+        dest: /etc/slurm/cgroup.conf
+        owner: slurm
+        group: slurm
+        mode: '0644'
+        content: |
+          CgroupPlugin=autodetect
+          EnableControllers=yes
+          IgnoreSystemd=no
+          ConstrainCores=yes
+          ConstrainRAMSpace=yes
+          ConstrainSwapSpace=yes
+          ConstrainDevices=yes
+          AllowedRAMSpace=100
+          AllowedSwapSpace=0
+      when: slurm_enable_cgroups | bool
+
+    - name: Deploy Slurm cgroup v1 compatibility config on head node in stable mode
+      ansible.builtin.copy:
+        dest: /etc/slurm/cgroup.conf
+        owner: slurm
+        group: slurm
+        mode: '0644'
+        content: |
+          CgroupPlugin=cgroup/v1
+      when: not (slurm_enable_cgroups | bool)
 
     - name: Reconfigure slurmctld after config repair
       ansible.builtin.command: /usr/local/slurm/bin/scontrol reconfigure
@@ -92,6 +170,8 @@
   vars:
     head_inventory_name: "{{ groups['head_nodes'][0] }}"
     unknown_worker_inventory_names: "{{ hostvars[head_inventory_name].unknown_worker_inventory_names | default([]) }}"
+    slurm_enable_cgroups: "{{ enable_slurm_cgroups | default(false) }}"
+    allowed_clock_skew_seconds: "{{ slurm_allowed_clock_skew_seconds | default(60) }}"
 
   tasks:
     - name: Check current slurmd state
@@ -100,9 +180,30 @@
       changed_when: false
       failed_when: false
 
+    - name: Capture worker epoch
+      ansible.builtin.command: date +%s
+      register: worker_epoch_cmd
+      changed_when: false
+
+    - name: Calculate worker clock skew from head node
+      ansible.builtin.set_fact:
+        worker_clock_skew_seconds: "{{ ((worker_epoch_cmd.stdout | int) - (hostvars[head_inventory_name].head_epoch | int)) | abs }}"
+
+    - name: Report clock skew that requires repair
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }} clock skew={{ worker_clock_skew_seconds }}s
+          compared with {{ head_inventory_name }}; correcting before Munge/Slurm restart.
+      when: worker_clock_skew_seconds | int > allowed_clock_skew_seconds | int
+
     - name: Mark workers that need slurmd repair
       ansible.builtin.set_fact:
-        needs_slurmd_repair: "{{ inventory_hostname in unknown_worker_inventory_names or current_slurmd_state.stdout != 'active' }}"
+        needs_slurmd_repair: >-
+          {{
+            inventory_hostname in unknown_worker_inventory_names
+            or current_slurmd_state.stdout != 'active'
+            or worker_clock_skew_seconds | int > allowed_clock_skew_seconds | int
+          }}
 
     - name: Ensure hostname matches Slurm NodeName
       ansible.builtin.hostname:
@@ -122,6 +223,31 @@
       failed_when: false
       when: needs_slurmd_repair
 
+    - name: Stop slurmd before clock correction
+      ansible.builtin.systemd:
+        name: slurmd
+        state: stopped
+      when:
+        - needs_slurmd_repair
+        - worker_clock_skew_seconds | int > allowed_clock_skew_seconds | int
+
+    - name: Align worker clock to head node epoch when skewed
+      ansible.builtin.command: "date -u -s @{{ hostvars[head_inventory_name].head_epoch }}"
+      register: clock_repair_result
+      changed_when: true
+      when:
+        - needs_slurmd_repair
+        - worker_clock_skew_seconds | int > allowed_clock_skew_seconds | int
+
+    - name: Restart munge after clock correction
+      ansible.builtin.systemd:
+        name: munge
+        state: restarted
+        enabled: yes
+      when:
+        - needs_slurmd_repair
+        - worker_clock_skew_seconds | int > allowed_clock_skew_seconds | int
+
     - name: Ensure munge is running
       ansible.builtin.systemd:
         name: munge
@@ -129,19 +255,92 @@
         enabled: yes
       when: needs_slurmd_repair
 
-    - name: Keep production cgroup proctrack on repaired worker config
+    - name: Remove duplicate runtime plugin settings from repaired worker config
+      ansible.builtin.lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^\s*{{ item }}\s*='
+        state: absent
+      loop:
+        - ProctrackType
+        - TaskPlugin
+        - JobAcctGatherType
+      when: needs_slurmd_repair
+
+    - name: Write authoritative runtime plugin settings on repaired worker config
+      ansible.builtin.blockinfile:
+        path: /etc/slurm/slurm.conf
+        marker: "# {mark} ANSIBLE MANAGED SLURM RUNTIME PLUGINS"
+        insertafter: '^SlurmdUser='
+        block: |
+          JobAcctGatherType={{ 'jobacct_gather/cgroup' if slurm_enable_cgroups | bool else 'jobacct_gather/linux' }}
+          ProctrackType={{ 'proctrack/cgroup' if slurm_enable_cgroups | bool else 'proctrack/linuxproc' }}
+          TaskPlugin={{ 'task/cgroup' if slurm_enable_cgroups | bool else 'task/affinity' }}
+      when: needs_slurmd_repair
+
+    - name: Read effective runtime plugin settings on repaired worker
+      ansible.builtin.shell: |
+        grep -E '^(JobAcctGatherType|ProctrackType|TaskPlugin)=' /etc/slurm/slurm.conf || true
+      register: worker_runtime_plugins
+      changed_when: false
+      when: needs_slurmd_repair
+
+    - name: Show effective runtime plugin settings on repaired worker
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} runtime plugins={{ worker_runtime_plugins.stdout_lines | default([]) }}"
+      when: needs_slurmd_repair
+
+    - name: Legacy cleanup for compatible proctrack on repaired worker config
       ansible.builtin.lineinfile:
         path: /etc/slurm/slurm.conf
         regexp: '^\s*ProctrackType\s*='
-        line: 'ProctrackType=proctrack/cgroup'
-      when: needs_slurmd_repair
+        line: "ProctrackType={{ 'proctrack/cgroup' if slurm_enable_cgroups | bool else 'proctrack/linuxproc' }}"
+      when: false
 
-    - name: Keep production cgroup task plugin on repaired worker config
+    - name: Legacy cleanup for compatible task plugin on repaired worker config
       ansible.builtin.lineinfile:
         path: /etc/slurm/slurm.conf
         regexp: '^\s*TaskPlugin\s*='
-        line: 'TaskPlugin=task/cgroup'
-      when: needs_slurmd_repair
+        line: "TaskPlugin={{ 'task/cgroup' if slurm_enable_cgroups | bool else 'task/affinity' }}"
+      when: false
+
+    - name: Legacy cleanup for compatible accounting gather plugin on repaired worker config
+      ansible.builtin.lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^\s*JobAcctGatherType\s*='
+        line: "JobAcctGatherType={{ 'jobacct_gather/cgroup' if slurm_enable_cgroups | bool else 'jobacct_gather/linux' }}"
+      when: false
+
+    - name: Deploy Slurm cgroup autodetect config on repaired worker when enabled
+      ansible.builtin.copy:
+        dest: /etc/slurm/cgroup.conf
+        owner: slurm
+        group: slurm
+        mode: '0644'
+        content: |
+          CgroupPlugin=autodetect
+          EnableControllers=yes
+          IgnoreSystemd=no
+          ConstrainCores=yes
+          ConstrainRAMSpace=yes
+          ConstrainSwapSpace=yes
+          ConstrainDevices=yes
+          AllowedRAMSpace=100
+          AllowedSwapSpace=0
+      when:
+        - needs_slurmd_repair
+        - slurm_enable_cgroups | bool
+
+    - name: Deploy Slurm cgroup v1 compatibility config on repaired worker in stable mode
+      ansible.builtin.copy:
+        dest: /etc/slurm/cgroup.conf
+        owner: slurm
+        group: slurm
+        mode: '0644'
+        content: |
+          CgroupPlugin=cgroup/v1
+      when:
+        - needs_slurmd_repair
+        - not (slurm_enable_cgroups | bool)
 
     - name: Restart slurmd on worker that needs repair
       ansible.builtin.systemd:
@@ -204,6 +403,7 @@
   gather_facts: no
   vars:
     slurm_bin: "/usr/local/slurm/bin"
+    playbook_error_log: "/opt/amritacluster/SLURM-COMPLETE-SETUP/cluster-via-ansible/playbook-erros.log"
     problem_slurm_node_names: "{{ hostvars[groups['head_nodes'][0]].problem_slurm_node_names | default([]) }}"
     unknown_worker_inventory_names: "{{ hostvars[groups['head_nodes'][0]].unknown_worker_inventory_names | default([]) }}"
 
@@ -246,6 +446,59 @@
       ansible.builtin.debug:
         msg: "{{ sinfo_after_repair.stdout_lines }}"
 
+    - name: Collect remaining controller-level unhealthy Slurm nodes
+      ansible.builtin.shell:
+        cmd: |
+          {{ slurm_bin }}/scontrol show node -o | awk '
+            {
+              node = ""
+              state = ""
+              for (i = 1; i <= NF; i++) {
+                if ($i ~ /^NodeName=/) {
+                  node = $i
+                  sub(/^NodeName=/, "", node)
+                }
+                if ($i ~ /^State=/) {
+                  state = tolower($i)
+                  sub(/^state=/, "", state)
+                  gsub(/[+*~#$@%]/, " ", state)
+                }
+              }
+              if (node != "" && state ~ /(^| )(down|drain|drained|draining|fail|failing|inval|invalid|unk|unknown|not_responding)( |$)/) {
+                print node
+              }
+            }
+          '
+      register: remaining_bad_slurm_nodes
+      changed_when: false
+
+    - name: Capture remaining unhealthy Slurm node details
+      ansible.builtin.shell:
+        cmd: |
+          {
+            echo
+            echo "================================================================================"
+            echo "repair_unknown_slurm_nodes.yml controller health failure: $(date -Is)"
+            echo "Remaining unhealthy Slurm nodes: {{ remaining_bad_slurm_nodes.stdout_lines | default([]) | join(' ') }}"
+            echo "--- sinfo ---"
+            {{ slurm_bin }}/sinfo || true
+            echo "--- scontrol details ---"
+            for node in {{ remaining_bad_slurm_nodes.stdout_lines | default([]) | join(' ') }}; do
+              {{ slurm_bin }}/scontrol show node "$node" || true
+            done
+            echo "================================================================================"
+          } >> "{{ playbook_error_log }}"
+      changed_when: false
+      when: remaining_bad_slurm_nodes.stdout_lines | default([]) | length > 0
+
+    - name: Fail if Slurm controller still reports unhealthy nodes
+      ansible.builtin.fail:
+        msg: >-
+          Slurm controller still reports unhealthy nodes after repair:
+          {{ remaining_bad_slurm_nodes.stdout_lines | default([]) | join(', ') }}.
+          Check {{ playbook_error_log }} for captured sinfo/scontrol details.
+      when: remaining_bad_slurm_nodes.stdout_lines | default([]) | length > 0
+
     - name: Show remaining UNKNOWN node details
       ansible.builtin.shell:
         cmd: |
@@ -283,5 +536,8 @@
 
     - name: Fail if slurmd is not active
       ansible.builtin.fail:
-        msg: "{{ inventory_hostname }} slurmd is {{ slurmd_final_verify.stdout }} after repair"
+        msg: >-
+          {{ inventory_hostname }} slurmd is {{ slurmd_final_verify.stdout }} after repair.
+          Check /opt/amritacluster/SLURM-COMPLETE-SETUP/cluster-via-ansible/playbook-erros.log
+          for captured systemctl/journalctl details.
       when: slurmd_final_verify.stdout != "active"
