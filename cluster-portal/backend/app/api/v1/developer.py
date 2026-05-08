@@ -616,53 +616,40 @@ def test_node_ssh(
     else:
         return SSHTestResponse(success=False, message="Connection Failed (Check Creds/IP)")
 
-@router.get("/nodes")
+@router.get("/nodes", response_model=List[DevNode])
 def get_dev_nodes(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_active_superuser)
 ):
-    dev_nodes = db.query(DevNodeModel).all()
-    result = []
+    nodes = db.query(DevNodeModel).all()
+    if not nodes:
+        return []
 
-    if dev_nodes:
-        results_by_id = {}
-        uncached = []
+    results_by_id = {}
+    uncached = []
 
-        for node in dev_nodes:
-            cached = _get_cached_serialize(node.id)
-            if cached:
-                results_by_id[node.id] = cached
-            else:
-                uncached.append(node)
+    for node in nodes:
+        cached = _get_cached_serialize(node.id)
+        if cached:
+            results_by_id[node.id] = cached
+        else:
+            uncached.append(node)
 
-        if uncached:
-            max_workers = min(32, max(1, len(uncached)))
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_map = {executor.submit(_serialize_dev_node, node): node.id for node in uncached}
-                for future in as_completed(future_map):
-                    node_id = future_map[future]
-                    try:
-                        results_by_id[node_id] = future.result()
-                    except Exception as exc:
-                        print(f"Node serialization failed for {node_id}: {exc}")
+    if uncached:
+        max_workers = min(32, max(1, len(uncached)))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_map = {executor.submit(_serialize_dev_node, node): node.id for node in uncached}
+            for future in as_completed(future_map):
+                node_id = future_map[future]
+                try:
+                    results_by_id[node_id] = future.result()
+                except Exception as exc:
+                    print(f"Node serialization failed for {node_id}: {exc}")
+                    results_by_id[node_id] = _serialize_dev_node(
+                        next(n for n in nodes if n.id == node_id)
+                    )
 
-            for node in dev_nodes:
-                serialized = results_by_id.get(node.id)
-                if serialized:
-                    result.append(serialized)
-
-    slurm_count = 0
-    try:
-        from app.core.slurm_api import slurm_client
-        slurm_nodes = slurm_client.get_nodes()
-        slurm_count = len(slurm_nodes) if slurm_nodes else 0
-    except Exception:
-        pass
-
-    return {
-        "nodes": result,
-        "slurm_node_count": slurm_count,
-    }
+    return [results_by_id.get(node.id) for node in nodes]
 
 @router.post("/nodes/bulk", response_model=DevNodeBulkResult)
 def create_dev_nodes_bulk(

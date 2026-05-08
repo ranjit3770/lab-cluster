@@ -96,29 +96,15 @@ function formatDate(value: string) {
   });
 }
 
-function EmptyColumn({ family, slurmNodeCount }: { family: NodeFamily; slurmNodeCount?: number }) {
+function EmptyColumn({ family }: { family: NodeFamily }) {
   const label = family === 'ubuntu' ? 'Ubuntu nodes' : 'Windows nodes';
   return (
     <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-6 py-10 text-center">
       <Network className="mb-3 h-8 w-8 text-gray-300" />
       <p className="text-sm font-bold text-gray-900">No {label.toLowerCase()} registered</p>
-      {slurmNodeCount && slurmNodeCount > 0 ? (
-        <div className="mt-3 flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
-            <span className="text-xs font-bold text-emerald-700">
-              {slurmNodeCount} Slurm node{slurmNodeCount !== 1 ? 's' : ''} detected
-            </span>
-          </div>
-          <p className="text-xs text-gray-500">
-            Register them as managed nodes to appear here.
-          </p>
-        </div>
-      ) : (
-        <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
-          Add nodes in Slurm configuration to see them here.
-        </p>
-      )}
+      <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
+        Add nodes in Slurm configuration to see them here.
+      </p>
     </div>
   );
 }
@@ -271,13 +257,11 @@ function NodeColumn({
   description,
   family,
   nodes,
-  slurmNodeCount,
 }: {
   title: string;
   description: string;
   family: NodeFamily;
   nodes: ManagedNode[];
-  slurmNodeCount?: number;
 }) {
   const isWindows = family === 'windows';
 
@@ -309,7 +293,7 @@ function NodeColumn({
       </div>
 
       <div className="max-h-[calc(100vh-260px)] grid grid-cols-1 gap-3 overflow-y-auto p-4 md:grid-cols-2">
-        {nodes.length > 0 ? nodes.map((node) => <NodeTile key={node.id} node={node} />) : <div className="col-span-1 md:col-span-2"><EmptyColumn family={family} slurmNodeCount={slurmNodeCount} /></div>}
+        {nodes.length > 0 ? nodes.map((node) => <NodeTile key={node.id} node={node} />) : <div className="col-span-1 md:col-span-2"><EmptyColumn family={family} /></div>}
       </div>
     </Card>
   );
@@ -318,7 +302,6 @@ function NodeColumn({
 export default function NodeManagementPage() {
   const { token } = useAuth();
   const [nodes, setNodes] = useState<DevNode[]>([]);
-  const [slurmNodeCount, setSlurmNodeCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -327,8 +310,7 @@ export default function NodeManagementPage() {
     try {
       setRefreshing(true);
       const response = await devNodesApi.getNodes(token);
-      setNodes(response.data?.nodes || []);
-      setSlurmNodeCount(response.data?.slurm_node_count ?? 0);
+      setNodes(response.data || []);
       if (showToast) toast.success('Node inventory refreshed');
     } catch (error) {
       console.error('Failed to load node management inventory', error);
@@ -384,14 +366,12 @@ export default function NodeManagementPage() {
             description="Linux compute nodes with slurmd service status."
             family="ubuntu"
             nodes={grouped.ubuntu}
-            slurmNodeCount={slurmNodeCount}
           />
           <NodeColumn
             title="Windows Nodes"
             description="Windows compute nodes with slurmd service status."
             family="windows"
             nodes={grouped.windows}
-            slurmNodeCount={slurmNodeCount}
           />
         </div>
       )}

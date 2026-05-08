@@ -40,13 +40,8 @@ export interface DevNodeBulkResult {
     failed: string[];
 }
 
-export interface DevNodesResponse {
-    nodes: DevNode[];
-    slurm_node_count: number;
-}
-
 export const devNodesApi = {
-    getNodes: (token: string) => api.get<DevNodesResponse>('/api/v1/developer/nodes', {
+    getNodes: (token: string) => api.get<DevNode[]>('/api/v1/developer/nodes', {
          headers: { Authorization: `Bearer ${token}` },
          params: { _ts: Date.now() }
     }),
