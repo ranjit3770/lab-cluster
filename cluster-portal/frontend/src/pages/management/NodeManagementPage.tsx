@@ -11,6 +11,7 @@ import {
   Play,
   ArrowRight,
   Loader2,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -192,10 +193,10 @@ function UptimeValue({ uptime, uptimeSeconds }: { uptime?: string | null; uptime
   );
 }
 
-function NodeTile({ node, onSetupIdle, onSwitchOs }: {
+function NodeTile({ node, onSetupIdle, onSwitchToCluster }: {
   node: ManagedNode;
   onSetupIdle: (node: ManagedNode) => void;
-  onSwitchOs: (node: ManagedNode) => void;
+  onSwitchToCluster: (node: ManagedNode) => void;
 }) {
   const isWindows = node.family === 'windows';
   const isAuto = node.auto_discovered;
@@ -204,15 +205,15 @@ function NodeTile({ node, onSetupIdle, onSwitchOs }: {
   const [setupIdleLoading, setSetupIdleLoading] = useState(false);
   const [switchOsLoading, setSwitchOsLoading] = useState(false);
 
-  const handleSetupIdle = async () => {
+  const handleSetupIdle = () => {
     setSetupIdleLoading(true);
     onSetupIdle(node);
     setSetupIdleLoading(false);
   };
 
-  const handleSwitchOs = () => {
+  const handleSwitchToCluster = () => {
     setSwitchOsLoading(true);
-    onSwitchOs(node);
+    onSwitchToCluster(node);
     setSwitchOsLoading(false);
   };
 
@@ -283,7 +284,7 @@ function NodeTile({ node, onSetupIdle, onSwitchOs }: {
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleSwitchOs}
+                onClick={handleSwitchToCluster}
                 disabled={switchOsLoading}
                 className="gap-2 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 font-black text-xs uppercase tracking-wider h-10"
               >
@@ -292,7 +293,7 @@ function NodeTile({ node, onSetupIdle, onSwitchOs }: {
                 ) : (
                   <ArrowRight className="h-4 w-4" />
                 )}
-                Switch OS
+                Switch to Cluster
               </Button>
             </div>
             <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
@@ -368,14 +369,14 @@ function NodeColumn({
   family,
   nodes,
   onSetupIdle,
-  onSwitchOs,
+  onSwitchToCluster,
 }: {
   title: string;
   description: string;
   family: NodeFamily;
   nodes: ManagedNode[];
   onSetupIdle: (node: ManagedNode) => void;
-  onSwitchOs: (node: ManagedNode) => void;
+  onSwitchToCluster: (node: ManagedNode) => void;
 }) {
   const isWindows = family === 'windows';
 
@@ -412,7 +413,7 @@ function NodeColumn({
             key={node.id}
             node={node}
             onSetupIdle={onSetupIdle}
-            onSwitchOs={onSwitchOs}
+            onSwitchToCluster={onSwitchToCluster}
           />
         )) : (
           <div className="col-span-1 md:col-span-2"><EmptyColumn family={family} /></div>
@@ -428,10 +429,13 @@ export default function NodeManagementPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogNode, setDialogNode] = useState<ManagedNode | null>(null);
-  const [dialogMessage, setDialogMessage] = useState('');
-  const [dialogAction, setDialogAction] = useState<'setup-idle' | 'switch-os' | null>(null);
+  const [setupIdleDialogOpen, setSetupIdleDialogOpen] = useState(false);
+  const [setupIdleDialogNode, setSetupIdleDialogNode] = useState<ManagedNode | null>(null);
+
+  const [switchClusterDialogOpen, setSwitchClusterDialogOpen] = useState(false);
+  const [switchClusterDialogNode, setSwitchClusterDialogNode] = useState<ManagedNode | null>(null);
+  const [switchClusterDialogMessage, setSwitchClusterDialogMessage] = useState('');
+
   const [actionLoading, setActionLoading] = useState(false);
 
   const loadNodes = useCallback(async (showToast = false) => {
@@ -462,11 +466,17 @@ export default function NodeManagementPage() {
     };
   }, [nodes]);
 
-  const handleSetupIdle = async (node: ManagedNode) => {
-    if (!token) return;
+  const handleSetupIdleClick = (node: ManagedNode) => {
+    setSetupIdleDialogNode(node);
+    setSetupIdleDialogOpen(true);
+  };
+
+  const confirmSetupIdle = async () => {
+    if (!token || !setupIdleDialogNode) return;
+    setSetupIdleDialogOpen(false);
     setActionLoading(true);
     try {
-      const response = await windowsNodesApi.setupIdle(token, node.id);
+      const response = await windowsNodesApi.setupIdle(token, setupIdleDialogNode.id);
       if (response.data.status === 'success') {
         toast.success(response.data.message);
       } else {
@@ -481,36 +491,34 @@ export default function NodeManagementPage() {
     }
   };
 
-  const handleSwitchOsClick = (node: ManagedNode) => {
-    setDialogNode(node);
-    const uptimeSeconds = node.uptime_seconds || 0;
+  const handleSwitchToClusterClick = (node: ManagedNode) => {
+    setSwitchClusterDialogNode(node);
+    const uptimeSeconds = node.uptime_seconds;
+    const hasValidUptime = uptimeSeconds !== null && uptimeSeconds !== undefined && uptimeSeconds > 0;
     const oneHour = 3600;
 
-    if (uptimeSeconds > 0 && uptimeSeconds < oneHour) {
-      setDialogMessage(
+    if (hasValidUptime && uptimeSeconds! < oneHour) {
+      setSwitchClusterDialogMessage(
         'The node has not yet reached the scheduled idle duration. Are you sure you want to switch the OS now?'
       );
     } else {
-      setDialogMessage('Are you sure you want to switch the operating system?');
+      setSwitchClusterDialogMessage('Are you sure you want to switch the operating system?');
     }
 
-    setDialogAction('switch-os');
-    setDialogOpen(true);
+    setSwitchClusterDialogOpen(true);
   };
 
-  const handleDialogConfirm = async () => {
-    if (!token || !dialogNode || !dialogAction) return;
-    setDialogOpen(false);
+  const confirmSwitchToCluster = async () => {
+    if (!token || !switchClusterDialogNode) return;
+    setSwitchClusterDialogOpen(false);
     setActionLoading(true);
 
     try {
-      if (dialogAction === 'switch-os') {
-        const response = await windowsNodesApi.switchOs(token, dialogNode.id);
-        if (response.data.status === 'success') {
-          toast.success(response.data.message);
-        } else {
-          toast.error(response.data.message);
-        }
+      const response = await windowsNodesApi.switchOs(token, switchClusterDialogNode.id);
+      if (response.data.status === 'success') {
+        toast.success(response.data.message);
+      } else {
+        toast.error(response.data.message);
       }
     } catch (err: any) {
       const msg = err.response?.data?.detail || err.message || 'Operation failed';
@@ -534,10 +542,10 @@ export default function NodeManagementPage() {
           type="button"
           variant="outline"
           onClick={() => loadNodes(true)}
-          disabled={refreshing}
+          disabled={refreshing || actionLoading}
           className="h-10 gap-2 border-gray-200 bg-white font-bold"
         >
-          <RefreshCcw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+          <RefreshCcw className={cn('h-4 w-4', (refreshing || actionLoading) && 'animate-spin')} />
           Refresh
         </Button>
       </div>
@@ -554,32 +562,52 @@ export default function NodeManagementPage() {
             description="Linux compute nodes with slurmd service status."
             family="ubuntu"
             nodes={grouped.ubuntu}
-            onSetupIdle={handleSetupIdle}
-            onSwitchOs={handleSwitchOsClick}
+            onSetupIdle={handleSetupIdleClick}
+            onSwitchToCluster={handleSwitchToClusterClick}
           />
           <NodeColumn
             title="Windows Nodes"
             description="Windows compute nodes with slurmd service status."
             family="windows"
             nodes={grouped.windows}
-            onSetupIdle={handleSetupIdle}
-            onSwitchOs={handleSwitchOsClick}
+            onSetupIdle={handleSetupIdleClick}
+            onSwitchToCluster={handleSwitchToClusterClick}
           />
         </div>
       )}
 
-      <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <AlertDialog open={setupIdleDialogOpen} onOpenChange={setSetupIdleDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm OS Switch</AlertDialogTitle>
-            <AlertDialogDescription>
-              {dialogMessage}
+            <AlertDialogTitle>Setup Idle Configuration</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-gray-500">
+                <span>This will configure the node to boot into Ubuntu on the next restart and set up an idle scheduler with a 1-hour grace period.</span>
+                <span className="block font-medium text-gray-700">The node will not be restarted at this stage.</span>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDialogConfirm} className="bg-amber-600 hover:bg-amber-700">
-              Switch OS
+            <AlertDialogAction onClick={confirmSetupIdle} className="bg-sky-600 hover:bg-sky-700">
+              Confirm Setup
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={switchClusterDialogOpen} onOpenChange={setSwitchClusterDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm OS Switch</AlertDialogTitle>
+            <AlertDialogDescription>
+              {switchClusterDialogMessage}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSwitchToCluster} className="bg-amber-600 hover:bg-amber-700">
+              Switch to Cluster
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

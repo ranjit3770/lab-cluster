@@ -10,6 +10,8 @@ email-validator
 requests
 pytz
 paramiko
+pywinrm
+pywinrm[credssp]
 websockets
 requests-unixsocket
 gunicorn

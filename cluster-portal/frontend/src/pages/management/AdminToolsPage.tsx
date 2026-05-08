@@ -1,7 +1,7 @@
 import { 
     Terminal, Trash2, Server, Plus, 
     RefreshCcw, Monitor, Edit2, Check, X,
-    Globe, Shield, Key, Hash, Activity
+    Globe, Shield, Key, Hash, Activity, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +46,7 @@ export default function AdminToolsPage() {
     const navigate = useNavigate();
     
     const [nodes, setNodes] = useState<DevNode[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [isAddingNode, setIsAddingNode] = useState(false);
     const [isBulkAdding, setIsBulkAdding] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -71,6 +72,7 @@ export default function AdminToolsPage() {
 
     const fetchNodes = async () => {
         setIsRefreshing(true);
+        setIsLoading(true);
         try {
             const res = await devNodesApi.getNodes(token!);
             setNodes(res.data);
@@ -79,6 +81,7 @@ export default function AdminToolsPage() {
             toast.error("Failed to load nodes.");
         } finally {
             setIsRefreshing(false);
+            setIsLoading(false);
         }
     };
 
@@ -578,7 +581,7 @@ export default function AdminToolsPage() {
                     </Card>
                  ))}
 
-                 {nodes.length === 0 && (
+                 {nodes.length === 0 && !isLoading && (
                     <div className="md:col-span-2 lg:col-span-3 py-20 text-center bg-gray-50/50 rounded-[2.5rem] border-2 border-dashed border-gray-100 flex flex-col items-center">
                         <div className="h-20 w-20 flex items-center justify-center bg-gray-100 rounded-3xl mb-4 group hover:rotate-12 transition-transform">
                             <Server className="h-10 w-10 text-gray-300" />
@@ -588,6 +591,12 @@ export default function AdminToolsPage() {
                         <Button variant="outline" className="mt-6 rounded-xl text-xs font-bold px-8 border-gray-200 hover:bg-white" onClick={() => setIsAddingNode(true)}>
                             Initialize First Node
                         </Button>
+                    </div>
+                 )}
+                 {nodes.length === 0 && isLoading && (
+                    <div className="md:col-span-2 lg:col-span-3 py-20 text-center bg-gray-50/50 rounded-[2.5rem] border-2 border-dashed border-gray-100 flex flex-col items-center">
+                        <Loader2 className="h-8 w-8 text-gray-300 animate-spin mb-4" />
+                        <p className="text-sm font-bold text-gray-600">Loading node inventory...</p>
                     </div>
                  )}
             </div>

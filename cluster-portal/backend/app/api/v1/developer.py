@@ -475,6 +475,27 @@ def _ssh_get_uptime(ip: str, port: int, username: str, password: Optional[str], 
     return {"uptime": "N/A", "uptime_seconds": None}
 
 
+def _winrm_get_uptime(ip: str, username: str, password: Optional[str]) -> Dict[str, Any]:
+    if not password:
+        return {"uptime": "N/A", "uptime_seconds": None}
+    try:
+        import winrm
+        session = winrm.Session(ip, auth=(username, password), transport='ntlm', server_cert_validation='ignore')
+        ps_script = '[math]::Round(((Get-Date)-(Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalSeconds)'
+        result = session.run_ps(ps_script)
+        if result.status_code == 0:
+            output = result.std_out.strip()
+            if output and output.replace('.', '').replace('-', '').isdigit():
+                seconds = float(output)
+                if seconds > 0:
+                    return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
+    except ImportError:
+        print("pywinrm not installed, skipping WinRM uptime check")
+    except Exception as e:
+        print(f"WinRM Uptime Error ({ip}): {e}")
+    return {"uptime": "N/A", "uptime_seconds": None}
+
+
 def _get_cached_services(node_id: int) -> Optional[Dict]:
     with _cache_lock:
         entry = _node_service_cache.get(node_id)
@@ -597,6 +618,10 @@ def _serialize_dev_node(node: DevNodeModel) -> dict:
             services = _get_node_services(node, effective_os)
             uptime_val = services.get("uptime", "N/A")
             uptime_secs = services.get("uptime_seconds")
+        elif effective_os == "windows" and node.ssh_username:
+            winrm_result = _winrm_get_uptime(node.ip_address, node.ssh_username, node.ssh_password)
+            uptime_val = winrm_result.get("uptime", "N/A")
+            uptime_secs = winrm_result.get("uptime_seconds")
 
     payload = {
         "id": node.id,

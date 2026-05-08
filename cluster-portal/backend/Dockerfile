@@ -5,7 +5,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     slurm-client \
     libmunge-dev \
     curl \
+    sshpass \
     && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir ansible-core ansible && \
+    ansible-galaxy collection install community.windows && \
+    rm -rf ~/.ansible
 
 WORKDIR /app
 

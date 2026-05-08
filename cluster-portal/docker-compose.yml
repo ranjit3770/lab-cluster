@@ -58,6 +58,7 @@ services:
       # Portal-submitted jobs need nodes that can read/write /data_storage.
       # Override this env with a comma-separated list after mounting shared storage on workers.
       - PORTAL_SLURM_NODELIST=${PORTAL_SLURM_NODELIST:-head-node}
+      - WINDOWS_PLAYBOOK_DIR=/opt/amritacluster/SLURM-COMPLETE-SETUP/windows-boot-testing
     volumes:
       - /data_storage:/data_storage
       - /etc/slurm:/etc/slurm:ro
@@ -66,6 +67,7 @@ services:
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro
       - /usr/local/slurm:/usr/local/slurm:ro
+      - /opt/amritacluster/SLURM-COMPLETE-SETUP/windows-boot-testing:/opt/amritacluster/SLURM-COMPLETE-SETUP/windows-boot-testing:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
