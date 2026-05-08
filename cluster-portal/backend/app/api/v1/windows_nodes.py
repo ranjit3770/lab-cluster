@@ -6,12 +6,11 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.api import deps
-from app.core.config import settings
 from app.models.dev_node import DevNode as DevNodeModel
 
 router = APIRouter()
 
-PLAYBOOK_DIR = settings.WINDOWS_PLAYBOOK_DIR
+PLAYBOOK_DIR = "/opt/amritacluster/SLURM-COMPLETE-SETUP/windows-boot-testing"
 
 
 def _run_playbook(

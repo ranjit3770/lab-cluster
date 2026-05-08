@@ -201,12 +201,19 @@ function NodeTile({ node, onSetupIdle, onSwitchOs }: {
   const isAuto = node.auto_discovered;
   const Icon = isWindows ? Monitor : Server;
 
-  const handleSetupIdle = () => {
+  const [setupIdleLoading, setSetupIdleLoading] = useState(false);
+  const [switchOsLoading, setSwitchOsLoading] = useState(false);
+
+  const handleSetupIdle = async () => {
+    setSetupIdleLoading(true);
     onSetupIdle(node);
+    setSetupIdleLoading(false);
   };
 
   const handleSwitchOs = () => {
+    setSwitchOsLoading(true);
     onSwitchOs(node);
+    setSwitchOsLoading(false);
   };
 
   return (
@@ -263,19 +270,29 @@ function NodeTile({ node, onSetupIdle, onSwitchOs }: {
                 type="button"
                 variant="outline"
                 onClick={handleSetupIdle}
+                disabled={setupIdleLoading}
                 className="gap-2 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 font-black text-xs uppercase tracking-wider h-10"
               >
-                <Play className="h-4 w-4" />
+                {setupIdleLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
                 Setup Idle
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 onClick={handleSwitchOs}
+                disabled={switchOsLoading}
                 className="gap-2 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 font-black text-xs uppercase tracking-wider h-10"
               >
-                <ArrowRight className="h-4 w-4" />
-                Switch to Cluster
+                {switchOsLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRight className="h-4 w-4" />
+                )}
+                Switch OS
               </Button>
             </div>
             <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
@@ -413,11 +430,8 @@ export default function NodeManagementPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogNode, setDialogNode] = useState<ManagedNode | null>(null);
-  const [dialogTitle, setDialogTitle] = useState('');
   const [dialogMessage, setDialogMessage] = useState('');
-  const [dialogDescription, setDialogDescription] = useState('');
   const [dialogAction, setDialogAction] = useState<'setup-idle' | 'switch-os' | null>(null);
-  const [dialogConfirmText, setDialogConfirmText] = useState('Confirm');
   const [actionLoading, setActionLoading] = useState(false);
 
   const loadNodes = useCallback(async (showToast = false) => {
@@ -448,45 +462,7 @@ export default function NodeManagementPage() {
     };
   }, [nodes]);
 
-  const handleSetupIdleClick = (node: ManagedNode) => {
-    setDialogNode(node);
-    setDialogTitle('Setup Idle Configuration');
-    setDialogDescription(
-      'This will configure the node to boot into Ubuntu on next restart and set up a 1-hour idle scheduler.'
-    );
-    setDialogMessage(
-      'GRUB will be updated to set Ubuntu as the default boot entry without restarting the node. An idle scheduler will be configured to automatically switch after 1 hour of inactivity.'
-    );
-    setDialogConfirmText('Setup Idle');
-    setDialogAction('setup-idle');
-    setDialogOpen(true);
-  };
-
-  const handleSwitchOsClick = (node: ManagedNode) => {
-    setDialogNode(node);
-    setDialogTitle('Switch to Cluster');
-    const uptimeSeconds = node.uptime_seconds || 0;
-    const oneHour = 3600;
-
-    if (!node.uptime_seconds || node.uptime === 'N/A') {
-      setDialogMessage(
-        'The node has not yet reached the scheduled idle duration. Are you sure you want to switch the OS now?'
-      );
-    } else if (uptimeSeconds > 0 && uptimeSeconds < oneHour) {
-      setDialogMessage(
-        'The node has not yet reached the scheduled idle duration. Are you sure you want to switch the OS now?'
-      );
-    } else {
-      setDialogMessage('Are you sure you want to switch the operating system?');
-    }
-
-    setDialogDescription('');
-    setDialogConfirmText('Switch to Cluster');
-    setDialogAction('switch-os');
-    setDialogOpen(true);
-  };
-
-  const executeSetupIdle = async (node: ManagedNode) => {
+  const handleSetupIdle = async (node: ManagedNode) => {
     if (!token) return;
     setActionLoading(true);
     try {
@@ -505,33 +481,43 @@ export default function NodeManagementPage() {
     }
   };
 
-  const executeSwitchOs = async (node: ManagedNode) => {
-    if (!token) return;
-    setActionLoading(true);
-    try {
-      const response = await windowsNodesApi.switchOs(token, node.id);
-      if (response.data.status === 'success') {
-        toast.success(response.data.message);
-      } else {
-        toast.error(response.data.message);
-      }
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || err.message || 'Switch OS failed';
-      toast.error(msg);
-    } finally {
-      setActionLoading(false);
-      loadNodes(true);
+  const handleSwitchOsClick = (node: ManagedNode) => {
+    setDialogNode(node);
+    const uptimeSeconds = node.uptime_seconds || 0;
+    const oneHour = 3600;
+
+    if (uptimeSeconds > 0 && uptimeSeconds < oneHour) {
+      setDialogMessage(
+        'The node has not yet reached the scheduled idle duration. Are you sure you want to switch the OS now?'
+      );
+    } else {
+      setDialogMessage('Are you sure you want to switch the operating system?');
     }
+
+    setDialogAction('switch-os');
+    setDialogOpen(true);
   };
 
   const handleDialogConfirm = async () => {
     if (!token || !dialogNode || !dialogAction) return;
     setDialogOpen(false);
+    setActionLoading(true);
 
-    if (dialogAction === 'setup-idle') {
-      await executeSetupIdle(dialogNode);
-    } else if (dialogAction === 'switch-os') {
-      await executeSwitchOs(dialogNode);
+    try {
+      if (dialogAction === 'switch-os') {
+        const response = await windowsNodesApi.switchOs(token, dialogNode.id);
+        if (response.data.status === 'success') {
+          toast.success(response.data.message);
+        } else {
+          toast.error(response.data.message);
+        }
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || err.message || 'Operation failed';
+      toast.error(msg);
+    } finally {
+      setActionLoading(false);
+      loadNodes(true);
     }
   };
 
@@ -568,7 +554,7 @@ export default function NodeManagementPage() {
             description="Linux compute nodes with slurmd service status."
             family="ubuntu"
             nodes={grouped.ubuntu}
-            onSetupIdle={handleSetupIdleClick}
+            onSetupIdle={handleSetupIdle}
             onSwitchOs={handleSwitchOsClick}
           />
           <NodeColumn
@@ -576,7 +562,7 @@ export default function NodeManagementPage() {
             description="Windows compute nodes with slurmd service status."
             family="windows"
             nodes={grouped.windows}
-            onSetupIdle={handleSetupIdleClick}
+            onSetupIdle={handleSetupIdle}
             onSwitchOs={handleSwitchOsClick}
           />
         </div>
@@ -585,29 +571,15 @@ export default function NodeManagementPage() {
       <AlertDialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{dialogTitle}</AlertDialogTitle>
-            {dialogDescription && (
-              <AlertDialogDescription className="text-xs text-gray-500 border-l-2 border-sky-200 pl-3 mt-2">
-                {dialogDescription}
-              </AlertDialogDescription>
-            )}
-            <AlertDialogDescription className="text-sm">
+            <AlertDialogTitle>Confirm OS Switch</AlertDialogTitle>
+            <AlertDialogDescription>
               {dialogMessage}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDialogConfirm}
-              disabled={actionLoading}
-              className={cn(
-                dialogAction === 'setup-idle' ? 'bg-sky-600 hover:bg-sky-700' : 'bg-amber-600 hover:bg-amber-700'
-              )}
-            >
-              {actionLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-              ) : null}
-              {dialogConfirmText}
+            <AlertDialogAction onClick={handleDialogConfirm} className="bg-amber-600 hover:bg-amber-700">
+              Switch OS
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

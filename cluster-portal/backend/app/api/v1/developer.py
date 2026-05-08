@@ -381,14 +381,13 @@ def _ps_encoded(script: str) -> str:
     return f'powershell -NoProfile -EncodedCommand {encoded}'
 
 
-def _ssh_execute(ip: str, port: int, username: str, password: Optional[str], command: str, timeout: int = 5) -> Optional[str]:
+def _ssh_execute(ip: str, port: int, username: str, password: Optional[str], command: str, timeout: int = 3) -> Optional[str]:
+    if not password:
+        return None
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        if password:
-            client.connect(hostname=ip, port=port, username=username, password=password, timeout=timeout, allow_agent=True, look_for_keys=True)
-        else:
-            client.connect(hostname=ip, port=port, username=username, timeout=timeout, allow_agent=True, look_for_keys=True)
+        client.connect(hostname=ip, port=port, username=username, password=password, timeout=timeout)
         _, stdout, stderr = client.exec_command(command)
         stdout.channel.settimeout(timeout)
         output = stdout.read()
@@ -594,9 +593,10 @@ def _serialize_dev_node(node: DevNodeModel) -> dict:
         uptime_val = services.get("uptime", "N/A")
         uptime_secs = services.get("uptime_seconds")
     else:
-        services = _get_node_services(node, effective_os)
-        uptime_val = services.get("uptime", "N/A")
-        uptime_secs = services.get("uptime_seconds")
+        if node.ssh_password:
+            services = _get_node_services(node, effective_os)
+            uptime_val = services.get("uptime", "N/A")
+            uptime_secs = services.get("uptime_seconds")
 
     payload = {
         "id": node.id,
@@ -685,34 +685,21 @@ def get_dev_nodes(
             else:
                 slurmd = "unknown"
 
-            node_ip = s_addr or s_host or s_name
-            detected_os = "ubuntu"
-            detected_label = "SSH"
-            detected_port = 22
-            reachable = True
-
-            for port, label in [(3389, "RDP"), (5985, "WinRM"), (5986, "WinRM")]:
-                if _probe_tcp_connection(node_ip, port):
-                    detected_os = "windows"
-                    detected_label = label
-                    detected_port = port
-                    break
-
             auto_discovered.append({
                 "id": auto_id,
                 "name": s_name,
-                "ip_address": node_ip,
-                "ssh_port": detected_port,
+                "ip_address": s_addr or s_host or s_name,
+                "ssh_port": 22,
                 "ssh_username": "",
                 "ssh_password": None,
                 "os_family": "auto",
                 "created_at": datetime.now().isoformat(),
-                "detected_os_family": detected_os,
-                "effective_os_family": detected_os,
+                "detected_os_family": "ubuntu",
+                "effective_os_family": "ubuntu",
                 "detection_source": "auto-discovered from Slurm",
-                "detected_access_label": detected_label,
-                "detected_access_port": detected_port,
-                "detected_reachable": reachable,
+                "detected_access_label": "SSH",
+                "detected_access_port": 22,
+                "detected_reachable": True,
                 "slurmd_status": slurmd,
                 "uptime": "N/A",
                 "uptime_seconds": None,
