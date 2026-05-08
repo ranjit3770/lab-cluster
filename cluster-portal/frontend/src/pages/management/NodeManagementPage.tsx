@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   Clock,
   Laptop,
   Monitor,
   Network,
   RefreshCcw,
   Server,
-  ShieldCheck,
-  UserRound,
+  Timer,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,7 +23,6 @@ type NodeFamily = 'ubuntu' | 'windows';
 
 type ManagedNode = DevNode & {
   family: NodeFamily;
-  accessLabel: string;
   detectionReason: string;
   isLiveDetected: boolean;
 };
@@ -33,15 +32,9 @@ const WINDOWS_PORTS = new Set([3389, 5985, 5986]);
 function classifyNode(node: DevNode): ManagedNode {
   const runtimeFamily = node.effective_os_family?.toLowerCase();
   if (runtimeFamily === 'ubuntu' || runtimeFamily === 'windows') {
-    const isWindows = runtimeFamily === 'windows';
-    const accessPort = node.detected_access_port || node.ssh_port;
     return {
       ...node,
       family: runtimeFamily,
-      accessLabel: node.detected_access_label || (isWindows
-        ? accessPort === 3389 ? 'RDP' : accessPort === 5985 || accessPort === 5986 ? 'WinRM' : 'SSH'
-        : 'SSH'),
-      ssh_port: accessPort,
       detectionReason: node.detection_source || (node.detected_os_family ? 'live detected' : 'saved admin setting'),
       isLiveDetected: Boolean(node.detected_os_family && node.detected_reachable),
     };
@@ -49,14 +42,9 @@ function classifyNode(node: DevNode): ManagedNode {
 
   const explicitFamily = node.os_family?.toLowerCase();
   if (explicitFamily === 'ubuntu' || explicitFamily === 'windows') {
-    const port = Number(node.ssh_port);
-    const isWindows = explicitFamily === 'windows';
     return {
       ...node,
       family: explicitFamily,
-      accessLabel: isWindows
-        ? port === 3389 ? 'RDP' : port === 5985 || port === 5986 ? 'WinRM' : 'SSH'
-        : 'SSH',
       detectionReason: 'saved admin setting',
       isLiveDetected: false,
     };
@@ -81,7 +69,6 @@ function classifyNode(node: DevNode): ManagedNode {
     return {
       ...node,
       family: 'windows',
-      accessLabel: port === 3389 ? 'RDP' : port === 5985 || port === 5986 ? 'WinRM' : 'SSH',
       detectionReason: hasWindowsPort
         ? `detected from port ${port}`
         : hasWindowsUser
@@ -94,7 +81,6 @@ function classifyNode(node: DevNode): ManagedNode {
   return {
     ...node,
     family: 'ubuntu',
-    accessLabel: 'SSH',
     detectionReason: nodeName.includes('ubuntu') ? 'detected from node name' : 'linux ssh profile',
     isLiveDetected: false,
   };
@@ -110,16 +96,89 @@ function formatDate(value: string) {
   });
 }
 
-function EmptyColumn({ family }: { family: NodeFamily }) {
+function EmptyColumn({ family, slurmNodeCount }: { family: NodeFamily; slurmNodeCount?: number }) {
   const label = family === 'ubuntu' ? 'Ubuntu nodes' : 'Windows nodes';
   return (
-      <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-6 py-10 text-center">
+    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-6 py-10 text-center">
       <Network className="mb-3 h-8 w-8 text-gray-300" />
       <p className="text-sm font-bold text-gray-900">No {label.toLowerCase()} registered</p>
-      <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
-        Add nodes in Slurm Nodes. Refresh runs live SSH, RDP, WinRM, SMB, and RPC probes.
-      </p>
+      {slurmNodeCount && slurmNodeCount > 0 ? (
+        <div className="mt-3 flex flex-col items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+            <span className="text-xs font-bold text-emerald-700">
+              {slurmNodeCount} Slurm node{slurmNodeCount !== 1 ? 's' : ''} detected
+            </span>
+          </div>
+          <p className="text-xs text-gray-500">
+            Register them as managed nodes to appear here.
+          </p>
+        </div>
+      ) : (
+        <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
+          Add nodes in Slurm configuration to see them here.
+        </p>
+      )}
     </div>
+  );
+}
+
+const slurmdStatusConfig: Record<string, { label: string; dotClass: string; bgClass: string }> = {
+  active: {
+    label: 'Active',
+    dotClass: 'bg-emerald-500',
+    bgClass: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+  },
+  inactive: {
+    label: 'Inactive',
+    dotClass: 'bg-red-500',
+    bgClass: 'bg-red-50 text-red-700 border-red-100',
+  },
+  failed: {
+    label: 'Failed',
+    dotClass: 'bg-red-500',
+    bgClass: 'bg-red-50 text-red-700 border-red-100',
+  },
+  'not-found': {
+    label: 'Not Found',
+    dotClass: 'bg-amber-400',
+    bgClass: 'bg-amber-50 text-amber-700 border-amber-100',
+  },
+  not_found: {
+    label: 'Not Found',
+    dotClass: 'bg-amber-400',
+    bgClass: 'bg-amber-50 text-amber-700 border-amber-100',
+  },
+  activating: {
+    label: 'Activating',
+    dotClass: 'bg-blue-400',
+    bgClass: 'bg-blue-50 text-blue-700 border-blue-100',
+  },
+  unknown: {
+    label: 'Unknown',
+    dotClass: 'bg-gray-300',
+    bgClass: 'bg-gray-50 text-gray-500 border-gray-100',
+  },
+};
+
+function SlurmdBadge({ status }: { status?: string | null }) {
+  const config = slurmdStatusConfig[status || 'unknown'] || slurmdStatusConfig.unknown;
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold', config.bgClass)}>
+      <span className={cn('h-1.5 w-1.5 rounded-full', config.dotClass)} />
+      {config.label}
+    </span>
+  );
+}
+
+function UptimeValue({ uptime, uptimeSeconds }: { uptime?: string | null; uptimeSeconds?: number | null }) {
+  if (!uptime || uptime === 'N/A') {
+    return <span className="text-sm font-bold text-gray-400">N/A</span>;
+  }
+  return (
+    <span className="text-sm font-bold text-gray-900" title={uptimeSeconds ? `${uptimeSeconds}s` : undefined}>
+      {uptime}
+    </span>
   );
 }
 
@@ -163,22 +222,24 @@ function NodeTile({ node }: { node: ManagedNode }) {
         </Badge>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
-            <ShieldCheck className="h-3 w-3" />
-            Access
+            <Activity className="h-3 w-3" />
+            Slurmd Service
           </div>
-          <p className="mt-1 truncate text-sm font-bold text-gray-900">
-            {node.accessLabel}:{node.ssh_port}
-          </p>
+          <div className="mt-1">
+            <SlurmdBadge status={node.slurmd_status} />
+          </div>
         </div>
         <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
-            <UserRound className="h-3 w-3" />
-            Login
+            <Timer className="h-3 w-3" />
+            Uptime
           </div>
-          <p className="mt-1 truncate text-sm font-bold text-gray-900">{node.ssh_username}</p>
+          <div className="mt-1">
+            <UptimeValue uptime={node.uptime} uptimeSeconds={node.uptime_seconds} />
+          </div>
         </div>
       </div>
 
@@ -189,12 +250,12 @@ function NodeTile({ node }: { node: ManagedNode }) {
         </span>
         <span
           className={cn(
-            "inline-flex items-center gap-1.5 font-bold",
-            node.detected_reachable ? "text-emerald-600" : "text-amber-600"
+            'inline-flex items-center gap-1.5 font-bold',
+            node.detected_reachable ? 'text-emerald-600' : 'text-amber-600'
           )}
         >
-          <span className={cn("h-2 w-2 rounded-full", node.detected_reachable ? "bg-emerald-500" : "bg-amber-400")} />
-          {node.detected_reachable ? "reachable" : "fallback"}
+          <span className={cn('h-2 w-2 rounded-full', node.detected_reachable ? 'bg-emerald-500' : 'bg-amber-400')} />
+          {node.detected_reachable ? 'reachable' : 'fallback'}
         </span>
         <span className="inline-flex items-center gap-1.5">
           <Clock className="h-3.5 w-3.5" />
@@ -210,11 +271,13 @@ function NodeColumn({
   description,
   family,
   nodes,
+  slurmNodeCount,
 }: {
   title: string;
   description: string;
   family: NodeFamily;
   nodes: ManagedNode[];
+  slurmNodeCount?: number;
 }) {
   const isWindows = family === 'windows';
 
@@ -245,8 +308,8 @@ function NodeColumn({
         </div>
       </div>
 
-        <div className="max-h-[calc(100vh-260px)] grid grid-cols-2 gap-3 overflow-y-auto p-4">
-        {nodes.length > 0 ? nodes.map((node) => <NodeTile key={node.id} node={node} />) : <div className="col-span-2"><EmptyColumn family={family} /></div>}
+      <div className="max-h-[calc(100vh-260px)] grid grid-cols-1 gap-3 overflow-y-auto p-4 md:grid-cols-2">
+        {nodes.length > 0 ? nodes.map((node) => <NodeTile key={node.id} node={node} />) : <div className="col-span-1 md:col-span-2"><EmptyColumn family={family} slurmNodeCount={slurmNodeCount} /></div>}
       </div>
     </Card>
   );
@@ -255,6 +318,7 @@ function NodeColumn({
 export default function NodeManagementPage() {
   const { token } = useAuth();
   const [nodes, setNodes] = useState<DevNode[]>([]);
+  const [slurmNodeCount, setSlurmNodeCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -263,7 +327,8 @@ export default function NodeManagementPage() {
     try {
       setRefreshing(true);
       const response = await devNodesApi.getNodes(token);
-      setNodes(response.data || []);
+      setNodes(response.data?.nodes || []);
+      setSlurmNodeCount(response.data?.slurm_node_count ?? 0);
       if (showToast) toast.success('Node inventory refreshed');
     } catch (error) {
       console.error('Failed to load node management inventory', error);
@@ -292,7 +357,7 @@ export default function NodeManagementPage() {
         <div>
           <h1 className="text-2xl font-black tracking-tight text-gray-950">Node Management</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Registered access inventory grouped for HPC administration.
+            Registered nodes with slurmd service status and system uptime.
           </p>
         </div>
         <Button
@@ -316,15 +381,17 @@ export default function NodeManagementPage() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <NodeColumn
             title="Ubuntu Nodes"
-            description="Live SSH targets or saved Linux inventory."
+            description="Linux compute nodes with slurmd service status."
             family="ubuntu"
             nodes={grouped.ubuntu}
+            slurmNodeCount={slurmNodeCount}
           />
           <NodeColumn
             title="Windows Nodes"
-            description="Live RDP, WinRM, SMB, RPC targets or saved Windows inventory."
+            description="Windows compute nodes with slurmd service status."
             family="windows"
             nodes={grouped.windows}
+            slurmNodeCount={slurmNodeCount}
           />
         </div>
       )}

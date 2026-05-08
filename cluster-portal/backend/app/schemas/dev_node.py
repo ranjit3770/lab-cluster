@@ -30,6 +30,9 @@ class DevNode(DevNodeBase):
     detected_access_label: Optional[str] = None
     detected_access_port: Optional[int] = None
     detected_reachable: Optional[bool] = None
+    slurmd_status: Optional[str] = None
+    uptime: Optional[str] = None
+    uptime_seconds: Optional[float] = None
 
     class Config:
         from_attributes = True

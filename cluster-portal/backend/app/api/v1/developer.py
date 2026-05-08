@@ -2,8 +2,10 @@ import os
 import paramiko
 import asyncio
 import socket
+import time
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, List
+from typing import Any, List, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 from sqlalchemy.orm import Session
 from app.api import deps
@@ -21,6 +23,19 @@ from app.schemas.dev_node import (
 from app.models.dev_node import DevNode as DevNodeModel
 from app.models.system_setting import SystemSetting
 from app.db.session import SessionLocal
+
+# --- Node Service Status Cache ---
+# Stale-while-revalidate cache for slurmd status and uptime
+_node_service_cache: Dict[int, Dict] = {}
+_cache_lock = threading.Lock()
+SERVICE_CACHE_TTL = 60
+SERVICE_CACHE_STALE_TTL = 300
+
+# Full node serialization cache (runtime detection + services)
+_node_serialize_cache: Dict[int, Dict] = {}
+_serialize_lock = threading.Lock()
+SERIALIZE_CACHE_TTL = 30
+SERIALIZE_CACHE_STALE_TTL = 120
 
 router = APIRouter()
 
@@ -278,7 +293,7 @@ def _test_node_access(node_data: dict) -> bool:
     return _test_ssh_connection(test_req)
 
 
-def _probe_tcp_connection(ip_address: str, port: int, timeout: float = 1.25) -> bool:
+def _probe_tcp_connection(ip_address: str, port: int, timeout: float = 0.5) -> bool:
     try:
         with socket.create_connection((ip_address, port), timeout=timeout):
             return True
@@ -342,7 +357,237 @@ def _detect_node_runtime(node: DevNodeModel) -> dict:
     }
 
 
+# --- Node Service Status Helpers ---
+
+def _format_uptime(seconds: float) -> str:
+    days = int(seconds // 86400)
+    hours = int((seconds % 86400) // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    if days > 0:
+        return f"{days}d {hours}h {minutes}m"
+    elif hours > 0:
+        return f"{hours}h {minutes}m"
+    elif minutes > 0:
+        return f"{minutes}m {secs}s"
+    else:
+        return f"{secs}s"
+
+
+def _ssh_execute(ip: str, port: int, username: str, password: Optional[str], command: str, timeout: int = 5) -> Optional[str]:
+    if not password:
+        return None
+    try:
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(hostname=ip, port=port, username=username, password=password, timeout=timeout)
+        _, stdout, stderr = client.exec_command(command, timeout=timeout)
+        output = stdout.read().decode().strip()
+        client.close()
+        return output
+    except Exception:
+        return None
+
+
+def _ssh_check_slurmd_status(ip: str, port: int, username: str, password: Optional[str], is_windows: bool) -> str:
+    if is_windows:
+        cmd = 'powershell -NoProfile -Command "(Get-Service slurmd -ErrorAction SilentlyContinue).Status"'
+    else:
+        cmd = "systemctl is-active slurmd 2>/dev/null || echo 'inactive'"
+    result = _ssh_execute(ip, port, username, password, cmd, timeout=10)
+    if result:
+        status = result.strip().lower()
+        if status in ("active", "inactive", "activating", "deactivating", "failed", "not_found", "not-found"):
+            return status
+        if "service" in status and ("not found" in status or "running" not in status):
+            return "not_found"
+    return "unknown"
+
+
+def _ssh_get_uptime(ip: str, port: int, username: str, password: Optional[str], is_windows: bool) -> Dict[str, Any]:
+    if is_windows:
+        # Method 1: PowerShell via CIM (requires WinRM, try with longer timeout)
+        cmd1 = (
+            'powershell -NoProfile -Command'
+            ' "[math]::Round(((Get-Date)-(gcim Win32_OperatingSystem).LastBootUpTime).TotalSeconds)"'
+        )
+        output = _ssh_execute(ip, port, username, password, cmd1, timeout=15)
+        if output:
+            try:
+                val = output.strip().splitlines()[-1].strip()
+                seconds = float(val)
+                if seconds > 0:
+                    return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
+            except (ValueError, TypeError):
+                pass
+
+        # Method 2: wmic (no WinRM needed, simpler)
+        cmd2 = 'cmd /c "wmic os get lastbootuptime /value"'
+        output = _ssh_execute(ip, port, username, password, cmd2, timeout=10)
+        if output:
+            try:
+                raw = output.strip().split("=", 1)[-1].split(".")[0].split("+")[0].split("-")[0]
+                from datetime import datetime
+                boot = datetime.strptime(raw, '%Y%m%d%H%M%S')
+                seconds = (datetime.utcnow() - boot).total_seconds()
+                if seconds > 0:
+                    return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
+            except (ValueError, TypeError, IndexError):
+                pass
+
+        # Method 3: systeminfo fallback
+        cmd3 = 'cmd /c "systeminfo | findstr /C:\\\"System Boot Time\\\" /C:\\\"System Up Time\\\""'
+        output = _ssh_execute(ip, port, username, password, cmd3, timeout=10)
+        if output:
+            import re
+            for line in output.splitlines():
+                l = line.strip()
+                if "Boot Time" in l:
+                    match = re.search(r':\s+(.+?)$', l)
+                    if match:
+                        try:
+                            bt = datetime.strptime(match.group(1).strip(), '%m/%d/%Y, %I:%M:%S %p')
+                            seconds = (datetime.now() - bt).total_seconds()
+                            if seconds > 0:
+                                return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
+                        except:
+                            pass
+    else:
+        cmd = "cat /proc/uptime 2>/dev/null | awk '{print int($1)}' || echo 0"
+        output = _ssh_execute(ip, port, username, password, cmd)
+        if output:
+            try:
+                seconds = float(output.strip())
+                if seconds > 0:
+                    return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
+            except (ValueError, TypeError):
+                pass
+    return {"uptime": "N/A", "uptime_seconds": None}
+
+
+def _get_cached_services(node_id: int) -> Optional[Dict]:
+    with _cache_lock:
+        entry = _node_service_cache.get(node_id)
+        if entry:
+            age = time.time() - entry["timestamp"]
+            if age < SERVICE_CACHE_TTL:
+                return entry["data"]
+            if age < SERVICE_CACHE_STALE_TTL:
+                return entry["data"]
+    return None
+
+
+def _set_cached_services(node_id: int, data: Dict):
+    with _cache_lock:
+        _node_service_cache[node_id] = {"data": data, "timestamp": time.time()}
+
+
+# --- Full Node Serialization Cache ---
+
+def _get_cached_serialize(node_id: int) -> Optional[Dict]:
+    with _serialize_lock:
+        entry = _node_serialize_cache.get(node_id)
+        if entry:
+            age = time.time() - entry["timestamp"]
+            if age < SERIALIZE_CACHE_TTL:
+                return entry["data"]
+            if age < SERIALIZE_CACHE_STALE_TTL:
+                return entry["data"]
+    return None
+
+
+def _set_cached_serialize(node_id: int, data: Dict):
+    with _serialize_lock:
+        _node_serialize_cache[node_id] = {"data": data, "timestamp": time.time()}
+
+
+def _check_node_services(node: DevNodeModel, detected_os_family: Optional[str] = None) -> Dict[str, Any]:
+    ip = node.ip_address
+    port = int(node.ssh_port or 22)
+    username = node.ssh_username
+    password = node.ssh_password
+
+    os_family = detected_os_family or node.os_family or "ubuntu"
+    is_windows = os_family == "windows"
+
+    slurmd_status = _ssh_check_slurmd_status(ip, port, username, password, is_windows)
+    uptime_info = _ssh_get_uptime(ip, port, username, password, is_windows)
+
+    result = {
+        "slurmd_status": slurmd_status,
+        "uptime": uptime_info["uptime"],
+        "uptime_seconds": uptime_info["uptime_seconds"],
+    }
+    return result
+
+
+def _get_node_services(node: DevNodeModel, detected_os_family: Optional[str] = None) -> Dict[str, Any]:
+    cached = _get_cached_services(node.id)
+    if cached:
+        return cached
+    data = _check_node_services(node, detected_os_family)
+    _set_cached_services(node.id, data)
+    return data
+
+
+def _infer_slurmd_from_slurm(dev_node_name: str, dev_node_ip: str) -> Optional[str]:
+    try:
+        from app.core.slurm_api import slurm_client
+        slurm_nodes = slurm_client.get_nodes()
+        if not slurm_nodes:
+            return None
+
+        def _match(node):
+            name = (node.get("name") or "").lower().strip()
+            addr = (node.get("address") or node.get("node_addr") or "").lower().strip()
+            host = (node.get("hostname") or node.get("node_hostname") or "").lower().strip()
+            target_name = dev_node_name.lower().strip()
+            target_ip = dev_node_ip.lower().strip()
+            return name == target_name or addr == target_ip or host == target_ip or host == target_name
+
+        for s_node in slurm_nodes:
+            if _match(s_node):
+                state = s_node.get("node_state") or s_node.get("state") or [""]
+                if isinstance(state, list):
+                    state_str = state[0] if state else ""
+                else:
+                    state_str = str(state)
+                state_str = state_str.lower().strip()
+                # Slurm node states that indicate slurmd is active
+                active_states = {"idle", "mixed", "allocated", "completing", "running", "resume"}
+                if state_str in active_states:
+                    return "active"
+                elif state_str in {"down", "draining", "fail", "failing", "power_down", "no_config", "unknown"}:
+                    return "inactive"
+                return "unknown"
+    except Exception:
+        pass
+    return None
+
+
 def _serialize_dev_node(node: DevNodeModel) -> dict:
+    cached = _get_cached_serialize(node.id)
+    if cached:
+        return cached
+
+    runtime = _detect_node_runtime(node)
+    effective_os = runtime.get("effective_os_family") or node.os_family
+
+    slurmd_status = _infer_slurmd_from_slurm(node.name, node.ip_address)
+    uptime_val = "N/A"
+    uptime_secs = None
+
+    if slurmd_status is None:
+        services = _get_node_services(node, effective_os)
+        slurmd_status = services.get("slurmd_status", "unknown")
+        uptime_val = services.get("uptime", "N/A")
+        uptime_secs = services.get("uptime_seconds")
+    else:
+        if node.ssh_password:
+            services = _get_node_services(node, effective_os)
+            uptime_val = services.get("uptime", "N/A")
+            uptime_secs = services.get("uptime_seconds")
+
     payload = {
         "id": node.id,
         "name": node.name,
@@ -352,8 +597,12 @@ def _serialize_dev_node(node: DevNodeModel) -> dict:
         "ssh_password": node.ssh_password,
         "os_family": getattr(node, "os_family", "auto") or "auto",
         "created_at": node.created_at,
+        "slurmd_status": slurmd_status or "unknown",
+        "uptime": uptime_val,
+        "uptime_seconds": uptime_secs,
     }
-    payload.update(_detect_node_runtime(node))
+    payload.update(runtime)
+    _set_cached_serialize(node.id, payload)
     return payload
 
 @router.post("/nodes/test", response_model=SSHTestResponse)
@@ -367,27 +616,53 @@ def test_node_ssh(
     else:
         return SSHTestResponse(success=False, message="Connection Failed (Check Creds/IP)")
 
-@router.get("/nodes", response_model=List[DevNode])
+@router.get("/nodes")
 def get_dev_nodes(
     db: Session = Depends(deps.get_db),
     current_user: Any = Depends(deps.get_current_active_superuser)
 ):
-    nodes = db.query(DevNodeModel).all()
-    if not nodes:
-        return []
+    dev_nodes = db.query(DevNodeModel).all()
+    result = []
 
-    max_workers = min(32, max(1, len(nodes)))
-    results_by_id = {}
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_map = {executor.submit(_serialize_dev_node, node): node.id for node in nodes}
-        for future in as_completed(future_map):
-            node_id = future_map[future]
-            try:
-                results_by_id[node_id] = future.result()
-            except Exception as exc:
-                print(f"Node runtime detection failed for {node_id}: {exc}")
+    if dev_nodes:
+        results_by_id = {}
+        uncached = []
 
-    return [results_by_id.get(node.id) or _serialize_dev_node(node) for node in nodes]
+        for node in dev_nodes:
+            cached = _get_cached_serialize(node.id)
+            if cached:
+                results_by_id[node.id] = cached
+            else:
+                uncached.append(node)
+
+        if uncached:
+            max_workers = min(32, max(1, len(uncached)))
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_map = {executor.submit(_serialize_dev_node, node): node.id for node in uncached}
+                for future in as_completed(future_map):
+                    node_id = future_map[future]
+                    try:
+                        results_by_id[node_id] = future.result()
+                    except Exception as exc:
+                        print(f"Node serialization failed for {node_id}: {exc}")
+
+            for node in dev_nodes:
+                serialized = results_by_id.get(node.id)
+                if serialized:
+                    result.append(serialized)
+
+    slurm_count = 0
+    try:
+        from app.core.slurm_api import slurm_client
+        slurm_nodes = slurm_client.get_nodes()
+        slurm_count = len(slurm_nodes) if slurm_nodes else 0
+    except Exception:
+        pass
+
+    return {
+        "nodes": result,
+        "slurm_node_count": slurm_count,
+    }
 
 @router.post("/nodes/bulk", response_model=DevNodeBulkResult)
 def create_dev_nodes_bulk(
