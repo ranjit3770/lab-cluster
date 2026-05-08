@@ -11,6 +11,7 @@ import {
     Clock
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import PageLoader from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
@@ -49,12 +50,7 @@ export default function UserDashboardPage() {
         fetchStats();
     }, [token]);
 
-    if (loading) return (
-        <div className="flex items-center justify-center h-full gap-3">
-            <div className="h-6 w-6 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-            <span className="text-xs text-muted-foreground uppercase">Loading...</span>
-        </div>
-    );
+    if (loading) return <PageLoader message="Loading dashboard..." />;
 
     const storagePercentage = stats?.storage_limit_gb 
         ? Math.min(100, Math.round((stats.storage_used_gb / stats.storage_limit_gb) * 100)) 

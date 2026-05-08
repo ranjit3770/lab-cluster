@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { nodesApi } from '@/api/nodes';
 import { devNodesApi, type DevNode } from '@/api/devNodes';
 import { useAuth } from '@/context/AuthContext';
+import PageLoader from '@/components/PageLoader';
 import { ControllerFailureAlert } from '@/components/ControllerFailureAlert';
 import { 
     Server, Search, RefreshCcw, Terminal, 
@@ -99,12 +100,7 @@ export default function NodesPage() {
         />
     );
 
-    if (loading) return (
-        <div className="flex items-center justify-center h-full gap-3">
-            <div className="h-6 w-6 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-            <span className="text-xs text-muted-foreground uppercase">Loading...</span>
-        </div>
-    );
+    if (loading) return <PageLoader message="Loading nodes..." />;
 
     return (
         <div className="flex flex-col gap-3 pb-4 selection:bg-primary/30">

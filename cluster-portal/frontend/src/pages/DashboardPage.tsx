@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { dashboardApi } from '@/api/dashboard';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import PageLoader from '@/components/PageLoader';
 import { ControllerFailureAlert } from '@/components/ControllerFailureAlert';
 import { 
     Activity, Server, Cpu,
@@ -105,12 +106,7 @@ export default function DashboardPage() {
     }
   }, [token, retryCount]);
 
-  if (loading && !stats) return (
-    <div className="flex items-center justify-center h-full gap-4">
-        <div className="h-8 w-8 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-        <span className="text-xs text-gray-500 uppercase tracking-wide">Loading...</span>
-    </div>
-  );
+  if (loading && !stats) return <PageLoader message="Loading dashboard..." />;
 
   if (error) return (
     <ControllerFailureAlert 

@@ -25,6 +25,11 @@ class SlurmReadOnlyClient:
         self.last_error = None
         self.request_timeout = float(os.getenv("SLURM_REST_TIMEOUT_SECONDS", "2"))
         self.jwt_failure_ttl = int(os.getenv("SLURM_JWT_FAILURE_TTL_SECONDS", "30"))
+        self._nodes_cache = None
+        self._nodes_cache_time = 0
+        self._jobs_cache = None
+        self._jobs_cache_time = 0
+        self.cache_ttl = 10
 
     def _get_jwt(self) -> str:
         """Fetch or generate a Slurm JWT."""
@@ -236,6 +241,10 @@ class SlurmReadOnlyClient:
         return nodes
 
     def get_nodes(self) -> List[Dict[str, Any]]:
+        now = time.time()
+        if self._nodes_cache and now - self._nodes_cache_time < self.cache_ttl:
+            return self._nodes_cache
+
         nodes_list = self._get_nodes_from_sinfo()
         if not nodes_list:
             data = self._get("nodes")
@@ -249,9 +258,16 @@ class SlurmReadOnlyClient:
         for node in nodes_list:
             if "name" not in node and "node_name" in node:
                 node["name"] = node["node_name"]
+
+        self._nodes_cache = nodes_list
+        self._nodes_cache_time = now
         return nodes_list
 
     def get_jobs(self) -> List[Dict[str, Any]]:
+        now = time.time()
+        if self._jobs_cache and now - self._jobs_cache_time < self.cache_ttl:
+            return self._jobs_cache
+
         output = self._run_slurm_cmd(["squeue", "-h", "-o", "%i|%u|%T"])
         if output:
             jobs = []
@@ -259,10 +275,15 @@ class SlurmReadOnlyClient:
                 parts = line.split("|")
                 if len(parts) >= 3:
                     jobs.append({"job_id": parts[0], "user_name": parts[1], "job_state": parts[2]})
+            self._jobs_cache = jobs
+            self._jobs_cache_time = now
             return jobs
 
         data = self._get("jobs")
-        return data.get("jobs", []) if data else []
+        result = data.get("jobs", []) if data else []
+        self._jobs_cache = result
+        self._jobs_cache_time = now
+        return result
 
     def get_diag(self) -> Optional[Dict[str, Any]]:
         return self._get("diag")

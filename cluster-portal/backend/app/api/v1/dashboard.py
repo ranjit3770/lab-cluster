@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 import traceback
+import time
 
 from app.api import deps
 from app.schemas.dashboard import (
@@ -21,6 +22,10 @@ from app.api.v1.nodes import node_aliases, slurm_node_name, slurm_node_address
 
 router = APIRouter()
 
+_dashboard_cache = None
+_dashboard_cache_time = 0
+_dashboard_cache_ttl = 15
+
 def get_slurm_value(field_value, default=0):
     if isinstance(field_value, dict):
         return field_value.get("number", default)
@@ -33,8 +38,15 @@ def get_dashboard_stats(
         db: Session = Depends(deps.get_db),
         current_user=Depends(deps.get_current_active_user),
 ):
+    global _dashboard_cache, _dashboard_cache_time
+    now = time.time()
+    if _dashboard_cache and now - _dashboard_cache_time < _dashboard_cache_ttl:
+        return _dashboard_cache
     try:
-        return _get_stats_internal(db)
+        result = _get_stats_internal(db)
+        _dashboard_cache = result
+        _dashboard_cache_time = now
+        return result
     except Exception as e:
         print(f"DASHBOARD LOGIC ERROR: {str(e)}")
         print(traceback.format_exc())

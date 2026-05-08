@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { jobsApi } from '@/api/jobs';
 import { filesApi } from '@/api/files';
 import { useAuth } from '@/context/AuthContext';
+import PageLoader from '@/components/PageLoader';
 import { ControllerFailureAlert } from '@/components/ControllerFailureAlert';
 import { 
     Search, FileText, RefreshCcw, Activity, User, Trash2,
@@ -123,6 +124,7 @@ export default function JobsPage() {
     
     const [selectedApp, setSelectedApp] = useState<'jupyter' | 'python' | null>(null);
     const [isAppSelectorOpen, setIsAppSelectorOpen] = useState(false);
+    const [scriptsLoading, setScriptsLoading] = useState(false);
 
     // Custom Dropdown States
     const [openDropdown, setOpenDropdown] = useState<'script' | 'req' | 'dep' | null>(null);
@@ -193,6 +195,7 @@ export default function JobsPage() {
     };
 
     const fetchScripts = async () => {
+        setScriptsLoading(true);
         try {
             const res = await filesApi.getFileTree(token!);
             const tree: FileItem[] = res.data;
@@ -210,7 +213,9 @@ export default function JobsPage() {
 
             setScripts(pyFiles);
             setTextFiles(txtFiles);
+            setScriptsLoading(false);
         } catch (err) {
+            setScriptsLoading(false);
             console.error("Failed to fetch script tree:", err);
             toast.error("Telemetry failure: Could not map cluster storage hierarchy.");
         }
@@ -232,16 +237,20 @@ export default function JobsPage() {
 
     useEffect(() => {
         fetchJobs();
-        fetchScripts();
-        fetchQuotas();
 
         const interval = setInterval(() => {
             fetchJobs(true);
-            fetchQuotas();
-        }, 4000);
+        }, 15000);
 
         return () => clearInterval(interval);
     }, [token]);
+
+    useEffect(() => {
+        if (selectedApp === 'python') {
+            fetchScripts();
+            if (!isAdmin) fetchQuotas();
+        }
+    }, [selectedApp]);
 
     // Timer effect for Running Jobs
     useEffect(() => {
@@ -531,15 +540,7 @@ export default function JobsPage() {
         <ControllerFailureAlert error={error} onRetry={fetchJobs} />
     );
 
-    if (loading && jobs.length === 0) return (
-        <div className="flex flex-col items-center justify-center h-[calc(100vh-200px)] gap-8">
-            <div className="relative">
-                <Loader2 className="h-24 w-24 text-primary animate-spin" />
-                <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full" />
-            </div>
-            <p className="mt-6 text-muted-foreground/30 font-black uppercase tracking-[0.6em] text-[11px] animate-pulse italic">Loading jobs...</p>
-        </div>
-    );
+    if (loading && jobs.length === 0) return <PageLoader message="Loading jobs..." />;
 
     const infoStatus = infoJob?.status?.toUpperCase() || '';
     const infoTrace = infoJob
@@ -889,7 +890,14 @@ export default function JobsPage() {
                         </Card>
                         )}
 
-                        {selectedApp === 'python' && (
+                        {selectedApp === 'python' && scriptsLoading ? (
+                        <Card className="p-4 border border-gray-100 bg-white flex-1 shadow-sm">
+                            <div className="flex flex-col items-center justify-center py-8 gap-3">
+                                <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                                <p className="text-[10px] text-gray-400 uppercase tracking-wider">Loading environment...</p>
+                            </div>
+                        </Card>
+                        ) : selectedApp === 'python' && (
                         <Card className="p-4 border border-gray-100 bg-white flex-1 shadow-sm">
                             <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between">
                                 <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">

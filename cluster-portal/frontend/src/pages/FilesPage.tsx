@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import PageLoader from "@/components/PageLoader";
 import { filesApi } from "@/api/files";
 import { userApi } from "@/api/user";
 import { useAuth } from "@/context/AuthContext";
@@ -541,7 +542,7 @@ export default function FilesPage() {
                 <div className="flex-1 overflow-auto">
                     {loading ? (
                         <div className="flex items-center justify-center h-full">
-                            <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                            <PageLoader message="Loading files..." />
                         </div>
                     ) : displayFiles.length === 0 ? (
                         <div className="flex flex-col items-center justify-center h-full text-gray-400">

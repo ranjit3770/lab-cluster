@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import PageLoader from "@/components/PageLoader";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -182,12 +183,7 @@ export default function UsersPage() {
         (u.full_name && u.full_name.toLowerCase().includes(search.toLowerCase()))
     );
 
-    if (loading) return (
-        <div className="flex items-center justify-center h-full gap-3">
-            <div className="h-6 w-6 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-            <span className="text-xs text-muted-foreground uppercase">Loading...</span>
-        </div>
-    );
+    if (loading) return <PageLoader message="Loading users..." />;
 
     return (
         <div className="flex flex-col gap-3 pb-4 selection:bg-primary/30">
