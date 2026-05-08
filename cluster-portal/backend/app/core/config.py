@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     # Storage
     DATA_STORAGE: str = os.getenv("DATA_STORAGE", "/data_storage")
 
+    # Windows Boot Playbooks
+    WINDOWS_PLAYBOOK_DIR: str = os.getenv("WINDOWS_PLAYBOOK_DIR", "/opt/amritacluster/SLURM-COMPLETE-SETUP/windows-boot-testing")
+
     # Email
     SMTP_TLS: bool = os.getenv("SMTP_TLS", "True").lower() == "true"
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))

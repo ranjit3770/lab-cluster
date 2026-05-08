@@ -24,7 +24,7 @@ router = APIRouter()
 
 _dashboard_cache = None
 _dashboard_cache_time = 0
-_dashboard_cache_ttl = 15
+_dashboard_cache_ttl = 30
 
 def get_slurm_value(field_value, default=0):
     if isinstance(field_value, dict):
@@ -73,13 +73,14 @@ def get_maintenance_status(
     }
 
 def _get_stats_internal(db: Session):
-    # --- 1. SLURM LIVE DATA ---
-    slurm_nodes = slurm_client.get_nodes()
-    slurm_jobs = slurm_client.get_jobs()
+    # --- 1. SLURM LIVE DATA (parallel fetch via concurrent calls) ---
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        slurm_nodes_fut = pool.submit(slurm_client.get_nodes)
+        slurm_jobs_fut = pool.submit(slurm_client.get_jobs)
+        slurm_nodes = slurm_nodes_fut.result()
+        slurm_jobs = slurm_jobs_fut.result()
 
-    # --- 2. CLUSTER STATUS ---
-    # Dashboard resource totals are restricted to nodes registered in Node Tools,
-    # then enriched from live Slurm telemetry when names/IPs match.
     full_node_list = slurm_nodes if isinstance(slurm_nodes, list) else []
     slurm_name_map = {}
     slurm_addr_map = {}
@@ -92,7 +93,8 @@ def _get_stats_internal(db: Session):
                 slurm_addr_map[key] = node
 
     node_list = []
-    for dev_node in db.query(DevNodeModel).all():
+    dev_nodes = db.query(DevNodeModel).all()
+    for dev_node in dev_nodes:
         matched = (
             next((slurm_name_map[key] for key in node_aliases(dev_node.name) if key in slurm_name_map), None)
             or next((slurm_addr_map[key] for key in node_aliases(dev_node.ip_address) if key in slurm_addr_map), None)
@@ -119,7 +121,6 @@ def _get_stats_internal(db: Session):
     active_nodes = 0
 
     for s_node in node_list:
-        # Robust field extraction (supports various OpenAPI schemas)
         c_tot = get_slurm_value(s_node.get("cpus"))
         c_usd = get_slurm_value(s_node.get("alloc_cpus"))
         m_tot = get_slurm_value(s_node.get("real_memory"))
@@ -130,7 +131,6 @@ def _get_stats_internal(db: Session):
         mem_total += m_tot
         mem_used += m_usd
 
-        # Robust State Detection (supports 'state' and 'node_state')
         raw_state = s_node.get("node_state") or s_node.get("state") or ["unknown"]
         state = raw_state[0].lower() if isinstance(raw_state, list) and raw_state else str(raw_state).lower()
 
@@ -158,17 +158,22 @@ def _get_stats_internal(db: Session):
         gpu_used_percent=0.0
     )
 
-    # --- 4. JOBS (Sourced from authoritative Database for history)
+    # --- 4. JOBS (single query for all status counts) ---
     from app.models.job import Job as JobModel, JobStatus
+    from sqlalchemy import func as sqlfunc
     
-    # Query database for all job counts to match JobsPage statistics
-    running = db.query(JobModel).filter(JobModel.status == JobStatus.RUNNING).count()
-    pending = db.query(JobModel).filter(JobModel.status == JobStatus.PENDING).count()
-    completed_all = db.query(JobModel).filter(JobModel.status == JobStatus.COMPLETED).count()
-    failed_all = db.query(JobModel).filter(JobModel.status == JobStatus.FAILED).count()
-    cancelled_all = db.query(JobModel).filter(JobModel.status == JobStatus.CANCELLED).count()
+    status_counts = dict(
+        db.query(JobModel.status, sqlfunc.count(JobModel.id))
+        .group_by(JobModel.status)
+        .all()
+    )
     
-    # Today's total count for secondary context
+    running = status_counts.get(JobStatus.RUNNING, 0)
+    pending = status_counts.get(JobStatus.PENDING, 0)
+    completed_all = status_counts.get(JobStatus.COMPLETED, 0)
+    failed_all = status_counts.get(JobStatus.FAILED, 0)
+    cancelled_all = status_counts.get(JobStatus.CANCELLED, 0)
+    
     midnight_at = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     today_count = db.query(JobModel).filter(JobModel.created_at >= midnight_at).count()
 
@@ -183,10 +188,9 @@ def _get_stats_internal(db: Session):
     )
     
     # --- 5. DATABASE STATS ---
-    from sqlalchemy import func
     total_users = db.query(User).filter(User.role != UserRole.DEVELOPER).count()
     pending_requests = db.query(Request).filter(Request.status == "pending").count()
-    alloc_data = db.query(func.sum(User.cpu_limit), func.sum(User.memory_limit_gb)).filter(User.role != UserRole.DEVELOPER).first()
+    alloc_data = db.query(sqlfunc.sum(User.cpu_limit), sqlfunc.sum(User.memory_limit_gb)).filter(User.role != UserRole.DEVELOPER).first()
     
     resources.cpu_allocated = int(alloc_data[0] or 0)
     resources.memory_allocated_mb = int(alloc_data[1] or 0) * 1024

@@ -9,8 +9,13 @@ import pytz
 from datetime import datetime
 from app.core.slurm_api import slurm_client
 import re
+import time
 
 router = APIRouter()
+
+_nodes_cache = None
+_nodes_cache_time = 0
+_nodes_cache_ttl = 15
 
 def get_val(val, default=0):
     if isinstance(val, dict):
@@ -95,10 +100,13 @@ def read_nodes(
     limit: int = 100,
     current_user = Depends(deps.get_current_active_user),
 ) -> Any:
-    # 1. LIVE DATA FROM SLURM
+    global _nodes_cache, _nodes_cache_time
+    now = time.time()
+    if _nodes_cache and now - _nodes_cache_time < _nodes_cache_ttl:
+        return _nodes_cache
+
     slurm_data = slurm_client.get_nodes() or []
     
-    # Map slurm nodes by lowercase name and various address fields for authoritative enrichment
     slurm_map = {}
     slurm_ip_map = {}
     for node in slurm_data:
@@ -114,7 +122,6 @@ def read_nodes(
                     if key:
                         slurm_ip_map[key] = node
     
-    # 2. Fetch Authoritative DevNodes (Source of Truth for Identity)
     dev_nodes = db.query(DevNodeModel).all()
     
     ist = pytz.timezone('Asia/Kolkata')
@@ -122,9 +129,7 @@ def read_nodes(
     
     nodes = []
 
-    # A. Process DevNodes First (Authoritative IPs and Names)
     for i, dn in enumerate(dev_nodes):
-        # Match with Slurm Telemetry
         s_node = (
             next((slurm_map[key] for key in node_aliases(dn.name) if key in slurm_map), None)
             or next((slurm_ip_map[key] for key in node_aliases(dn.ip_address) if key in slurm_ip_map), None)
@@ -133,7 +138,6 @@ def read_nodes(
         if s_node:
             payload = slurm_payload(s_node, current_time, dn)
         else:
-            # Authorized but not yet recognized by Slurmfabric
             payload = {
                 "name": dn.name,
                 "ip_address": dn.ip_address,
@@ -154,26 +158,14 @@ def read_nodes(
             }
             
         nodes.append(payload)
-        
-        # PERSIST: Sync to the 'nodes' table (Audit Trail)
-        existing_node = db.query(NodeModel).filter(NodeModel.name == dn.name).first()
-        if existing_node:
-            for key, value in payload.items():
-                if hasattr(existing_node, key) and key != "dev_node_id":
-                    setattr(existing_node, key, value)
-        else:
-            filtered_payload = {k: v for k, v in payload.items() if k != "dev_node_id"}
-            db.add(NodeModel(**filtered_payload))
-
-    db.commit()
     
-    # Sort: Head node first (cluster-hn), then alphabetically
     nodes.sort(key=lambda x: (x['name'].lower() != 'cluster-hn', x['name'].lower()))
     
-    # Assign temporary IDs for frontend map keys
     for i, n in enumerate(nodes):
         n['id'] = i + 1
-        
+
+    _nodes_cache = nodes
+    _nodes_cache_time = now
     return nodes
 
 @router.get("/{node_id}", response_model=NodeSchema)

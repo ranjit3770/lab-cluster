@@ -28,14 +28,14 @@ from app.db.session import SessionLocal
 # Stale-while-revalidate cache for slurmd status and uptime
 _node_service_cache: Dict[int, Dict] = {}
 _cache_lock = threading.Lock()
-SERVICE_CACHE_TTL = 60
-SERVICE_CACHE_STALE_TTL = 300
+SERVICE_CACHE_TTL = 120
+SERVICE_CACHE_STALE_TTL = 600
 
 # Full node serialization cache (runtime detection + services)
 _node_serialize_cache: Dict[int, Dict] = {}
 _serialize_lock = threading.Lock()
-SERIALIZE_CACHE_TTL = 30
-SERIALIZE_CACHE_STALE_TTL = 120
+SERIALIZE_CACHE_TTL = 60
+SERIALIZE_CACHE_STALE_TTL = 300
 
 router = APIRouter()
 
@@ -293,7 +293,7 @@ def _test_node_access(node_data: dict) -> bool:
     return _test_ssh_connection(test_req)
 
 
-def _probe_tcp_connection(ip_address: str, port: int, timeout: float = 0.5) -> bool:
+def _probe_tcp_connection(ip_address: str, port: int, timeout: float = 0.3) -> bool:
     try:
         with socket.create_connection((ip_address, port), timeout=timeout):
             return True
@@ -382,12 +382,13 @@ def _ps_encoded(script: str) -> str:
 
 
 def _ssh_execute(ip: str, port: int, username: str, password: Optional[str], command: str, timeout: int = 5) -> Optional[str]:
-    if not password:
-        return None
     try:
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(hostname=ip, port=port, username=username, password=password, timeout=timeout)
+        if password:
+            client.connect(hostname=ip, port=port, username=username, password=password, timeout=timeout, allow_agent=True, look_for_keys=True)
+        else:
+            client.connect(hostname=ip, port=port, username=username, timeout=timeout, allow_agent=True, look_for_keys=True)
         _, stdout, stderr = client.exec_command(command)
         stdout.channel.settimeout(timeout)
         output = stdout.read()
@@ -405,7 +406,7 @@ def _ssh_check_slurmd_status(ip: str, port: int, username: str, password: Option
         )
     else:
         cmd = "systemctl is-active slurmd 2>/dev/null || echo 'inactive'"
-    result = _ssh_execute(ip, port, username, password, cmd, timeout=10)
+    result = _ssh_execute(ip, port, username, password, cmd, timeout=5)
     if result:
         status = result.strip().lower()
         if status in ("active", "inactive", "activating", "deactivating", "failed", "not_found", "not-found"):
@@ -419,7 +420,7 @@ def _ssh_get_uptime(ip: str, port: int, username: str, password: Optional[str], 
     if is_windows:
         # Method 1: PowerShell via -EncodedCommand (no quoting issues)
         ps_script = '[math]::Round(((Get-Date)-(Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalSeconds)'
-        output = _ssh_execute(ip, port, username, password, _ps_encoded(ps_script), timeout=25)
+        output = _ssh_execute(ip, port, username, password, _ps_encoded(ps_script), timeout=15)
         if output:
             try:
                 for raw_line in output.splitlines():
@@ -593,10 +594,9 @@ def _serialize_dev_node(node: DevNodeModel) -> dict:
         uptime_val = services.get("uptime", "N/A")
         uptime_secs = services.get("uptime_seconds")
     else:
-        if node.ssh_password:
-            services = _get_node_services(node, effective_os)
-            uptime_val = services.get("uptime", "N/A")
-            uptime_secs = services.get("uptime_seconds")
+        services = _get_node_services(node, effective_os)
+        uptime_val = services.get("uptime", "N/A")
+        uptime_secs = services.get("uptime_seconds")
 
     payload = {
         "id": node.id,
@@ -646,7 +646,7 @@ def get_dev_nodes(
             uncached.append(node)
 
     if uncached:
-        max_workers = min(32, max(1, len(uncached)))
+        max_workers = min(8, max(1, len(uncached)))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_map = {executor.submit(_serialize_dev_node, node): node.id for node in uncached}
             for future in as_completed(future_map):
@@ -685,21 +685,34 @@ def get_dev_nodes(
             else:
                 slurmd = "unknown"
 
+            node_ip = s_addr or s_host or s_name
+            detected_os = "ubuntu"
+            detected_label = "SSH"
+            detected_port = 22
+            reachable = True
+
+            for port, label in [(3389, "RDP"), (5985, "WinRM"), (5986, "WinRM")]:
+                if _probe_tcp_connection(node_ip, port):
+                    detected_os = "windows"
+                    detected_label = label
+                    detected_port = port
+                    break
+
             auto_discovered.append({
                 "id": auto_id,
                 "name": s_name,
-                "ip_address": s_addr or s_host or s_name,
-                "ssh_port": 22,
+                "ip_address": node_ip,
+                "ssh_port": detected_port,
                 "ssh_username": "",
                 "ssh_password": None,
                 "os_family": "auto",
                 "created_at": datetime.now().isoformat(),
-                "detected_os_family": "ubuntu",
-                "effective_os_family": "ubuntu",
+                "detected_os_family": detected_os,
+                "effective_os_family": detected_os,
                 "detection_source": "auto-discovered from Slurm",
-                "detected_access_label": "SSH",
-                "detected_access_port": 22,
-                "detected_reachable": True,
+                "detected_access_label": detected_label,
+                "detected_access_port": detected_port,
+                "detected_reachable": reachable,
                 "slurmd_status": slurmd,
                 "uptime": "N/A",
                 "uptime_seconds": None,

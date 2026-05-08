@@ -55,11 +55,13 @@ services:
       - SLURM_JWT_USER=slurmapi
       - SLURM_REST_TIMEOUT_SECONDS=2
       - SLURM_JWT_FAILURE_TTL_SECONDS=30
+      - WINDOWS_PLAYBOOK_DIR=${WINDOWS_PLAYBOOK_DIR:-/opt/amritacluster/SLURM-COMPLETE-SETUP/windows-boot-testing}
       # Portal-submitted jobs need nodes that can read/write /data_storage.
       # Override this env with a comma-separated list after mounting shared storage on workers.
       - PORTAL_SLURM_NODELIST=${PORTAL_SLURM_NODELIST:-head-node}
     volumes:
       - /data_storage:/data_storage
+      - ${WINDOWS_PLAYBOOK_DIR:-/opt/amritacluster/SLURM-COMPLETE-SETUP/windows-boot-testing}:/opt/amritacluster/SLURM-COMPLETE-SETUP/windows-boot-testing:ro
       - /etc/slurm:/etc/slurm:ro
       - /var/run/munge/munge.socket.2:/var/run/munge/munge.socket.2:ro
       - /run/slurmrestd:/run/slurmrestd:ro
