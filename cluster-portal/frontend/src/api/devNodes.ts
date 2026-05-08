@@ -17,6 +17,7 @@ export interface DevNode {
     slurmd_status?: string | null;
     uptime?: string | null;
     uptime_seconds?: number | null;
+    auto_discovered?: boolean | null;
     created_at: string;
 }
 

@@ -374,6 +374,13 @@ def _format_uptime(seconds: float) -> str:
         return f"{secs}s"
 
 
+def _ps_encoded(script: str) -> str:
+    """Encode a PowerShell script as a base64 EncodedCommand to avoid SSH quoting issues."""
+    import base64
+    encoded = base64.b64encode(script.encode('utf-16-le')).decode()
+    return f'powershell -NoProfile -EncodedCommand {encoded}'
+
+
 def _ssh_execute(ip: str, port: int, username: str, password: Optional[str], command: str, timeout: int = 5) -> Optional[str]:
     if not password:
         return None
@@ -381,17 +388,21 @@ def _ssh_execute(ip: str, port: int, username: str, password: Optional[str], com
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         client.connect(hostname=ip, port=port, username=username, password=password, timeout=timeout)
-        _, stdout, stderr = client.exec_command(command, timeout=timeout)
-        output = stdout.read().decode().strip()
+        _, stdout, stderr = client.exec_command(command)
+        stdout.channel.settimeout(timeout)
+        output = stdout.read()
         client.close()
-        return output
-    except Exception:
+        return output.decode(errors='replace').strip()
+    except Exception as e:
+        print(f"SSH Exec Error ({ip}:{port}): {e}")
         return None
 
 
 def _ssh_check_slurmd_status(ip: str, port: int, username: str, password: Optional[str], is_windows: bool) -> str:
     if is_windows:
-        cmd = 'powershell -NoProfile -Command "(Get-Service slurmd -ErrorAction SilentlyContinue).Status"'
+        cmd = _ps_encoded(
+            'try { (Get-Service slurmd -ErrorAction Stop).Status } catch { "not_found" }'
+        )
     else:
         cmd = "systemctl is-active slurmd 2>/dev/null || echo 'inactive'"
     result = _ssh_execute(ip, port, username, password, cmd, timeout=10)
@@ -406,47 +417,46 @@ def _ssh_check_slurmd_status(ip: str, port: int, username: str, password: Option
 
 def _ssh_get_uptime(ip: str, port: int, username: str, password: Optional[str], is_windows: bool) -> Dict[str, Any]:
     if is_windows:
-        # Method 1: PowerShell via CIM (requires WinRM, try with longer timeout)
-        cmd1 = (
-            'powershell -NoProfile -Command'
-            ' "[math]::Round(((Get-Date)-(gcim Win32_OperatingSystem).LastBootUpTime).TotalSeconds)"'
-        )
-        output = _ssh_execute(ip, port, username, password, cmd1, timeout=15)
+        # Method 1: PowerShell via -EncodedCommand (no quoting issues)
+        ps_script = '[math]::Round(((Get-Date)-(Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalSeconds)'
+        output = _ssh_execute(ip, port, username, password, _ps_encoded(ps_script), timeout=25)
         if output:
             try:
-                val = output.strip().splitlines()[-1].strip()
-                seconds = float(val)
-                if seconds > 0:
-                    return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
+                for raw_line in output.splitlines():
+                    val = raw_line.strip()
+                    if val and val.replace('.', '').replace('-', '').isdigit():
+                        seconds = float(val)
+                        if seconds > 0:
+                            return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
             except (ValueError, TypeError):
                 pass
 
-        # Method 2: wmic (no WinRM needed, simpler)
-        cmd2 = 'cmd /c "wmic os get lastbootuptime /value"'
-        output = _ssh_execute(ip, port, username, password, cmd2, timeout=10)
+        # Method 2: wmic (no PowerShell needed, locale-independent)
+        output = _ssh_execute(ip, port, username, password, 'wmic os get lastbootuptime /value', timeout=20)
         if output:
             try:
-                raw = output.strip().split("=", 1)[-1].split(".")[0].split("+")[0].split("-")[0]
-                from datetime import datetime
-                boot = datetime.strptime(raw, '%Y%m%d%H%M%S')
-                seconds = (datetime.utcnow() - boot).total_seconds()
-                if seconds > 0:
-                    return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
+                for line in output.splitlines():
+                    if "=" in line:
+                        raw = line.split("=", 1)[-1].split(".")[0].split("+")[0].split("-")[0]
+                        from datetime import datetime
+                        boot = datetime.strptime(raw, '%Y%m%d%H%M%S')
+                        seconds = (datetime.utcnow() - boot).total_seconds()
+                        if seconds > 0:
+                            return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
             except (ValueError, TypeError, IndexError):
                 pass
 
-        # Method 3: systeminfo fallback
-        cmd3 = 'cmd /c "systeminfo | findstr /C:\\\"System Boot Time\\\" /C:\\\"System Up Time\\\""'
-        output = _ssh_execute(ip, port, username, password, cmd3, timeout=10)
+        # Method 3: net statistics (works everywhere, locale-dependent)
+        output = _ssh_execute(ip, port, username, password, 'net statistics workstation', timeout=15)
         if output:
             import re
             for line in output.splitlines():
-                l = line.strip()
-                if "Boot Time" in l:
-                    match = re.search(r':\s+(.+?)$', l)
-                    if match:
+                if "since" in line.lower():
+                    parts = line.split("since", 1)[-1].strip()
+                    for fmt in ['%m/%d/%Y %I:%M:%S %p', '%Y-%m-%d %I:%M:%S %p', '%d/%m/%Y %H:%M:%S']:
                         try:
-                            bt = datetime.strptime(match.group(1).strip(), '%m/%d/%Y, %I:%M:%S %p')
+                            from datetime import datetime
+                            bt = datetime.strptime(parts, fmt)
                             seconds = (datetime.now() - bt).total_seconds()
                             if seconds > 0:
                                 return {"uptime": _format_uptime(seconds), "uptime_seconds": seconds}
@@ -649,7 +659,59 @@ def get_dev_nodes(
                         next(n for n in nodes if n.id == node_id)
                     )
 
-    return [results_by_id.get(node.id) for node in nodes]
+    # Auto-discover Slurm compute nodes not in dev_nodes table
+    matched_names = {n.name.lower().strip() for n in nodes}
+    matched_ips = {n.ip_address.lower().strip() for n in nodes}
+    auto_id = -1
+    auto_discovered = []
+
+    try:
+        from app.core.slurm_api import slurm_client
+        slurm_data = slurm_client.get_nodes() or []
+        for s_node in slurm_data:
+            s_name = (s_node.get("name") or "").lower().strip()
+            s_addr = (s_node.get("address") or "").lower().strip()
+            s_host = (s_node.get("hostname") or s_node.get("node_hostname") or "").lower().strip()
+            if s_name in matched_names or s_addr in matched_ips or s_host in matched_ips:
+                continue
+
+            state = s_node.get("node_state") or s_node.get("state") or [""]
+            state_str = (state[0] if isinstance(state, list) else str(state)).lower().strip()
+            active_states = {"idle", "mixed", "allocated", "completing", "running", "resume"}
+            if state_str in active_states:
+                slurmd = "active"
+            elif state_str in {"down", "draining", "fail", "failing", "power_down", "no_config"}:
+                slurmd = "inactive"
+            else:
+                slurmd = "unknown"
+
+            auto_discovered.append({
+                "id": auto_id,
+                "name": s_name,
+                "ip_address": s_addr or s_host or s_name,
+                "ssh_port": 22,
+                "ssh_username": "",
+                "ssh_password": None,
+                "os_family": "auto",
+                "created_at": datetime.now().isoformat(),
+                "detected_os_family": "ubuntu",
+                "effective_os_family": "ubuntu",
+                "detection_source": "auto-discovered from Slurm",
+                "detected_access_label": "SSH",
+                "detected_access_port": 22,
+                "detected_reachable": True,
+                "slurmd_status": slurmd,
+                "uptime": "N/A",
+                "uptime_seconds": None,
+                "auto_discovered": True,
+            })
+            auto_id -= 1
+    except Exception:
+        pass
+
+    ordered = [results_by_id.get(node.id) for node in nodes] + auto_discovered
+    ordered.sort(key=lambda x: (x.get("auto_discovered", False), x.get("name", "").lower()))
+    return ordered
 
 @router.post("/nodes/bulk", response_model=DevNodeBulkResult)
 def create_dev_nodes_bulk(

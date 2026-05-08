@@ -8,6 +8,7 @@ import {
   RefreshCcw,
   Server,
   Timer,
+  Play,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -30,6 +31,15 @@ type ManagedNode = DevNode & {
 const WINDOWS_PORTS = new Set([3389, 5985, 5986]);
 
 function classifyNode(node: DevNode): ManagedNode {
+  if (node.auto_discovered) {
+    return {
+      ...node,
+      family: 'ubuntu',
+      detectionReason: 'auto-discovered from Slurm',
+      isLiveDetected: true,
+    };
+  }
+
   const runtimeFamily = node.effective_os_family?.toLowerCase();
   if (runtimeFamily === 'ubuntu' || runtimeFamily === 'windows') {
     return {
@@ -170,6 +180,7 @@ function UptimeValue({ uptime, uptimeSeconds }: { uptime?: string | null; uptime
 
 function NodeTile({ node }: { node: ManagedNode }) {
   const isWindows = node.family === 'windows';
+  const isAuto = node.auto_discovered;
   const Icon = isWindows ? Monitor : Server;
 
   return (
@@ -195,38 +206,78 @@ function NodeTile({ node }: { node: ManagedNode }) {
             </p>
           </div>
         </div>
-        <Badge
-          variant="secondary"
-          className={cn(
-            'shrink-0 border px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em]',
-            isWindows
-              ? 'border-sky-100 bg-sky-50 text-sky-700'
-              : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isAuto && (
+            <Badge
+              variant="secondary"
+              className="border-violet-100 bg-violet-50 text-[10px] font-black uppercase tracking-[0.12em] text-violet-700"
+            >
+              Slurm
+            </Badge>
           )}
-        >
-          {node.isLiveDetected ? 'live ' : ''}{node.family}
-        </Badge>
+          <Badge
+            variant="secondary"
+            className={cn(
+              'shrink-0 border px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em]',
+              isWindows
+                ? 'border-sky-100 bg-sky-50 text-sky-700'
+                : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+            )}
+          >
+            {node.isLiveDetected ? 'live ' : ''}{node.family}
+          </Badge>
+        </div>
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
-            <Activity className="h-3 w-3" />
-            Slurmd Service
-          </div>
-          <div className="mt-1">
-            <SlurmdBadge status={node.slurmd_status} />
-          </div>
-        </div>
-        <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
-            <Timer className="h-3 w-3" />
-            Uptime
-          </div>
-          <div className="mt-1">
-            <UptimeValue uptime={node.uptime} uptimeSeconds={node.uptime_seconds} />
-          </div>
-        </div>
+        {isWindows ? (
+          <>
+            <div className="col-span-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 font-black text-xs uppercase tracking-wider h-10"
+              >
+                <Play className="h-4 w-4" />
+                Setup Idle
+              </Button>
+            </div>
+            <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
+                <Timer className="h-3 w-3" />
+                Uptime
+              </div>
+              <div className="mt-1">
+                <UptimeValue uptime={node.uptime} uptimeSeconds={node.uptime_seconds} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
+                <Activity className="h-3 w-3" />
+                Slurmd Service
+              </div>
+              <div className="mt-1">
+                <SlurmdBadge status={node.slurmd_status} />
+              </div>
+            </div>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
+                <Timer className="h-3 w-3" />
+                Uptime
+              </div>
+              <div className="mt-1">
+                {isAuto ? (
+                  <span className="text-xs font-bold text-gray-400">No SSH</span>
+                ) : (
+                  <UptimeValue uptime={node.uptime} uptimeSeconds={node.uptime_seconds} />
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="mt-3 flex flex-col gap-2 border-t border-gray-100 pt-3 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between">
@@ -234,15 +285,17 @@ function NodeTile({ node }: { node: ManagedNode }) {
           <Laptop className="h-3.5 w-3.5" />
           {node.detectionReason}
         </span>
-        <span
-          className={cn(
-            'inline-flex items-center gap-1.5 font-bold',
-            node.detected_reachable ? 'text-emerald-600' : 'text-amber-600'
-          )}
-        >
-          <span className={cn('h-2 w-2 rounded-full', node.detected_reachable ? 'bg-emerald-500' : 'bg-amber-400')} />
-          {node.detected_reachable ? 'reachable' : 'fallback'}
-        </span>
+        {!isAuto && (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5 font-bold',
+              node.detected_reachable ? 'text-emerald-600' : 'text-amber-600'
+            )}
+          >
+            <span className={cn('h-2 w-2 rounded-full', node.detected_reachable ? 'bg-emerald-500' : 'bg-amber-400')} />
+            {node.detected_reachable ? 'reachable' : 'fallback'}
+          </span>
+        )}
         <span className="inline-flex items-center gap-1.5">
           <Clock className="h-3.5 w-3.5" />
           {formatDate(node.created_at)}

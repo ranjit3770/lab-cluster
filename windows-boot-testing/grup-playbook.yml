@@ -1,0 +1,23 @@
+- name: Set Ubuntu as primary boot option
+  hosts: windows
+  tasks:
+    - name: Get Ubuntu GUID from firmware boot entries
+      ansible.windows.win_shell: |
+        $bcd = bcdedit /enum firmware
+        $ubuntu = $bcd | Select-String -Pattern 'ubuntu' -Context 1,0
+        if ($ubuntu) {
+            $guid = ($ubuntu.Context.PreContext[0] -split "\s+")[1]
+            return $guid
+        }
+      register: ubuntu_guid_lookup
+      changed_when: false
+
+    - name: Move Ubuntu to top of boot order
+      ansible.windows.win_shell: "bcdedit /set {fwbootmgr} displayorder {{ ubuntu_guid_lookup.stdout.trim() }} /addfirst"
+      when: ubuntu_guid_lookup.stdout != ""
+      notify: Reboot host
+
+  handlers:
+    - name: Reboot host
+      ansible.windows.win_reboot:
+

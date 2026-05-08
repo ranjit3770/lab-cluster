@@ -1,9 +1,7 @@
 FROM python:3.10-slim
 
-# System Utilities (Required for OS Orchestration & Slurm access)
-RUN apt-get update && apt-get install -y \
-    sudo \
-    mariadb-client \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mariadb-client-core \
     slurm-client \
     libmunge-dev \
     curl \

@@ -33,6 +33,7 @@ class DevNode(DevNodeBase):
     slurmd_status: Optional[str] = None
     uptime: Optional[str] = None
     uptime_seconds: Optional[float] = None
+    auto_discovered: Optional[bool] = False
 
     class Config:
         from_attributes = True
