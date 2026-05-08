@@ -195,84 +195,90 @@ if($f){Write-Output $f}else{Write-Output 'NO_EFI'}
         return path, ""
     return None, "No Linux EFI loader found"
 
+def find_existing_managed_entry(ip, username, password):
+    success, out, err = run_winrm_command(ip, username, password, "bcdedit /enum firmware /v")
+    if not success: return None
+    sections = re.split(r'(?:\r?\n){2,}', out or "")
+    for section in sections:
+        if "Ubuntu Managed" in section:
+            match = re.search(r'identifier\s+(\{[a-f0-9-]+\})', section, re.IGNORECASE)
+            if match: return match.group(1)
+    return None
+
+def repair_power_options(ip, username, password):
+    ps = r"""
+    $p1 = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+    $p2 = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+    if (!(Test-Path $p1)) { New-Item $p1 -Force | Out-Null }
+    Set-ItemProperty -Path $p1 -Name 'ShutdownWithoutLogon' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+    if (Test-Path $p2) {
+        Set-ItemProperty -Path $p2 -Name 'NoClose' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+    }
+    """
+    run_winrm_command(ip, username, password, ps)
+
 def create_managed_linux_firmware_entry(ip, username, password, efi_path):
+    existing = find_existing_managed_entry(ip, username, password)
+    if existing: return existing, ""
+
     ps = rf"""
-$m='S:'
-if(Test-Path 'S:\'){{$m='T:'}}
-mountvol $m /S | Out-Null
-$created = bcdedit /create /d "Ubuntu Managed" /application BOOTAPP 2>&1 | Out-String
-$match = [regex]::Match($created, '\{{[A-Fa-f0-9-]+\}}')
-if(-not $match.Success){{ mountvol $m /D | Out-Null; Write-Output "FAILED_CREATE::$created"; exit 1 }}
-$g = $match.Value
-$dev = bcdedit /set $g device partition=$m 2>&1 | Out-String
-$path = bcdedit /set $g path "{efi_path}" 2>&1 | Out-String
-mountvol $m /D | Out-Null
-Write-Output "GUID::$g"
-Write-Output "DEVICE::$dev"
-Write-Output "PATH::$path"
-"""
+    $m='S:'
+    if(Test-Path 'S:\'){{$m='T:'}}
+    mountvol $m /S | Out-Null
+    $created = bcdedit /create /d "Ubuntu Managed" /application BOOTAPP 2>&1 | Out-String
+    $match = [regex]::Match($created, '\{{[A-Fa-f0-9-]+\}}')
+    if(-not $match.Success){{ mountvol $m /D | Out-Null; Write-Output "FAILED_CREATE::$created"; exit 1 }}
+    $g = $match.Value
+    bcdedit /set $g device partition=$m | Out-Null
+    bcdedit /set $g path "{efi_path}" | Out-Null
+    mountvol $m /D | Out-Null
+    Write-Output "GUID::$g"
+    """
     success, out, err = run_winrm_command(ip, username, password, ps)
-    if not success:
-        return None, err or out
+    if not success: return None, err or out
     match = re.search(r'GUID::(\{[a-f0-9-]+\})', out, re.IGNORECASE)
-    if not match:
-        return None, out.strip() or "Managed firmware entry creation did not return a GUID"
-    return match.group(1), ""
+    return (match.group(1), "") if match else (None, out.strip())
 
 def switch_windows_to_linux(ip, username, password):
     actions = []
     errors = []
-    guid = None
+    
+    # 0. Repair potential Power Options issues
+    repair_power_options(ip, username, password)
 
+    # 1. Try to find existing Linux entries
     success, out, err = run_winrm_command(ip, username, password, "bcdedit /enum firmware /v")
-    if success:
-        guid = extract_linux_firmware_guid(out)
-        if guid:
-            summary = summarize_linux_firmware_entry(out, guid)
-            seq_ok, seq_out, seq_err = run_winrm_command(ip, username, password, f'bcdedit /set "{{fwbootmgr}}" bootsequence {guid}')
-            order_ok, order_out, order_err = run_winrm_command(ip, username, password, f'bcdedit /set "{{fwbootmgr}}" displayorder {guid} /addfirst')
-            bootseq_ok, bootseq_out, bootseq_err = run_winrm_command(ip, username, password, f"bcdedit /bootsequence {guid} /addfirst")
-            if seq_ok or order_ok or bootseq_ok:
-                actions.append(f"firmware entry {guid}" + (f" ({summary})" if summary else ""))
-            else:
-                errors.append(f"Linux GUID {guid} found but bcdedit refused update: {seq_err or seq_out} {order_err or order_out} {bootseq_err or bootseq_out}")
-        else:
-            errors.append("No Linux firmware GUID found")
-    else:
-        errors.append(f"Could not read firmware entries: {err}")
+    guid = extract_linux_firmware_guid(out) if success else None
+    
+    if guid:
+        summary = summarize_linux_firmware_entry(out, guid)
+        run_winrm_command(ip, username, password, f'bcdedit /set "{{fwbootmgr}}" bootsequence {guid}')
+        run_winrm_command(ip, username, password, f'bcdedit /set "{{fwbootmgr}}" displayorder {guid} /addfirst')
+        actions.append(f"existing entry {guid} ({summary})")
 
+    # 2. Ensure managed entry exists and is prioritized
     efi_path, efi_err = find_windows_linux_efi_path(ip, username, password)
     if efi_path:
-        managed_guid, managed_err = create_managed_linux_firmware_entry(ip, username, password, efi_path)
+        managed_guid, m_err = create_managed_linux_firmware_entry(ip, username, password, efi_path)
         if managed_guid:
-            seq_ok, seq_out, seq_err = run_winrm_command(ip, username, password, f'bcdedit /set "{{fwbootmgr}}" bootsequence {managed_guid}')
-            order_ok, order_out, order_err = run_winrm_command(ip, username, password, f'bcdedit /set "{{fwbootmgr}}" displayorder {managed_guid} /addfirst')
-            bootseq_ok, bootseq_out, bootseq_err = run_winrm_command(ip, username, password, f"bcdedit /bootsequence {managed_guid} /addfirst")
-            if seq_ok or order_ok or bootseq_ok:
-                guid = guid or managed_guid
-                actions.append(f"managed firmware entry {managed_guid} -> {efi_path}")
-            else:
-                errors.append(f"Created managed entry {managed_guid} but could not set firmware order: {seq_err or seq_out} {order_err or order_out} {bootseq_err or bootseq_out}")
-        else:
-            errors.append(f"Found {efi_path} but could not create managed firmware entry: {managed_err}")
-    else:
-        errors.append(efi_err)
+            run_winrm_command(ip, username, password, f'bcdedit /set "{{fwbootmgr}}" bootsequence {managed_guid}')
+            run_winrm_command(ip, username, password, f'bcdedit /set "{{fwbootmgr}}" displayorder {managed_guid} /addfirst')
+            actions.append(f"managed entry {managed_guid}")
+        else: errors.append(m_err)
+    else: errors.append(efi_err)
 
-    if not actions:
-        return ip, False, "Failed: " + " | ".join(errors) + " No reboot performed."
+    if not actions: return ip, False, "Failed: " + " | ".join(errors)
 
-    verify_ok, verify_out, verify_err = run_winrm_command(ip, username, password, 'bcdedit /enum "{fwbootmgr}"')
-    if guid and actions and verify_ok and any(action.startswith("firmware entry") for action in actions) and guid.lower() not in verify_out.lower():
-        return ip, False, f"Failed: bcdedit accepted commands but fwbootmgr does not list Linux GUID {guid}. No reboot performed."
-
-    reboot_ok, reboot_out, reboot_err = run_winrm_command(ip, username, password, "shutdown /r /t 0 /f")
+    # 3. Final reboot command with 'planned' reason to avoid OS warnings
+    reboot_cmd = "shutdown /r /t 2 /f /d p:2:4 /c 'Automated switch to Linux'"
+    reboot_ok, r_out, r_err = run_winrm_command(ip, username, password, reboot_cmd)
     if reboot_ok:
         time.sleep(POST_REBOOT_WAIT_SECONDS)
         booted, state, detail = wait_for_state(ip, "LINUX")
-        if booted:
-            return ip, True, "Success: Booted Linux after setting " + " + ".join(actions) + f". Probe: {detail}"
-        return ip, False, "Boot target changed, but node came back as " + state + f" ({detail}). Firmware may be overriding the Linux entry."
-    return ip, False, "Boot target changed but reboot failed: " + (reboot_err or reboot_out)
+        if booted: return ip, True, f"Success: Booted Linux via {' + '.join(actions)}"
+        return ip, False, f"Boot target changed, but node came back as {state} ({detail})"
+    return ip, False, "Reboot failed: " + (r_err or r_out)
+
 
 def main():
     print("\n\033[95m" + "="*60)

@@ -1,5 +1,5 @@
 ---
-- name: Switch Windows Boot to Ubuntu
+- name: Production-Grade Switch Windows Boot to Ubuntu
   hosts: windows
   gather_facts: no
   vars:
@@ -7,30 +7,57 @@
     ansible_port: 5985
     ansible_winrm_transport: ntlm
     ansible_winrm_server_cert_validation: ignore
+    reboot_timeout: 600
 
   tasks:
-    - name: 1. Check if Windows is responding
+    - name: 1. Verify Connectivity and State
       win_ping:
 
-    - name: 2. Get Firmware Boot List from BCD
-      win_command: bcdedit /enum firmware
+    - name: 2. Repair 'Missing Power Options' Issue (Policy Reset)
+      win_regedit:
+        path: "{{ item.path }}"
+        name: "{{ item.name }}"
+        data: "{{ item.data }}"
+        type: dword
+        state: present
+      loop:
+        - { path: 'HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System', name: 'ShutdownWithoutLogon', data: 1 }
+        - { path: 'HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', name: 'NoClose', data: 0 }
+      ignore_errors: yes
+
+    - name: 3. Audit BCD Firmware Entries
+      win_command: bcdedit /enum firmware /v
       register: bcd_output
+      changed_when: false
 
-    - name: 3. Extract Ubuntu GUID automatically
+    - name: 4. Resolve Ubuntu Boot GUID
       set_fact:
-        # This regex looks for the GUID {xxx} that appears before the Ubuntu path
-        ubuntu_guid: "{{ bcd_output.stdout | regex_findall('{([a-fA-F0-9\\-]+)}[\\s\\S]*?path\\s+\\\\EFI\\\\ubuntu\\\\shimx64\\.efi') | first }}"
+        # Improved regex to handle various BCD formats and descriptions
+        ubuntu_guid: "{{ bcd_output.stdout | regex_findall('identifier\\s+(\\{[a-fA-F0-9\\-]+\\})[\\s\\S]*?(?:ubuntu|shim|grub|debian)') | first | default('') }}"
 
-    - name: 4. Move Ubuntu to the top of the Boot Order
-      win_command: 'bcdedit /set {fwbootmgr} displayorder {{"{"}}{{ ubuntu_guid }}{{"}"}} /addfirst'
+    - name: 5. Handle Missing Ubuntu Entry
+      fail:
+        msg: "CRITICAL: Could not find a Linux/Ubuntu entry in the BCD firmware list. Manual BIOS intervention may be required."
+      when: ubuntu_guid == ""
 
-    - name: 5. Trigger Reboot and Disconnect
-      # Shutdown with a 5-second delay to allow Ansible to close the session cleanly
-      win_shell: "shutdown /r /t 5 /f /d p:2:4"
+    - name: 6. Configure Boot Sequence (One-Time Override)
+      win_command: 'bcdedit /set {fwbootmgr} bootsequence {{ ubuntu_guid }}'
+      register: bcd_seq
+      failed_when: bcd_seq.rc != 0 and "successfully" not in bcd_seq.stdout
+
+    - name: 7. Configure Display Order (Permanent Preference)
+      win_command: 'bcdedit /set {fwbootmgr} displayorder {{ ubuntu_guid }} /addfirst'
+      register: bcd_order
+      failed_when: bcd_order.rc != 0 and "successfully" not in bcd_order.stdout
+
+    - name: 8. Trigger Production Reboot
+      win_shell: "shutdown /r /t 5 /f /d p:2:4 /c 'Production switch to Ubuntu initiated by automation'"
       async: 10
       poll: 0
+      when: not skip_reboot | default(false) | bool
 
-    - name: 6. Success Message
+    - name: 9. Final Update
       debug:
-        msg: "GUID {{ ubuntu_guid }} set as first boot. System is switching to Ubuntu now."
+        msg: "SUCCESS: GUID {{ ubuntu_guid }} is now the primary boot target. System is transitioning to Ubuntu."
+
 

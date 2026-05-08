@@ -1,0 +1,36 @@
+---
+- name: Switch Windows Boot to Ubuntu
+  hosts: windows
+  gather_facts: no
+  vars:
+    ansible_connection: winrm
+    ansible_port: 5985
+    ansible_winrm_transport: ntlm
+    ansible_winrm_server_cert_validation: ignore
+
+  tasks:
+    - name: 1. Check if Windows is responding
+      win_ping:
+
+    - name: 2. Get Firmware Boot List from BCD
+      win_command: bcdedit /enum firmware
+      register: bcd_output
+
+    - name: 3. Extract Ubuntu GUID automatically
+      set_fact:
+        # This regex looks for the GUID {xxx} that appears before the Ubuntu path
+        ubuntu_guid: "{{ bcd_output.stdout | regex_findall('{([a-fA-F0-9\\-]+)}[\\s\\S]*?path\\s+\\\\EFI\\\\ubuntu\\\\shimx64\\.efi') | first }}"
+
+    - name: 4. Move Ubuntu to the top of the Boot Order
+      win_command: 'bcdedit /set {fwbootmgr} displayorder {{"{"}}{{ ubuntu_guid }}{{"}"}} /addfirst'
+
+    - name: 5. Trigger Reboot and Disconnect
+      # Shutdown with a 5-second delay to allow Ansible to close the session cleanly
+      win_shell: "shutdown /r /t 5 /f /d p:2:4"
+      async: 10
+      poll: 0
+
+    - name: 6. Success Message
+      debug:
+        msg: "GUID {{ ubuntu_guid }} set as first boot. System is switching to Ubuntu now."
+
