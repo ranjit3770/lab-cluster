@@ -1,0 +1,28 @@
+---
+- name: Export MAC addresses to JSON
+  hosts: cluster_nodes
+  gather_facts: no  # We will get them manually
+  become: yes
+
+  tasks:
+    - name: Get MAC address via shell
+      # This command finds the interface used for the default route and gets its MAC
+      shell: "cat /sys/class/net/$(ip route show default | awk '/default/ {print $5}')/address"
+      register: worker_mac
+      changed_when: false
+
+    - name: Create JSON report
+      run_once: true
+      delegate_to: localhost
+      become: no
+      copy:
+        dest: "./mac_addresses.json"
+        content: >
+          {% set results = [] %}
+          {% for host in ansible_play_hosts %}
+            {% set _ = results.append({
+                'host': host,
+                'mac': hostvars[host]['worker_mac']['stdout'] | default('N/A')
+            }) %}
+          {% endfor %}
+          {{ results | to_nice_json }}

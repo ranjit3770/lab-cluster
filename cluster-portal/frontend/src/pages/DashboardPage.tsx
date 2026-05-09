@@ -170,7 +170,7 @@ export default function DashboardPage() {
                 </div>
             </Card>
 
-            <Card className="p-3 border-gray-200 bg-white hover:border-purple-500/30 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate('/nodes')}>
+            <Card className="p-3 border-gray-200 bg-white hover:border-purple-500/30 hover:shadow-md transition-all cursor-pointer" onClick={() => navigate('/management/node-management')}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <div className="p-1.5 rounded-md bg-purple-500/10">
@@ -306,7 +306,7 @@ export default function DashboardPage() {
                 </CardContent>
             </Card>
 
-            <Card className="p-4 border-gray-200 bg-white hover:shadow-md transition-all cursor-pointer" onClick={() => navigate('/nodes')}>
+            <Card className="p-4 border-gray-200 bg-white hover:shadow-md transition-all cursor-pointer" onClick={() => navigate('/management/node-management')}>
                 <CardHeader className="p-0 pb-2">
                     <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                         <Server className="h-4 w-4 text-purple-500" />
@@ -314,7 +314,7 @@ export default function DashboardPage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <p className="text-xs text-gray-500">View cluster nodes and status</p>
+                    <p className="text-xs text-gray-500">Manage compute nodes and services</p>
                 </CardContent>
             </Card>
         </div>

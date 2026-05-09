@@ -13,6 +13,7 @@ import { devNodesApi, type DevNode, type DevNodeCreate } from "@/api/devNodes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
+import PageLoader from "@/components/PageLoader";
 
 import {
     Dialog,
@@ -225,6 +226,8 @@ export default function AdminToolsPage() {
              toast.error("Failed to delete node.");
         }
     };
+
+    if (isLoading) return <PageLoader message="Loading node inventory..." />;
 
     return (
         <div className="flex flex-col gap-4 pb-4 max-w-[1400px] mx-auto w-full animate-in fade-in slide-in-from-bottom-5 duration-500">
@@ -591,12 +594,6 @@ export default function AdminToolsPage() {
                         <Button variant="outline" className="mt-6 rounded-xl text-xs font-bold px-8 border-gray-200 hover:bg-white" onClick={() => setIsAddingNode(true)}>
                             Initialize First Node
                         </Button>
-                    </div>
-                 )}
-                 {nodes.length === 0 && isLoading && (
-                    <div className="md:col-span-2 lg:col-span-3 py-20 text-center bg-gray-50/50 rounded-[2.5rem] border-2 border-dashed border-gray-100 flex flex-col items-center">
-                        <Loader2 className="h-8 w-8 text-gray-300 animate-spin mb-4" />
-                        <p className="text-sm font-bold text-gray-600">Loading node inventory...</p>
                     </div>
                  )}
             </div>

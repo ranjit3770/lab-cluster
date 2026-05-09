@@ -110,7 +110,7 @@ def get_system_config(
         slurm_node_api=settings.SLURM_NODE_API,
         external_job_api_url=settings.EXTERNAL_JOB_API_URL,
         slurm_version=settings.SLURM_VERSION,
-        slurm_user=settings.SLURM_USER,
+        slurm_user=getattr(settings, "SLURM_USER", settings.SLURM_JWT_USER),
         slurm_jwt_user=settings.SLURM_JWT_USER,
         slurm_path=settings.SLURM_PATH,
         slurm_lib_path=settings.SLURM_LIB_PATH,
@@ -159,7 +159,6 @@ def update_system_config(
              update_setting("slurm_version", stripped_ver)
 
         if config_in.slurm_user is not None:
-             settings.SLURM_USER = config_in.slurm_user
              update_setting("slurm_user", config_in.slurm_user)
         
         if config_in.slurm_jwt_user is not None:
@@ -613,15 +612,16 @@ def _serialize_dev_node(node: DevNodeModel) -> dict:
         slurmd_status = services.get("slurmd_status", "unknown")
         uptime_val = services.get("uptime", "N/A")
         uptime_secs = services.get("uptime_seconds")
-    else:
-        if node.ssh_password:
-            services = _get_node_services(node, effective_os)
-            uptime_val = services.get("uptime", "N/A")
-            uptime_secs = services.get("uptime_seconds")
-        elif effective_os == "windows" and node.ssh_username:
-            winrm_result = _winrm_get_uptime(node.ip_address, node.ssh_username, node.ssh_password)
-            uptime_val = winrm_result.get("uptime", "N/A")
-            uptime_secs = winrm_result.get("uptime_seconds")
+    elif node.ssh_password:
+        services = _get_node_services(node, effective_os)
+        uptime_val = services.get("uptime", "N/A")
+        uptime_secs = services.get("uptime_seconds")
+
+    if uptime_secs is None and effective_os == "windows" and node.ssh_username:
+        winrm_result = _winrm_get_uptime(node.ip_address, node.ssh_username, node.ssh_password)
+        if winrm_result.get("uptime_seconds"):
+            uptime_val = winrm_result["uptime"]
+            uptime_secs = winrm_result["uptime_seconds"]
 
     payload = {
         "id": node.id,

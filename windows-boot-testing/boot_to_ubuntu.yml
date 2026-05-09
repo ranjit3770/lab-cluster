@@ -7,57 +7,153 @@
     ansible_port: 5985
     ansible_winrm_transport: ntlm
     ansible_winrm_server_cert_validation: ignore
-    reboot_timeout: 600
-
+  any_errors_fatal: true
   tasks:
-    - name: 1. Verify Connectivity and State
+    - name: 1. Verify Connectivity
       win_ping:
 
-    - name: 2. Repair 'Missing Power Options' Issue (Policy Reset)
-      win_regedit:
-        path: "{{ item.path }}"
-        name: "{{ item.name }}"
-        data: "{{ item.data }}"
-        type: dword
-        state: present
-      loop:
-        - { path: 'HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\System', name: 'ShutdownWithoutLogon', data: 1 }
-        - { path: 'HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer', name: 'NoClose', data: 0 }
-      ignore_errors: yes
+    - name: 2. SAFETY - Backup BCD Configuration
+      win_shell: bcdedit /export C:\bcd_backup_pre_migration.bak
 
-    - name: 3. Audit BCD Firmware Entries
-      win_command: bcdedit /enum firmware /v
-      register: bcd_output
+    - name: 3. SAFETY - Handle BitLocker (Prevent Recovery Mode)
+      win_shell: |
+        $bl = Get-BitLockerVolume -MountPoint "C:"
+        if ($bl.ProtectionStatus -eq "On") {
+            Write-Output "SUSPENDING_BITLOCKER"
+            Suspend-BitLocker -MountPoint "C:" -RebootCount 1
+        } else {
+            Write-Output "BITLOCKER_NOT_ACTIVE"
+        }
+      register: bitlocker_info
+      changed_when: "'SUSPENDING_BITLOCKER' in bitlocker_info.stdout"
+
+    - name: 4. Disable Windows Fast Startup (Ensures Cold Boot)
+      win_shell: reg add "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Power" /v HiberbootEnabled /t REG_DWORD /d 0 /f
+
+    - name: 5. Repair 'Missing Power Options' Issue
+      win_shell: |
+        reg add "HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Policies\System" /v ShutdownWithoutLogon /t REG_DWORD /d 1 /f
+        reg add "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v NoClose /t REG_DWORD /d 0 /f
+
+    - name: 6. Locate Ubuntu EFI loader on EFI System Partition
+      win_shell:
+        cmd: |
+          $mount = "S:"
+          if (Test-Path 'S:\') { $mount = "T:" }
+          mountvol $mount /S | Out-Null
+          $candidates = @(
+              '\EFI\ubuntu\shimx64.efi',
+              '\EFI\ubuntu\grubx64.efi',
+              '\EFI\debian\shimx64.efi',
+              '\EFI\debian\grubx64.efi',
+              '\EFI\BOOT\BOOTX64.EFI'
+          )
+          $found = ""
+          foreach ($candidate in $candidates) {
+            if (Test-Path ($mount + $candidate)) {
+              $found = $candidate
+              break
+            }
+          }
+          mountvol $mount /D | Out-Null
+          if (-not $found) { throw "No Ubuntu/Linux EFI loader found on ESP" }
+          Write-Output $found
+      register: ubuntu_efi_result
+
+    - name: 7. Create managed Ubuntu firmware entry
+      win_shell:
+        cmd: |
+          $efiPath = "{{ ubuntu_efi_result.stdout_lines[-1] | trim }}"
+          $mount = "S:"
+          if (Test-Path 'S:\') { $mount = "T:" }
+          mountvol $mount /S | Out-Null
+
+          $created = bcdedit /create /d "Ubuntu Managed" /application BOOTAPP 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            mountvol $mount /D | Out-Null
+            Write-Error $created
+            exit 1
+          }
+
+          $match = [regex]::Match($created, "\{[A-Fa-f0-9-]+\}")
+          if (-not $match.Success) {
+            mountvol $mount /D | Out-Null
+            Write-Error "Could not parse managed Ubuntu boot GUID from: $created"
+            exit 1
+          }
+
+          $guid = $match.Value
+          $device = bcdedit /set $guid device partition=$mount 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) {
+            mountvol $mount /D | Out-Null
+            Write-Error $device
+            exit 1
+          }
+
+          $path = bcdedit /set $guid path $efiPath 2>&1 | Out-String
+          mountvol $mount /D | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error $path
+            exit 1
+          }
+
+          Write-Output $guid
+      register: managed_ubuntu_guid
+
+    - name: 8. Set firmware boot sequence to managed Ubuntu entry
+      win_shell:
+        cmd: |
+          $guid = "{{ managed_ubuntu_guid.stdout_lines[-1] | trim }}"
+          $efiPath = "{{ ubuntu_efi_result.stdout_lines[-1] | trim }}"
+          $ErrorActionPreference = "Continue"
+
+          function Invoke-Bcdedit {
+            param([string[]]$Arguments)
+            $output = & bcdedit @Arguments 2>&1 | Out-String
+            $ok = ($LASTEXITCODE -eq 0 -or $output -match "successfully")
+            return @{ Ok = $ok; Text = ("bcdedit " + ($Arguments -join " ") + "`n" + $output) }
+          }
+
+          $results = @()
+          $results += Invoke-Bcdedit @("/set", "{fwbootmgr}", "bootsequence", $guid)
+          $results += Invoke-Bcdedit @("/set", "{fwbootmgr}", "displayorder", $guid, "/addfirst")
+          $results += Invoke-Bcdedit @("/bootsequence", $guid, "/addfirst")
+          $results += Invoke-Bcdedit @("/set", "{bootmgr}", "path", $efiPath)
+          $results += Invoke-Bcdedit @("/set", "{fwbootmgr}", "bootsequence", "{bootmgr}")
+          $results += Invoke-Bcdedit @("/displayorder", "{bootmgr}", "/addfirst")
+
+          $messages = $results | ForEach-Object { $_.Text }
+          if (-not ($results | Where-Object { $_.Ok })) {
+            Write-Error ($messages -join "`n")
+            exit 1
+          }
+          Write-Output ($messages -join "`n")
+      register: boot_update
+
+    - name: 9. Capture BCD diagnostics before reboot
+      win_shell:
+        cmd: |
+          Write-Output "===== bcdedit /enum {fwbootmgr} ====="
+          bcdedit /enum "{fwbootmgr}" 2>&1 | Out-String
+          Write-Output "===== bcdedit /enum firmware /v ====="
+          bcdedit /enum firmware /v 2>&1 | Out-String
+          Write-Output "===== bcdedit /enum {bootmgr} ====="
+          bcdedit /enum "{bootmgr}" 2>&1 | Out-String
+      register: bcd_diagnostics
       changed_when: false
 
-    - name: 4. Resolve Ubuntu Boot GUID
-      set_fact:
-        # Improved regex to handle various BCD formats and descriptions
-        ubuntu_guid: "{{ bcd_output.stdout | regex_findall('identifier\\s+(\\{[a-fA-F0-9\\-]+\\})[\\s\\S]*?(?:ubuntu|shim|grub|debian)') | first | default('') }}"
-
-    - name: 5. Handle Missing Ubuntu Entry
-      fail:
-        msg: "CRITICAL: Could not find a Linux/Ubuntu entry in the BCD firmware list. Manual BIOS intervention may be required."
-      when: ubuntu_guid == ""
-
-    - name: 6. Configure Boot Sequence (One-Time Override)
-      win_command: 'bcdedit /set {fwbootmgr} bootsequence {{ ubuntu_guid }}'
-      register: bcd_seq
-      failed_when: bcd_seq.rc != 0 and "successfully" not in bcd_seq.stdout
-
-    - name: 7. Configure Display Order (Permanent Preference)
-      win_command: 'bcdedit /set {fwbootmgr} displayorder {{ ubuntu_guid }} /addfirst'
-      register: bcd_order
-      failed_when: bcd_order.rc != 0 and "successfully" not in bcd_order.stdout
-
-    - name: 8. Trigger Production Reboot
-      win_shell: "shutdown /r /t 5 /f /d p:2:4 /c 'Production switch to Ubuntu initiated by automation'"
+    - name: 10. Trigger Full Production Reboot
+      win_shell: "shutdown /r /t 5 /f /d p:2:4 /c 'Production switch to Ubuntu (Precision Mode Enabled)'"
       async: 10
       poll: 0
       when: not skip_reboot | default(false) | bool
 
-    - name: 9. Final Update
+    - name: 11. Final Status Report
       debug:
-        msg: "SUCCESS: GUID {{ ubuntu_guid }} is now the primary boot target. System is transitioning to Ubuntu."
-
-
+        msg: |
+          "BOOT TARGET ARMED.
+           Ubuntu EFI: {{ ubuntu_efi_result.stdout_lines[-1] }}
+           Managed GUID: {{ managed_ubuntu_guid.stdout_lines[-1] }}
+           BitLocker: {{ 'Suspended' if 'SUSPENDING_BITLOCKER' in bitlocker_info.stdout else 'None' }}
+           BCD Diagnostics:
+           {{ bcd_diagnostics.stdout }}"
