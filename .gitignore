@@ -1,0 +1,96 @@
+﻿# === OS Junk ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+\.BIN/
+*.lnk
+
+# === IDE / Editor ===
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.~lock.*
+.history/
+.ionide/
+
+# === Environment / Secrets ===
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.key
+*.pem
+*.crt
+secrets/
+
+# === Package manager artifacts ===
+node_modules/
+.pnp
+.pnp.js
+yarn.lock
+package-lock.json
+.pnpm-store/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*\.class
+*.so
+.Python
+env/
+venv/
+.venv/
+poetry.lock
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# === .NET ===
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.vs/
+
+# === Java / JVM ===
+*.class
+*.jar
+*.war
+*.nar
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# === Rust ===
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# === Go ===
+vendor/
+
+# === Terraform ===
+*.tfstate
+*.tfstate.*
+.terraform/
+crash.log
+
+# === Logs / Temp ===
+*.log
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
