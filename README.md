@@ -21,8 +21,7 @@ SLURM-COMPLETE-SETUP/
 │   │   └── single_node_switch.py# Single-node switch helper
 │   └── slurm-resume-nodes.sh    # Cron-safe Slurm node resume watchdog
 ├── docs/                        # Operator procedures and setup guides
-├── logs/                        # Runtime logs (ansible playbook-errors.log)
-└── backups/                     # Historical artifacts kept for reference only
+└── logs/                        # Runtime logs (ansible playbook-errors.log)
 ```
 
 ## Components
