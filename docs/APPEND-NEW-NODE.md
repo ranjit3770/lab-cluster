@@ -1,8 +1,24 @@
 # Append a New Slurm Worker Node
 
-This document is the future reference procedure for adding one new worker node to the existing Slurm cluster without rebuilding or disturbing already working nodes.
+Reference procedure for adding one new worker node to the existing Slurm
+cluster without rebuilding or disturbing already working nodes.
 
-Use this when the cluster is already running and you only want to append a new Linux worker, for example `worker_node29`.
+Use this when the cluster is already running and you only want to append a new
+Linux worker, for example `worker_node29`.
+
+## Contents
+
+1. [Important Rule](#important-rule)
+2. [Files Involved](#files-involved)
+3. [Prerequisites](#prerequisites)
+4. [Step 1: Add the New Worker to Inventory](#step-1-add-the-new-worker-to-inventory)
+5. [Step 2: Run the Single Management Playbook](#step-2-run-the-single-management-playbook)
+6. [What Append Mode Does / Does Not Do](#what-append-mode-does)
+7. [Expected Successful Result](#expected-successful-result)
+8. [If the Playbook Fails](#if-the-playbook-fails)
+9. [Full Setup vs Append Mode](#full-setup-vs-append-mode)
+10. [Syntax Check](#syntax-check)
+11. [Operator Checklist](#operator-checklist)
 
 ## Path Convention
 

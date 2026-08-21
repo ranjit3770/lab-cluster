@@ -92,18 +92,34 @@ ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbook
 
 ## Documentation Index
 
+### Infrastructure (Ansible)
+
 | Document | Description |
 | --- | --- |
-| [Ansible workflow](ansible/README.md) | Playbook layout, commands, resource enforcement. |
+| [Ansible workflow](ansible/README.md) | Playbook layout, task-based command reference, resource enforcement. |
 | [Fresh Slurm Cluster Setup](docs/FRESH-SLURM-CLUSTER-SETUP.md) | Full build/rebuild procedure. |
 | [Append a New Worker Node](docs/APPEND-NEW-NODE.md) | Add one worker safely. |
 | [Vault Setup](docs/VAULT-SETUP.md) | Encrypted variables for Windows inventory. |
 | [Dual-Boot Fix Reference](docs/FIX-BOOT-ISSUE.md) | Boot-order troubleshooting. |
-| [Portal workflow](cluster-portal/README.md) | Portal architecture and operations. |
-| [Frontend UI guide](cluster-portal/frontend/README.md) | React frontend reference. |
-| [Backend API guide](cluster-portal/backend/README.md) | FastAPI backend reference. |
-| [Job-API guide](cluster-portal/backend/job-api/README.md) | Job submission service. |
+
+### Cluster Portal
+
+| Document | Description |
+| --- | --- |
+| [Portal workflow](cluster-portal/README.md) | Portal architecture, operator workflow, deployment. |
+| [Frontend UI guide](cluster-portal/frontend/README.md) | React frontend, navigation, RBAC, design system. |
+| [Backend API guide](cluster-portal/backend/README.md) | FastAPI registry and node inventory contract. |
+| [Job-API guide](cluster-portal/backend/job-api/README.md) | Job submission service overview and doc index. |
 | [Resource verification](cluster-portal/backend/job-api/RESOURCE-ALLOCATION-AND-VERIFICATION.md) | Allocation audit details. |
+| [Design decisions](cluster-portal/backend/job-api/DESIGN-DECISIONS.md) | Why the portal adds no scheduling logic. |
+| [Quota & job lifecycle rules](cluster-portal/backend/job-api/QUOTA-AND-JOB-LIFECYCLE.md) | Quota counting, termination flow, hardening invariants. |
+
+### Reference Guides
+
+| Document | Description |
+| --- | --- |
+| [Portal docs index](cluster-portal/docs/README.md) | Manual setup guides and troubleshooting runbooks. |
+| [Operational scripts](scripts/README.md) | OS swapper tools and resume watchdog. |
 
 ## Production Relocation
 

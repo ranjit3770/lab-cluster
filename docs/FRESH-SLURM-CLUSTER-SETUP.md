@@ -1,6 +1,7 @@
 # Fresh Slurm Cluster Setup
 
-This document is the future reference procedure for a fresh Slurm cluster setup or a full cluster rebuild using the Ansible playbooks in this repository.
+Reference procedure for a fresh Slurm cluster setup or a full cluster rebuild
+using the Ansible playbooks in this repository.
 
 Use this when:
 
@@ -8,7 +9,22 @@ Use this when:
 - rebuilding Slurm across the cluster
 - intentionally rerunning the full deployment flow
 
-Do not use this procedure just to add one worker to an already working cluster. For that, use [Append a New Slurm Worker Node](APPEND-NEW-NODE.md).
+Do not use this procedure just to add one worker to an already working cluster.
+For that, use [Append a New Slurm Worker Node](APPEND-NEW-NODE.md).
+
+## Contents
+
+1. [Recommended Entrypoint](#recommended-entrypoint)
+2. [Prerequisites](#prerequisites)
+3. [Inventory Example](#inventory-example)
+4. [What Full Setup Does](#what-full-setup-does)
+5. [Operator Prompts During Full Setup](#operator-prompts-during-full-setup)
+6. [Slurm Configuration Generation](#slurm-configuration-generation)
+7. [Expected Successful Result](#expected-successful-result)
+8. [Post-Setup Verification](#post-setup-verification)
+9. [If Full Setup Fails](#if-full-setup-fails)
+10. [Syntax Check](#syntax-check)
+11. [Fresh Setup Checklist](#fresh-setup-checklist)
 
 ## Path Convention
 
@@ -157,13 +173,24 @@ Important details:
 
 - `SelectType` is set to `select/cons_tres`.
 - `SelectTypeParameters` is set to `CR_Core_Memory`.
-- `ProctrackType` is set to `proctrack/cgroup`.
-- `TaskPlugin` is set to `task/cgroup`.
-- `JobAcctGatherType` is set to `jobacct_gather/cgroup`.
-- CPU, core, thread, and memory values are generated from actual node topology unless explicit CPU/RAM caps are provided.
-- `cgroup.conf` enables CPU, RAM, swap, and device constraints.
+- CPU, core, thread, and memory values are generated from actual node topology
+  unless explicit CPU/RAM caps are provided.
 - GPU GRES is only configured when the expected render device exists.
 - Windows inventory groups are not used for Slurm node definitions.
+
+Process tracking and cgroup behavior depend on the mode chosen at deploy time:
+
+| Setting | Stable default | With `-e enable_slurm_cgroups=true` |
+| --- | --- | --- |
+| ProctrackType | `proctrack/linuxproc` | `proctrack/cgroup` |
+| TaskPlugin | `task/affinity` | `task/cgroup` |
+| JobAcctGatherType | `jobacct_gather/linux` | `jobacct_gather/cgroup` |
+| cgroup.conf constraints | — | CPU, RAM, swap, and device constraints enabled |
+
+The stable default schedules and accounts resources through Slurm while keeping
+services reliable on mixed lab hardware; strict cgroups additionally enforce
+allocations in the kernel. See
+[Ansible Cluster Automation](../ansible/README.md#slurm-resource-enforcement).
 
 ## Expected Successful Result
 

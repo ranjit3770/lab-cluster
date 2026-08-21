@@ -1,55 +1,62 @@
-`slurmrestd` is a REST API interface that allows you to interact with the Slurm Workload Manager using standard HTTP methods (GET, POST, PUT, DELETE) and JSON data.
+# Slurm REST API (slurmrestd) Usage Reference
 
-Since you are running **Slurm 25.11.4** with the **v0.0.44** plugin, here is a breakdown of what you can achieve through this interface.
+`slurmrestd` exposes the Slurm Workload Manager over standard HTTP methods
+(GET, POST, PUT, DELETE) with JSON payloads. This cluster runs Slurm 25.11.4
+with the **v0.0.44** OpenAPI plugin. This page summarizes what the interface
+provides and how the portal uses it.
 
-### 1. Job Management (The Core Function)
+## Capabilities
 
-This is the most common use case for building portals or automation scripts.
+### 1. Job Management (core use case)
 
-- **Submit Jobs:** Submit a job script or a "job description" in JSON format (equivalent to `sbatch`).
-- **List Jobs:** View all jobs in the queue or filter by user, partition, or state (equivalent to `squeue`).
-- **Query Job Details:** Get highly specific metadata about a single job (start time, end time, allocated nodes, environment variables).
-- **Cancel/Signal Jobs:** Kill a running job or send signals like SIGTERM (equivalent to `scancel`).
-- **Modify Jobs:** Update job parameters like time limits or partition while the job is still pending (equivalent to `scontrol update job`).
+- **Submit jobs** — a job script or JSON job description (equivalent to `sbatch`).
+- **List jobs** — full queue or filtered by user, partition, or state (equivalent to `squeue`).
+- **Job details** — start/end time, allocated nodes, environment variables, and other metadata.
+- **Cancel/signal jobs** — kill a running job or send signals such as SIGTERM (equivalent to `scancel`).
+- **Modify pending jobs** — update time limits or partition while queued (equivalent to `scontrol update job`).
 
-### 2. Node & Cluster Monitoring
+### 2. Node And Cluster Monitoring
 
-Instead of parsing the text output of `sinfo`, you get structured JSON data.
+Structured JSON instead of parsed `sinfo` text:
 
-- **Node Status:** View the state of every node (`IDLE`, `DOWN`, `DRAIN`, `ALLOCATED`).
-- **Hardware Inventory:** Check the available CPUs, Memory, and GRES (like GPUs) on each node.
-- **Update Node State:** Mark a node as `DRAIN` for maintenance or `RESUME` it back into the cluster.
+- **Node status** — `IDLE`, `DOWN`, `DRAIN`, `ALLOCATED`.
+- **Hardware inventory** — CPUs, memory, and GRES (for example GPUs) per node.
+- **Node state updates** — `DRAIN` a node for maintenance or `RESUME` it back.
 
-### 3. Partition & Reservation Control
+### 3. Partition And Reservation Control
 
-- **Read Partitions:** See which partitions (queues) are available, their max time limits, and which nodes belong to them.
-- **Manage Reservations:** Create, update, or delete advanced reservations for specific users or maintenance windows.
+- **Read partitions** — limits, defaults, and member nodes.
+- **Manage reservations** — create/update/delete reservations for users or maintenance windows.
 
-### 4. Accounting (SlurmDBD Interaction)
+### 4. Accounting (SlurmDBD)
 
-Because your `ping` output confirmed that your `accounting_storage` is `slurmdbd`, you can perform administrative tasks:
+Accounting storage is backed by `slurmdbd`, so the REST API can also:
 
-- **Users & Accounts:** List, create, or modify Slurm users and their account associations.
-- **Usage Statistics:** Query historical data about job completions and resource consumption (equivalent to `sacct`).
-- **QOS (Quality of Service):** Manage QOS levels to set priorities and limits for different groups.
+- **Users & accounts** — list/create/modify Slurm accounts and associations.
+- **Usage statistics** — historical job and consumption data (equivalent to `sacct`).
+- **QOS management** — priority and limit tiers per group.
 
-### 5. Diagnostics & Health
+### 5. Diagnostics And Health
 
-- **Ping:** Check if the `slurmctld` (controller) is alive and its current latency.
-- **Diag:** Get internal performance statistics for the controller (equivalent to `sdiag`).
-- **Configuration:** View the active `slurm.conf` parameters effectively used by the running daemons.
+- **Ping** — controller liveness and latency.
+- **Diag** — internal controller statistics (equivalent to `sdiag`).
+- **Configuration** — the active `slurm.conf` parameters in use by running daemons.
 
----
+## CLI Vs REST Comparison
 
-### Comparison: CLI vs. REST API
+| Aspect | CLI (`sbatch`, `squeue`) | REST (`slurmrestd`) |
+| :--- | :--- | :--- |
+| Output format | Plain text / tables | Structured JSON |
+| Connectivity | Slurm binaries required locally | Any client with `curl` or Python |
+| Authentication | Munge (UID/GID based) | JWT token or Unix socket |
+| Integration | String parsing required | Direct web/app integration |
 
-| Feature            | CLI (`sbatch`, `squeue`)                 | REST API (`slurmrestd`)           |
-| :----------------- | :--------------------------------------- | :-------------------------------- |
-| **Output Format**  | Plain Text / Tables                      | Structured JSON                   |
-| **Connectivity**   | Requires Slurm binaries on local machine | Any device with `curl` or Python  |
-| **Authentication** | Munge (UID/GID based)                    | JWT (Token-based) or Socket       |
-| **Integration**    | Difficult (requires string parsing)      | Easy (direct web/app integration) |
+## How The Portal Uses It
 
-### Use Case Example
+The portal backend queries job IDs and node data through Python over the
+Unix socket (see `SLURM_REST_URL` in the [backend guide](backend/README.md)).
+This is what powers user-facing dashboards for job status without granting
+SSH access to the head node.
 
-In your current project, you are using Python `requests` to get **Job IDs** and **Nodes**. By using `slurmrestd`, you can easily turn that data into a web-based dashboard for users to see their job status without ever giving them SSH access to the `head-node`.
+For setup of the daemon itself, see
+[docs/setup-guides/SLURMREST-SETUP.md](docs/setup-guides/SLURMREST-SETUP.md).

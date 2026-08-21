@@ -1,6 +1,25 @@
 # Smart Slurm Orchestration Layer
 
-This job-api implements a production-oriented Slurm submission layer that converts high-level user intent into efficient Slurm allocations without hardcoded cluster specifications.
+This job-api implements a production-oriented Slurm submission layer that
+converts high-level user intent into efficient Slurm allocations without
+hardcoded cluster specifications.
+
+Related documents: [DESIGN-DECISIONS.md](DESIGN-DECISIONS.md) explains the
+modeling rules referenced below; verification of live allocations is covered
+in [RESOURCE-ALLOCATION-AND-VERIFICATION.md](RESOURCE-ALLOCATION-AND-VERIFICATION.md).
+
+## Contents
+
+1. [Entry Points](#entry-points)
+2. [User Input Model](#user-input-model)
+3. [Dynamic Cluster Awareness](#dynamic-cluster-awareness)
+4. [Allocation Strategy](#allocation-strategy)
+5. [Smart Corrections](#smart-corrections)
+6. [Packing Logic](#packing-logic)
+7. [Generated sbatch Script](#generated-sbatch-script)
+8. [Multi-User Fairness](#multi-user-fairness)
+9. [API Examples](#api-examples)
+10. [Extensibility Points](#extensibility-points)
 
 ## Entry Points
 
@@ -164,7 +183,7 @@ The planner is intentionally modular:
 - ML tuning: add command-aware task and memory heuristics
 - partition policy: set `job_default_partition` in portal system settings or env `JOB_DEFAULT_PARTITION`
 
-## Changed Files
+## Files Implementing This Layer
 
 - `app/planner.py`: dynamic Slurm inventory, validation, packing, correction, directive generation
 - `app/slurm.py`: generated scripts, `srun` execution, audit logs, optimized REST submission

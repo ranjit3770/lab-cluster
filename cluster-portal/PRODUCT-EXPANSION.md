@@ -1,46 +1,27 @@
-Your current system supports:
+# Product Expansion Roadmap
 
-- ✅ Python scripts
-- ✅ Jupyter Lab
+Current supported workload entry points:
 
-👉 That’s a good start, but HPC portals usually support **many more workload types**.
+- Python scripts
+- Jupyter Lab
 
-Let’s expand this in a **practical, production-safe way** 👇
+This document lists practical, production-safe additions, prioritized. The
+guiding rule for every item:
 
----
-
-# 🔷 1. Core Principle (IMPORTANT)
-
-👉 You should **NOT change scheduling logic**
-👉 You should **expand execution capabilities**
-
-Think:
+> Do not change scheduling logic. Expand execution capabilities.
 
 ```text
 Portal = "how to run things"
-SLURM = "where/when to run"
+Slurm  = "where/when to run"
 ```
 
----
+## Planned Workload Types
 
-# 🔷 2. High-Value Additions (Recommended)
+### Phase 1 — Easy And High Impact
 
-## 🟢 1. Shell / Bash Jobs
+#### 1. Shell / Bash jobs
 
-![Image](https://www.cyberciti.biz/media/new/faq/2017/12/Give-execute-permission-to-your-script-on-Linux.png)
-
-![Image](https://hpc.nmsu.edu/onboarding/supercomputing/_images/slurm-commands-example.png)
-
-![Image](https://genomicsaotearoa.github.io/Workshop-Bash_Scripting_And_HPC_Job_Scheduler/nesi_images/anatomy_of_a_slurm_script.png)
-
-![Image](https://www.uhd.edu/images/computing/hpc/slurm/sbatch.png)
-
-### ✅ Why
-
-- Most HPC users already use `.sh` scripts
-- Needed for pipelines, automation
-
-### Example
+Most HPC users already use `.sh` scripts; needed for pipelines and automation.
 
 ```bash
 #!/bin/bash
@@ -51,100 +32,44 @@ echo "Running job"
 ./run_pipeline.sh
 ```
 
-👉 Just allow:
+Portal change: accept `.sh` entry points and execute them directly instead of
+assuming Python.
 
-- `.sh` entry points
-- Execute directly instead of python
+#### 2. Multi-language support
 
----
+| Language | Execution |
+| --- | --- |
+| C/C++ | `gcc main.c && ./a.out` |
+| Java | `javac Main.java && java Main` |
+| R | `Rscript script.R` |
+| MATLAB | `matlab -batch script` |
 
-## 🟢 2. Multi-language Support
+Detect the language by extension: `.c`, `.cpp`, `.java`, `.R`, `.m`.
 
-![Image](https://www.cyberciti.biz/media/new/faq/2014/04/gcc-verification.jpg)
+#### 3. Job templates
 
-![Image](https://itsfoss.com/content/images/wordpress/2021/09/running-java-programs-in-Linux-terminal.png)
+Predefined submission templates for common workloads: ML training, data
+processing, simulation.
 
-![Image](https://i.sstatic.net/la7EX.png)
+### Phase 2
 
-![Image](https://docs.posit.co/ide/user/ide/guide/code/images/quarto-execute-line.png)
+#### 4. GPU jobs
 
-### Support:
-
-| Language | Execution                      |
-| -------- | ------------------------------ |
-| C/C++    | `gcc main.c && ./a.out`        |
-| Java     | `javac Main.java && java Main` |
-| R        | `Rscript script.R`             |
-| MATLAB   | `matlab -batch script`         |
-
-👉 Detect by extension:
-
-- `.c`, `.cpp`, `.java`, `.R`, `.m`
-
----
-
-## 🟢 3. Docker / Container Jobs (VERY POWERFUL)
-
-![Image](https://media2.dev.to/dynamic/image/width%3D1000%2Cheight%3D420%2Cfit%3Dcover%2Cgravity%3Dauto%2Cformat%3Dauto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fvxanfmgvx7t0a5hi0xsz.png)
-
-![Image](https://ulhpc-tutorials.readthedocs.io/en/latest/containers/singularity/images/sing.png)
-
-![Image](https://superorbital.io/blog/slurm-an-hpc-scheduler-for-batch-workloads/slurm-layout.gif)
-
-![Image](https://slurm.schedmd.com/arch.gif)
-
-### ✅ Why
-
-- Avoid dependency issues
-- Reproducible environments
-
-### HPC standard:
-
-- Use **Singularity / Apptainer**
-
-### Example
-
-```bash
-singularity exec my_image.sif python train.py
-```
-
----
-
-## 🟢 4. GPU Jobs (High Demand)
-
-![Image](https://m.media-amazon.com/images/I/71MrVQbDSqL._UF1000%2C1000_QL80_.jpg)
-
-![Image](https://bizon-tech.com/media/catalog/product/cache/1/image/9df78eab33525d08d6e5fb8d27136e95/_/b/_banner-g7000-mobile_1_1.jpg)
-
-![Image](https://www.hpc.iastate.edu/sites/default/files/uploads/HPCHowTo/HPCCluster.JPG)
-
-![Image](https://cdn.prod.website-files.com/675823350267b290d7ca1c88/675823350267b290d7ca1f3b_hpc_cluster.png)
-
-### Add support:
-
-```bash
-#SBATCH --gres=gpu:1
-```
-
-👉 Portal input:
+Expose GRES requests in the portal input:
 
 ```json
 "gpu": 1
 ```
 
----
+which maps to:
 
-## 🟢 5. MPI / Parallel Jobs
+```bash
+#SBATCH --gres=gpu:1
+```
 
-![Image](https://raw.githubusercontent.com/AaltoSciComp/aaltoscicomp-graphics/master/figures/cluster-schematic/cluster-schematic-mpi.png)
+The planner already parses node GRES from live Slurm state.
 
-![Image](https://optics.ansys.com/hc/article_attachments/360059611974)
-
-![Image](https://ekatsevi.github.io/statistical-computing/figures/hpc-schematic.jpg)
-
-![Image](https://media.licdn.com/dms/image/v2/D5612AQGpyqo0EQgntg/article-cover_image-shrink_720_1280/article-cover_image-shrink_720_1280/0/1679687655296?e=2147483647&t=k-jR2CwFlQTrUG5txQx5oB8Hgut8ua_FyOwbZkSbHhQ&v=beta)
-
-### Example
+#### 5. MPI / parallel jobs
 
 ```bash
 #SBATCH --ntasks=8
@@ -152,143 +77,64 @@ singularity exec my_image.sif python train.py
 srun ./mpi_program
 ```
 
-👉 Needed for:
+Required for simulations and scientific workloads; the horizontal allocation
+mode already generates multi-task scripts with `srun`.
 
-- simulations
-- scientific workloads
+### Phase 3 — Advanced
 
----
+#### 6. Container jobs (Singularity/Apptainer)
 
-## 🟢 6. Workflow / Pipeline Jobs
+Reproducible environments without dependency conflicts — the HPC standard:
 
-### Tools:
-
-- Airflow (light integration)
-- Prefect
-- simple DAG runner
-
----
-
-### Example:
-
-```text
-Step1 → preprocess
-Step2 → train
-Step3 → evaluate
+```bash
+singularity exec my_image.sif python train.py
 ```
 
----
+#### 7. Workflow / pipeline jobs
 
-## 🟢 7. Interactive Terminal Jobs
+Chained steps such as preprocess → train → evaluate, via Airflow (light
+integration), Prefect, or a simple DAG runner.
 
-Instead of only Jupyter:
+#### 8. Interactive terminal jobs
+
+Beyond Jupyter:
 
 ```bash
 srun --pty bash
 ```
 
-👉 Useful for:
+Useful for debugging and manual runs.
 
-- debugging
-- manual runs
+### Backlog
 
----
+#### 9. Data management tools
 
-## 🟢 8. Data Management Tools
+Dataset upload, shared-storage mounting helpers, dataset versioning.
 
-- Upload datasets
-- Mount shared storage
-- Dataset versioning
+#### 10. Environment management
 
----
+Conda support in addition to venv, and environment modules
+(`module load cuda`).
 
-## 🟢 9. Job Templates (VERY USEFUL)
+## Implementation Notes
 
-Predefined templates:
-
-- ML training
-- Data processing
-- Simulation
-
----
-
-## 🟢 10. Environment Management
-
-Instead of only venv:
-
-- Conda support
-- Module system (`module load cuda`)
-
----
-
-# 🔷 3. What You Should Add FIRST (Priority)
-
-## 🥇 Phase 1 (Easy + High Impact)
-
-- ✅ Bash scripts
-- ✅ Multi-language support
-- ✅ Job templates
-
----
-
-## 🥈 Phase 2
-
-- ✅ GPU support
-- ✅ MPI jobs
-
----
-
-## 🥉 Phase 3 (Advanced)
-
-- ✅ Containers (Singularity)
-- ✅ Workflow pipelines
-
----
-
-# 🔷 4. Minimal Changes Needed in Your System
-
-You don’t need major changes.
-
-👉 Just update:
-
-### In `slurm.py`
-
-Replace:
+Minimal changes are required in the existing service. In
+`backend/job-api/app/slurm.py`, replace the fixed Python invocation:
 
 ```python
 "$VENV/bin/python" "{entry_script}"
 ```
 
-👉 With:
+with file-type detection that selects the runner:
 
-```python
-detect file type → run accordingly
-```
+| File type | Command |
+| --- | --- |
+| `.py` | python |
+| `.sh` | bash |
+| `.R` | Rscript |
+| `.cpp` | g++ + run |
+| `.java` | javac + java |
 
----
+## Summary
 
-# 🔷 5. Example Execution Mapping
-
-| File Type | Command      |
-| --------- | ------------ |
-| `.py`     | python       |
-| `.sh`     | bash         |
-| `.R`      | Rscript      |
-| `.cpp`    | g++ + run    |
-| `.java`   | javac + java |
-
----
-
-# 🔥 Final Recommendation
-
-👉 Don’t touch scheduler
-👉 Expand execution layer
-
----
-
-# 🔚 One-line Summary
-
-👉
-**Add more “what to run” (tools & languages), not “how to schedule”**
-
----
+Add more "what to run" (tools and languages), not "how to schedule".

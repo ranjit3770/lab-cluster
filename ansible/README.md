@@ -1,8 +1,9 @@
 # Ansible Cluster Automation
 
-Infrastructure automation for the Amrita Slurm cluster: provisioning, Slurm/Munge
-deployment, dual-boot OS switching, and node repair. All operations are
-inventory-driven and idempotent where possible.
+This directory contains all infrastructure automation for the Amrita Slurm
+cluster: provisioning, Slurm/Munge deployment, dual-boot OS switching, and node
+repair. Everything is inventory-driven from `inventory/hosts.ini` and designed
+to be idempotent where possible.
 
 ## Directory Layout
 
@@ -11,7 +12,7 @@ ansible/
 ├── ansible.cfg                  # Project config (inventory, logging, SSH tuning)
 ├── inventory/
 │   ├── hosts.ini                # Master inventory (Linux + Windows groups)
-│   ├── group_vars/              # Group variables (Windows vault vars)
+│   ├── group_vars/              # Group variables (Windows vault variables)
 │   ├── cluster-info.json        # Cluster metadata
 │   ├── mac_addresses.json       # Discovered worker MACs
 │   └── ubuntu_mac_addresses.json
@@ -24,15 +25,18 @@ ansible/
     │   ├── slurm/               # Step-by-step Slurm install tasks
     │   └── finally/             # Append, repair, status, restart utilities
     └── os-switching/            # Dual-boot Ubuntu <-> Windows control
-        ├── boot_to_ubuntu.yml           # Windows -> Ubuntu next boot (portal-invoked)
-        ├── setup_windows_idle.yml       # Windows idle auto-reboot scheduler (portal-invoked)
-        ├── setup_windows_idle_5m.yml    # 5-minute idle variant (testing)
-        ├── ensure_ubuntu_boot_target_auto.yml  # One-command dual-boot workflow
-        ├── set_grub_default_targeted.yml       # Persistent Ubuntu GRUB default
+        ├── boot_to_ubuntu.yml                 # Windows -> Ubuntu next boot (portal-invoked)
+        ├── setup_windows_idle.yml             # Windows idle auto-reboot scheduler (portal-invoked)
+        ├── setup_windows_idle_5m.yml          # 5-minute idle variant (testing)
+        ├── ensure_ubuntu_boot_target_auto.yml # One-command dual-boot workflow
+        ├── set_grub_default_targeted.yml      # Persistent Ubuntu GRUB default
         └── set_ubuntu_boot_from_windows_targeted.yml
 ```
 
-The operator entrypoint (run from this directory):
+## Quick Start
+
+The guided entrypoint handles both major operations. Run it from this
+(`ansible/`) directory:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/cluster_manage.yml --ask-vault-pass
@@ -40,19 +44,17 @@ ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbook
 
 When prompted, choose:
 
-- `setup` for a fresh or full Slurm cluster setup.
-- `append` to add one new worker node to an existing working cluster.
+| Mode | Use when |
+| --- | --- |
+| `setup` | Fresh cluster build or full rebuild of an existing cluster. |
+| `append` | Adding one new worker node to an already working cluster. |
 
-## Main Documents
+Detailed procedures:
 
-- [Fresh Slurm Cluster Setup](../docs/FRESH-SLURM-CLUSTER-SETUP.md)
-  Full setup procedure for building or rebuilding the cluster.
-- [Append a New Slurm Worker Node](../docs/APPEND-NEW-NODE.md)
-  Safe procedure for adding one new worker without rebuilding existing nodes.
-- [Vault Setup](../docs/VAULT-SETUP.md)
-  Notes for encrypted variables, especially Windows inventory variables.
-- [Dual-Boot Fix Reference](../docs/FIX-BOOT-ISSUE.md)
-  Boot-order troubleshooting for dual-boot workers.
+- [Fresh Slurm Cluster Setup](../docs/FRESH-SLURM-CLUSTER-SETUP.md) — full build/rebuild procedure.
+- [Append a New Slurm Worker Node](../docs/APPEND-NEW-NODE.md) — safe single-node addition.
+- [Vault Setup](../docs/VAULT-SETUP.md) — encrypted variables, especially Windows credentials.
+- [Dual-Boot Fix Reference](../docs/FIX-BOOT-ISSUE.md) — boot-order troubleshooting.
 
 ## Key Files
 
@@ -67,7 +69,7 @@ When prompted, choose:
 | `playbooks/os-switching/set_grub_default_targeted.yml` | Sets persistent Ubuntu GRUB default on selected Linux hosts via `target_hosts`. |
 | `playbooks/os-switching/boot_to_ubuntu.yml` | Sets Windows nodes to boot Ubuntu once; also invoked by the portal API. |
 
-## Inventory Pattern
+## Inventory And Node Naming
 
 Linux Slurm nodes use underscore inventory names:
 
@@ -87,7 +89,8 @@ head_node     -> head-node
 worker_node1  -> worker-node1
 ```
 
-Keep this pattern consistent when adding new workers.
+Keep this pattern consistent when adding new workers — the configuration
+generator depends on it.
 
 Dual-boot nodes have two inventory names for the same machine/IP:
 
@@ -96,29 +99,46 @@ worker_node28          -> Linux/Ubuntu SSH inventory entry
 windows_worker_node28  -> Windows WinRM inventory entry
 ```
 
-Use the entry that matches the operating system currently running on the node. If
-the node is currently Windows, `worker_node28` will fail because SSH port `22`
+Use the entry that matches the operating system currently running on the node.
+If the node is currently Windows, `worker_node28` fails because SSH port `22`
 is not available.
 
-## Common Commands
+## Command Reference
 
-All commands are run from this (`ansible/`) directory.
+All commands run from this (`ansible/`) directory.
+`--ask-vault-pass` is needed only when encrypted group variables are in use.
 
-Run the guided setup/append entrypoint:
+### Deploy / repair the cluster
+
+Guided entrypoint (choose `setup` or `append` when prompted):
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/cluster_manage.yml --ask-vault-pass
 ```
 
-Run full Slurm setup directly:
+Full Slurm setup directly:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/step4_main.yml --ask-vault-pass
 ```
 
-During full setup, the playbook displays detected CPU and RAM for every Slurm
-node before writing `slurm.conf`. Press Enter to use detected values, or enter
-CPU/RAM caps directly at the prompts. You can also pass caps non-interactively:
+Append one worker directly:
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/finally/append_slurm_node.yml --ask-vault-pass
+```
+
+Repair unhealthy Slurm nodes (`UNKNOWN`, `INVALID`, `DOWN`, `DRAIN`):
+
+```bash
+ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/finally/repair_unknown_slurm_nodes.yml --ask-vault-pass
+```
+
+### Control advertised CPU/RAM during setup
+
+Before writing `slurm.conf`, the setup displays detected CPU and RAM for every
+Slurm node. Press Enter to use detected values, enter caps at the prompts, or
+pass caps non-interactively:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/step4_main.yml --ask-vault-pass -e slurm_cpu_cap_per_node=12 -e slurm_memory_cap_mb_per_node=12288
@@ -131,52 +151,46 @@ ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbook
 ```
 
 Strict cgroup enforcement is intentionally opt-in because some lab images do not
-expose a compatible cgroup hierarchy to the locally built Slurm daemons. The
-stable default still schedules CPU/RAM with `select/cons_tres` and
-`CR_Core_Memory`, using `proctrack/linuxproc` plus `task/affinity` so `slurmd`
-stays healthy during demos. Enable strict cgroups only after OS support is verified:
+expose a compatible cgroup hierarchy to the locally built Slurm daemons. Enable
+strict cgroups only after OS support is verified:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/step4_main.yml --ask-vault-pass -e enable_slurm_cgroups=true
 ```
 
-Append one worker directly:
+See [Slurm Resource Enforcement](#slurm-resource-enforcement) for what each
+mode configures.
 
-```bash
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/finally/append_slurm_node.yml --ask-vault-pass
-```
+### OS switching — automatic (recommended)
 
-Repair unhealthy Slurm nodes:
-
-```bash
-ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/finally/repair_unknown_slurm_nodes.yml --ask-vault-pass
-```
-
-Automatically ensure selected dual-boot nodes boot Ubuntu, regardless of their
-current OS:
+Ensure selected dual-boot nodes end up booted into Ubuntu, regardless of which
+OS they currently run. This playbook takes the **Linux** inventory name as
+input:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/ensure_ubuntu_boot_target_auto.yml -e target_hosts=worker_node28 --ask-vault-pass
 ```
 
-Target multiple dual-boot nodes:
+Multiple dual-boot nodes:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/ensure_ubuntu_boot_target_auto.yml -e "target_hosts=worker_node27:worker_node28" --ask-vault-pass
 ```
 
-This automatic playbook uses the Linux inventory name as operator input. If the
-node is already Ubuntu, it applies the GRUB default directly. If the node is
-Windows, it maps to `windows_worker_nodeXX`, applies the Windows boot changes,
-reboots, waits for Ubuntu SSH, then applies the Linux GRUB default.
+Behavior: if the node is already Ubuntu, the GRUB default is applied directly.
+If the node is Windows, it maps `worker_node28` to `windows_worker_node28`,
+applies the Windows boot changes, reboots, waits for Ubuntu SSH, then applies
+the Linux GRUB default.
 
-Set Ubuntu as default GRUB entry on one selected Linux node:
+### OS switching — manual step-by-step
+
+Set Ubuntu as the persistent default GRUB entry on selected **Linux** nodes:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/set_grub_default_targeted.yml -e target_hosts=worker_node28
 ```
 
-Multiple selected Linux nodes:
+Multiple Linux nodes:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/set_grub_default_targeted.yml -e "target_hosts=worker_node27:worker_node28"
@@ -194,7 +208,8 @@ Force reboot without prompt when GRUB changed:
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/set_grub_default_targeted.yml -e target_hosts=worker_node28 -e reboot=yes
 ```
 
-Set a currently-Windows dual-boot node to boot Ubuntu next:
+Set a currently-**Windows** dual-boot node to boot Ubuntu next (uses the
+Windows inventory name):
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/set_ubuntu_boot_from_windows_targeted.yml -e target_hosts=windows_worker_node28 --ask-vault-pass
@@ -206,7 +221,7 @@ Force the Windows-to-Ubuntu reboot without the confirmation prompt:
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/set_ubuntu_boot_from_windows_targeted.yml -e target_hosts=windows_worker_node28 -e reboot=yes --ask-vault-pass
 ```
 
-Target multiple currently-Windows dual-boot nodes:
+Target multiple currently-Windows nodes:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/set_ubuntu_boot_from_windows_targeted.yml -e "target_hosts=windows_worker_node27:windows_worker_node28" --ask-vault-pass
@@ -218,31 +233,52 @@ Skip waiting for Ubuntu SSH after reboot:
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/set_ubuntu_boot_from_windows_targeted.yml -e target_hosts=windows_worker_node28 -e wait_for_linux=false --ask-vault-pass
 ```
 
-After the node is back in Ubuntu, use the Linux inventory entry to make Ubuntu
-the persistent GRUB default:
+After the node is back in Ubuntu, make Ubuntu the persistent GRUB default using
+the Linux entry:
 
 ```bash
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/set_grub_default_targeted.yml -e target_hosts=worker_node28 -e reboot=no
 ```
 
-Syntax-check the main entrypoints without changing cluster machines:
+### Validate without changing anything
+
+Syntax-check the main entrypoints:
 
 ```bash
 ansible-playbook -i inventory/hosts.ini playbooks/deployment/cluster_manage.yml --syntax-check
 ansible-playbook -i inventory/hosts.ini playbooks/os-switching/ensure_ubuntu_boot_target_auto.yml --syntax-check
 ```
 
-## Operating Rules
+## Slurm Resource Enforcement
 
-- Use playbooks for cluster changes; no manual Slurm repair except emergencies.
-- Use `append` mode for one new worker.
-- Use `setup` mode only for fresh setup or full rebuild.
-- Keep `inventory/hosts.ini` current and backed up with the cluster configuration.
-- Review playbook output at the end for final `sinfo` and `slurmd` status.
-- Playbook output and failures are logged to `../logs/playbook-errors.log`.
-- If this repository moves to another host/path, update `cluster_root` in
-  `inventory/group_vars/all.yml` — it is the single base-path variable used by
-  playbooks.
+The generated Slurm configuration always uses production-style consumable
+resource scheduling:
+
+- `SelectType=select/cons_tres`
+- `SelectTypeParameters=CR_Core_Memory`
+
+Two service modes exist:
+
+| Setting | Stable default (opt-out) | Strict cgroups (`-e enable_slurm_cgroups=true`) |
+| --- | --- | --- |
+| ProctrackType | `proctrack/linuxproc` | `proctrack/cgroup` |
+| TaskPlugin | `task/affinity` | `task/cgroup` |
+| JobAcctGatherType | `jobacct_gather/linux` | `jobacct_gather/cgroup` |
+| CgroupPlugin | `cgroup/v1` | `cgroup/v1` |
+| Constraints | — | `ConstrainCores=yes`, `ConstrainRAMSpace=yes`, `ConstrainSwapSpace=yes`, `ConstrainDevices=yes` |
+
+In both modes Slurm schedules CPU and memory as consumable resources. In stable
+default mode, Linux process tracking keeps services reliable on mixed lab
+hardware. In strict cgroup mode, the kernel also hard-limits each allocation. A
+job requesting `--cpus-per-task=2 --mem=2G` is scheduled against exactly that
+allocation, and with cgroups enabled it is additionally enforced by the kernel.
+
+Quick runtime verification after deployment:
+
+```bash
+scontrol show config | egrep 'SelectType|SelectTypeParameters|ProctrackType|TaskPlugin|JobAcctGatherType'
+scontrol show node worker-node28
+```
 
 ## Portal Integration
 
@@ -256,61 +292,22 @@ Two `os-switching` playbooks are invoked automatically by the Cluster Portal
 The portal generates a temporary per-node inventory, so those calls do not use
 `hosts.ini`. Keep both filenames stable if refactoring.
 
-## Slurm Resource Enforcement
-
-The generated Slurm configuration always uses production-style consumable
-resource scheduling:
-
-- `SelectType=select/cons_tres`
-- `SelectTypeParameters=CR_Core_Memory`
-
-Stable default service mode:
-
-- `ProctrackType=proctrack/linuxproc`
-- `TaskPlugin=task/affinity`
-- `JobAcctGatherType=jobacct_gather/linux`
-- `CgroupPlugin=cgroup/v1`
-
-Strict cgroup mode with `-e enable_slurm_cgroups=true`:
-
-- `ProctrackType=proctrack/cgroup`
-- `TaskPlugin=task/cgroup`
-- `JobAcctGatherType=jobacct_gather/cgroup`
-- `ConstrainCores=yes`
-- `ConstrainRAMSpace=yes`
-- `ConstrainSwapSpace=yes`
-- `ConstrainDevices=yes`
-
-This means Slurm schedules CPU and memory as consumable resources. In stable
-default mode, Slurm reserves and accounts for resources while Linux process
-tracking keeps services reliable. In strict cgroup mode, Linux cgroups also
-enforce the allocation at runtime. A job requesting `--cpus-per-task=2
---mem=2G` should be scheduled against exactly that allocation, and with cgroups
-enabled it should also be hard-limited by the kernel.
-
-Quick runtime verification after deployment:
-
-```bash
-scontrol show config | egrep 'SelectType|SelectTypeParameters|ProctrackType|TaskPlugin|JobAcctGatherType'
-scontrol show node worker-node28
-```
-
 ## Responsibility Split
-
-Keep Ansible and the portal responsibilities separate:
 
 - **Ansible** provisions operating systems, Slurm, Munge, controller services,
   workers, and repair actions.
 - **Cluster Portal** manages users, quotas, job submission, registered access
   nodes, dashboards, and the admin-only Node Management view.
-- **Node naming** should remain consistent between `inventory/hosts.ini`,
-  Slurm node names, and portal-registered access nodes so operators can quickly
-  match scheduler state with portal inventory.
-- **Windows nodes** should stay in the appropriate Ansible inventory/vault
-  workflow. The portal Node Management page can display Windows access targets
-  after they are registered in the portal, but it does not provision them.
+- **Node naming** should stay consistent between `inventory/hosts.ini`, Slurm
+  node names, and portal-registered access nodes so scheduler state maps
+  cleanly onto portal inventory.
+- **Windows nodes** stay in the Ansible inventory/vault workflow. The portal
+  Node Management page can display Windows access targets after they are
+  registered, but it does not provision them.
 
-## Full Setup Flow
+## How The Flows Work Internally
+
+### Full setup flow
 
 Managed by `playbooks/deployment/step4_main.yml`, which imports the Slurm tasks
 in order:
@@ -332,7 +329,7 @@ in order:
 See [Fresh Slurm Cluster Setup](../docs/FRESH-SLURM-CLUSTER-SETUP.md) for the
 full operator procedure.
 
-## Append Flow
+### Append flow
 
 Managed by `playbooks/deployment/finally/append_slurm_node.yml`. It prepares
 only the requested new worker, regenerates controller configuration from
@@ -341,3 +338,15 @@ all workers.
 
 See [Append a New Slurm Worker Node](../docs/APPEND-NEW-NODE.md) for the
 detailed procedure.
+
+## Operating Rules
+
+- Use playbooks for cluster changes; no manual Slurm repair except emergencies.
+- Use `append` mode for one new worker.
+- Use `setup` mode only for fresh setup or full rebuild.
+- Keep `inventory/hosts.ini` current and backed up with the cluster configuration.
+- Review playbook output at the end for final `sinfo` and `slurmd` status.
+- Playbook output and failures are logged to `../logs/playbook-errors.log`.
+- If this repository moves to another host/path, update `cluster_root` in
+  `inventory/group_vars/all.yml` — it is the single base-path variable used by
+  playbooks.

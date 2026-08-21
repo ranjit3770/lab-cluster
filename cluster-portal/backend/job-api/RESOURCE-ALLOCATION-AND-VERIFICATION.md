@@ -1,6 +1,23 @@
-# Job API Resource Allocation and Verification
+# Job API Resource Allocation And Verification
 
-This document explains how the portal job-api converts user requests into Slurm allocations, how it avoids wasting cluster resources, and how users/operators can verify that Jupyter and Python jobs are running inside the assigned CPU and memory limits.
+This document explains how the portal job-api converts user requests into
+Slurm allocations, how it avoids wasting cluster resources, and how users and
+operators can verify that Jupyter and Python jobs run inside their assigned
+CPU and memory limits.
+
+## Contents
+
+1. [Production Rule](#production-rule)
+2. [User Request Model](#user-request-model)
+3. [Allocation Strategy](#allocation-strategy)
+4. [No-Waste Logic](#no-waste-logic)
+5. [Submission Transport](#submission-transport)
+6. [Generated Runtime Contract](#generated-runtime-contract)
+7. [Verify From Head Node](#verify-from-head-node)
+8. [Verify Inside Jupyter](#verify-inside-jupyter)
+9. [Verify Inside Python App](#verify-inside-python-app)
+10. [Job Logs](#job-logs)
+11. [Operational Notes](#operational-notes)
 
 ## Production Rule
 

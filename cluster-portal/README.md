@@ -1,86 +1,115 @@
-# Strach Portal // HPC Management Interface
+# Cluster Portal — Strach HPC Management Interface
 
-A professional, high-density control plane for modern HPC clusters. Designed for researchers and administrators to manage Slurm workloads, compute resources, and system governance with a premium, terminal-inspired aesthetic.
+A control plane for the Amrita Slurm cluster. Researchers submit and monitor
+workloads; administrators manage users, quotas, registered access nodes, and
+system governance.
 
-## 🚀 Core Capabilities
+## What It Provides
 
-### 1. Research & Workload Dispatch
-- **Interactive Jupyter Hub**: Provision isolated Jupyter Lab environments with automatic user identity mapping.
-- **Batch Workload Registry**: Streamlined submission of Python workloads with pip dependency management and real-time log telemetry.
-- **Job Monitoring**: Live status tracking (Pending, Running, Completed, Failed) with detailed output/error log streaming.
+### Researcher workloads
 
-### 2. Unified Management Console
-- **Platform Configuration**: Centralized control over Slurm REST API (v0.0.44), session constraints, and identity providers.
-- **Job Registry Enforcement**: Administrative caps for concurrent batch and interactive sessions per user.
-- **Maintenance Governance**: Global system lock with IP-based whitelisting for seamless infrastructure upgrades.
-- **Admin Diagnostic Tools**: Integrated terminal console for direct node access and fabric troubleshooting.
-- **Node Management**: Admin-only two-column inventory view that groups registered access nodes into Ubuntu and Windows pools without changing Slurm or Ansible state.
+| Capability | Description |
+| --- | --- |
+| Interactive Jupyter Hub | Isolated Jupyter Lab environments with automatic user identity mapping. |
+| Batch Python jobs | Submission with pip dependency management and real-time log streaming. |
+| Job monitoring | Live status (Pending, Running, Completed, Failed) with output/error log streaming. |
 
-### 3. Resource & Identity Governance
-- **Quota Management**: Individualized CPU, RAM, and Storage allocations per researcher.
-- **Cluster Inventory**: Federated view of Slurm compute nodes and administrative gateway nodes.
-- **Audit & Feedback**: Integrated system feedback loop for researcher-administrator communication.
+### Administration
 
-## 🧭 Operator Workflow
+| Capability | Description |
+| --- | --- |
+| Platform Config | Central control of Slurm REST API (v0.0.44), session constraints, identity providers. |
+| Job Setting | Administrative caps for concurrent batch and interactive sessions per user. |
+| Maintenance Mode | Global system lock with IP whitelisting for infrastructure upgrades. |
+| Admin Tools | Registered access-node inventory plus a diagnostic SSH terminal console. |
+| Node Management | Admin-only two-column inventory grouping registered nodes into Ubuntu and Windows pools; changes no Slurm or Ansible state. |
 
-1. **Register access nodes** in `Management -> Slurm Nodes`. This is the portal-owned inventory used for SSH/RDP/WinRM access and diagnostics.
-2. **Review grouped inventory** in `Management -> Node Management`. Ubuntu/Linux nodes and Windows nodes are grouped from live SSH/RDP/WinRM probes first, then saved OS Family, then metadata fallback.
-3. **Monitor Slurm resources** from `Nodes`, `Dashboard`, and `Jobs`. Slurm resource counts come from the Slurm integration, while Node Management only shows portal-registered access targets.
-4. **Submit workloads** from the user or admin job workflows. The Job-API dynamically plans CPU, memory, walltime, and submission scripts from live Slurm state.
+### Governance
 
-Keep infrastructure changes in the Ansible project. The portal should manage user-facing workflows, inventory visibility, job submission, and operational observability.
+| Capability | Description |
+| --- | --- |
+| Quota management | Per-researcher CPU, RAM, and storage allocations. |
+| Cluster inventory | Federated view of Slurm compute nodes and administrative gateway nodes. |
+| Audit & feedback | System feedback channel between researchers and administrators. |
 
-For dual-boot or repurposed nodes, refresh `Node Management` after changing the machine state. If Windows remote ports are blocked, update the portal OS Family in `Management -> Slurm Nodes` as a fallback.
+## Operator Workflow
+
+1. **Register access nodes** in `Management -> Slurm Nodes`. This is the
+   portal-owned inventory used for SSH/RDP/WinRM access and diagnostics.
+2. **Review grouped inventory** in `Management -> Node Management`. Nodes are
+   grouped by live SSH/RDP/WinRM probes first, then saved OS Family, then
+   metadata fallback.
+3. **Monitor Slurm resources** from `Nodes`, `Dashboard`, and `Jobs`. Slurm
+   counts come from the Slurm integration; Node Management shows only
+   portal-registered access targets.
+4. **Submit workloads** through the job workflows. The Job-API plans CPU,
+   memory, walltime, and submission scripts from live Slurm state.
+
+Division of responsibility: infrastructure changes belong in the
+[Ansible project](../ansible/README.md). The portal owns user-facing
+workflows, inventory visibility, job submission, and observability.
+
+For dual-boot or repurposed nodes, refresh `Node Management` after changing
+the machine state. If Windows remote ports are blocked, set the OS Family
+manually in `Management -> Slurm Nodes`.
 
 ## Resource Enforcement Contract
 
-The portal and Job-API request CPU/RAM through Slurm; they do not enforce kernel resource limits by themselves. Strict runtime enforcement must be configured by the Ansible Slurm setup:
+The portal and Job-API request CPU/RAM through Slurm; they do not enforce
+kernel resource limits themselves. Strict runtime enforcement is configured by
+the Ansible Slurm setup:
 
-- `SelectType=select/cons_tres`
-- `SelectTypeParameters=CR_Core_Memory`
-- `ProctrackType=proctrack/cgroup`
-- `TaskPlugin=task/cgroup`
-- `JobAcctGatherType=jobacct_gather/cgroup`
-- `ConstrainCores=yes`
-- `ConstrainRAMSpace=yes`
+```text
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+ProctrackType=proctrack/cgroup      # strict mode
+TaskPlugin=task/cgroup              # strict mode
+JobAcctGatherType=jobacct_gather/cgroup
+ConstrainCores=yes
+ConstrainRAMSpace=yes
+```
 
-With that contract in place, a portal job requesting 1 CPU and 1 GB RAM is submitted as a Slurm allocation and enforced by Slurm cgroups on the compute node.
+With that contract in place, a portal job requesting 1 CPU and 1 GB RAM is
+submitted as a Slurm allocation and enforced by Slurm cgroups on the compute
+node. See
+[Resource Allocation and Verification](backend/job-api/RESOURCE-ALLOCATION-AND-VERIFICATION.md).
 
-## 🛠️ Technology Stack
+## Technology Stack
 
-- **Framework**: React + Vite (Frontend), FastAPI (Backend & Job-API)
-- **Database**: MariaDB 10.6 (Persistent Identity & Job Registry)
-- **Slurm Integration**: Slurm REST API v0.0.44 via Unix Socket
-- **Styling**: Tailwind CSS + Radix UI + Lucide Icons
-- **Aesthetic**: Custom High-Density "Datadog-Inspired" Monotonic Design
+| Layer | Technology |
+| --- | --- |
+| Frontend | React + Vite, Tailwind CSS, Radix UI, Lucide Icons |
+| Backend & Job-API | FastAPI |
+| Database | MariaDB 10.6 (identity + job registry) |
+| Slurm integration | Slurm REST API v0.0.44 via Unix socket |
 
-## 📦 Deployment & Development
+## Running The Portal
 
-### Local Development
+### Local development
+
 ```bash
-# Clone the repository
-git clone <repository-url>
-
-# Start Frontend
+# Frontend
 cd frontend && npm install && npm run dev
 
-# Start Backend (Requires Python 3.9+)
+# Backend (Python 3.9+)
 cd backend && pip install -r requirements.txt && python app/main.py
 ```
 
-### Production Environment (Docker Persistence)
-The portal is production-ready with a containerized architecture. Database volumes are persistent.
+### Production (Docker)
 
 ```bash
-# Start the full stack
 docker-compose up -d --build
-
-# 🛑 AVOID deleting existing data:
-# DO NOT use 'docker-compose down -v' as it will destroy persistent volumes.
-# Use 'docker-compose down' (without -v) to stop services while keeping data.
 ```
 
-For Docker Compose v1 recreate errors such as `KeyError: 'ContainerConfig'`, stop and remove only the affected portal containers, keep the database volume, then recreate services:
+Database volumes are persistent.
+
+**Never run `docker-compose down -v`** — it destroys persistent data. Use plain
+`docker-compose down` to stop services while keeping data.
+
+#### Docker Compose v1 recreate errors
+
+For failures such as `KeyError: 'ContainerConfig'`, stop and remove only the
+affected portal containers, keep the database volume, then recreate:
 
 ```bash
 docker-compose stop backend job-api frontend
@@ -89,10 +118,21 @@ docker-compose up -d database
 docker-compose up -d --no-deps --force-recreate backend job-api frontend
 ```
 
-## 🔐 Administrative Credentials
-Default users seeded by `initial_data.py`:
-- **Admin**: `admin` / `admin123`
-- **Ranjithks (Admin)**: `ranjithks` / `ranjit123`
+## Default Administrative Users
 
----
-*Developed for advanced research environments requiring robust scheduling and secure data isolation.*
+Seeded by `initial_data.py`:
+
+| User | Password | Role |
+| --- | --- | --- |
+| `admin` | `admin123` | Admin |
+| `ranjithks` | `ranjit123` | Admin |
+
+## Documentation Index
+
+| Document | Description |
+| --- | --- |
+| [Frontend guide](frontend/README.md) | UI architecture, navigation, RBAC, design system. |
+| [Backend guide](backend/README.md) | FastAPI registry, inventory contract, environment. |
+| [Job-API guide](backend/job-api/README.md) | Job submission service overview and doc index. |
+| [Slurm REST usage](REST-USAGE.md) | What slurmrestd provides to the portal. |
+| [Product expansion roadmap](PRODUCT-EXPANSION.md) | Planned workload types, phased. |

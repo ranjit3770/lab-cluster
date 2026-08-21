@@ -1,32 +1,32 @@
-#### 1. Encrypting Specific Variables
+# Vault Setup
 
-Instead of encrypting your whole `hosts.ini`, it is better to encrypt only the password inside a `group_vars` file.
+How to encrypt sensitive Ansible variables (for example the Windows
+administrator password) with `ansible-vault`, instead of encrypting the whole
+`hosts.ini`.
 
-**Step 1: Create the variable file**
+The pattern: store secrets in an encrypted `group_vars` file and reference the
+variable name from the inventory.
 
-Bash
+## Step 1 — Create The Encrypted Variable File
 
-```
+```bash
 ansible-vault create group_vars/windows_node.yml
-
 ```
 
-**Step 2: Inside the file, define your password**
+## Step 2 — Define The Secret Inside It
 
-YAML
-
-```
+```yaml
 win_admin_pass: "MySuperSecretPassword123"
-
 ```
 
-**Step 3: Reference it in your Inventory or Playbook**
+Save and exit; the file is now encrypted on disk.
 
-In your `hosts.ini`, you simply use the variable name:
+## Step 3 — Reference The Variable From The Inventory
 
-Ini, TOML
+In `inventory/hosts.ini`, use the variable name instead of a plaintext
+password:
 
-```
+```ini
 [windows_nodes]
 worker_node1 ansible_host=172.17.181.170
 
@@ -38,20 +38,21 @@ ansible_winrm_server_cert_validation=ignore
 ansible_winrm_transport=ntlm
 ansible_port=5985
 ansible_winrm_scheme=http
-
-
 ```
 
-----------
+## Step 4 — Test
 
-**Step 4: Testing**
+Ansible pauses for the vault password before running tasks:
 
-Ansible will pause and ask you to type the vault password before starting the tasks.
-
-Bash
-
-```
+```bash
 ansible windows_nodes -i inventory/hosts.ini -m win_ping --ask-vault-pass
-
 ```
----
+
+A successful pong confirms both WinRM connectivity and vault decryption.
+
+## Notes
+
+- All playbook commands in this repository that touch Windows variables use
+  `--ask-vault-pass`; see [Ansible Cluster Automation](../ansible/README.md).
+- Keep the vault password out of the repository. Share it with operators
+  through your approved secret-distribution process.
