@@ -1,0 +1,96 @@
+---
+- name: Install Slurm and Munge Dependencies
+  hosts: cluster_nodes
+  become: yes
+  tasks:
+    - name: Check if antigravity.list exists
+      stat:
+        path: /etc/apt/sources.list.d/antigravity.list
+      register: antigravity_stat
+
+    - name: Fix Antigravity APT source architecture (Add arch=amd64)
+      replace:
+        path: /etc/apt/sources.list.d/antigravity.list
+        regexp: '^deb \[(signed-by=[^ \]]*)\]'
+        replace: 'deb [\1 arch=amd64]'
+      when: antigravity_stat.stat.exists
+
+    - name: Check if nodesource.list exists
+      stat:
+        path: /etc/apt/sources.list.d/nodesource.list
+      register: nodesource_stat
+
+    - name: Fix NodeSource APT source architecture (Add arch=amd64)
+      replace:
+        path: /etc/apt/sources.list.d/nodesource.list
+        regexp: '^deb \[(signed-by=[^ \]]*)\]'
+        replace: 'deb [\1 arch=amd64]'
+      when: nodesource_stat.stat.exists
+
+    - name: Disable unreachable Veyon PPA to prevent apt update errors
+      shell: rm -f /etc/apt/sources.list.d/*veyon*.list /etc/apt/sources.list.d/*veyon*.sources || true
+      ignore_errors: yes
+
+    - name: Kill stuck apt processes and background upgrades (which use Python 3)
+      shell: killall -9 apt apt-get dpkg unattended-upgrade || true
+      ignore_errors: yes
+
+    - name: Forcefully remove apt lock files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /var/lib/apt/lists/lock
+        - /var/cache/apt/archives/lock
+        - /var/lib/dpkg/lock
+        - /var/lib/dpkg/lock-frontend
+
+    - name: Fix interrupted dpkg configuration
+      shell: dpkg --configure -a
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+      ignore_errors: yes
+
+    - name: Confirm APT Cache Update
+      pause:
+        prompt: |
+
+          ================================================================================
+          [ATTENTION REQUIRED] Playbook is about to update the APT cache.
+          Type 'yes' to proceed with the update.
+          Type 'no' to skip updating the cache.
+          ================================================================================
+          Your choice: 
+      register: apt_prompt
+      run_once: true
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+      ignore_errors: yes
+      when: (apt_prompt.user_input | default('yes') | lower) in ['y', 'yes']
+
+    - name: Install build-essential and required libraries
+      apt:
+        name:
+          - build-essential
+          - munge
+          - libmunge-dev
+          - libhwloc-dev
+          - libssl-dev
+          - libjson-c-dev
+          - libpam0g-dev
+          - libmysqlclient-dev
+          - curl
+          - python3
+        state: present
+        force_apt_get: yes
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Ensure Munge service is started and enabled
+      service:
+        name: munge
+        state: started
+        enabled: yes

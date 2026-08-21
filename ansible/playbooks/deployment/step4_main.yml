@@ -1,0 +1,20 @@
+---
+- name: Full Slurm Cluster Deployment
+  hosts: head_nodes,cluster_nodes
+  # This master playbook imports all sub-steps in sequence
+
+- import_playbook: slurm/step1_cleanup_slurm.yml
+- import_playbook: slurm/step2_install_dependencies.yml
+- import_playbook: slurm/step3_setup_munge_perms.yml
+- import_playbook: slurm/step4_sync_munge_key.yml
+- import_playbook: slurm/step5_verify_munge.yml
+- import_playbook: slurm/step6_build_slurm.yml
+- import_playbook: slurm/step7_setup_slurm_env.yml
+- import_playbook: slurm/step8_configure_slurm_dynamic.yml
+- import_playbook: slurm/step8_1_setup_slurmdb.yml
+- import_playbook: slurm/step8_2_fix_slurmdbd.yml
+- import_playbook: slurm/step9_deploy_services.yml
+- import_playbook: slurm/step10_start_slurm.yml
+- import_playbook: slurm/step10-1_fixes.yml
+- import_playbook: slurm/step11_online_verification.yml
+- import_playbook: finally/repair_unknown_slurm_nodes.yml

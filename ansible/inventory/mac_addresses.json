@@ -1,0 +1,110 @@
+                                                        [
+    {
+        "host": "worker_node1",
+        "mac": "4c:cf:7c:31:0e:de"
+    },
+    {
+        "host": "worker_node2",
+        "mac": "4c:cf:7c:2c:79:f6"
+    },
+    {
+        "host": "worker_node3",
+        "mac": "4c:cf:7c:30:fd:a9"
+    },
+    {
+        "host": "worker_node4",
+        "mac": "4c:cf:7c:31:0f:26"
+    },
+    {
+        "host": "worker_node5",
+        "mac": "4c:cf:7c:2c:7b:35"
+    },
+    {
+        "host": "worker_node6",
+        "mac": "4c:cf:7c:2c:79:c7"
+    },
+    {
+        "host": "worker_node7",
+        "mac": "4c:cf:7c:31:00:ac"
+    },
+    {
+        "host": "worker_node8",
+        "mac": "4c:cf:7c:30:ff:ff"
+    },
+    {
+        "host": "worker_node9",
+        "mac": "4c:cf:7c:30:fd:a0"
+    },
+    {
+        "host": "worker_node10",
+        "mac": "4c:cf:7c:2c:79:b9"
+    },
+    {
+        "host": "worker_node11",
+        "mac": "4c:cf:7c:30:fe:02"
+    },
+    {
+        "host": "worker_node12",
+        "mac": "4c:cf:7c:31:00:97"
+    },
+    {
+        "host": "worker_node13",
+        "mac": "4c:cf:7c:31:0e:23"
+    },
+    {
+        "host": "worker_node14",
+        "mac": "4c:cf:7c:31:10:35"
+    },
+    {
+        "host": "worker_node15",
+        "mac": "4c:cf:7c:30:ff:84"
+    },
+    {
+        "host": "worker_node16",
+        "mac": "4c:cf:7c:31:0e:34"
+    },
+    {
+        "host": "worker_node17",
+        "mac": "4c:cf:7c:2c:62:eb"
+    },
+    {
+        "host": "worker_node18",
+        "mac": "4c:cf:7c:31:0e:3c"
+    },
+    {
+        "host": "worker_node19",
+        "mac": "4c:cf:7c:31:02:c1"
+    },
+    {
+        "host": "worker_node20",
+        "mac": "4c:cf:7c:31:0e:15"
+    },
+    {
+        "host": "worker_node21",
+        "mac": "4c:cf:7c:31:0e:20"
+    },
+    {
+        "host": "worker_node22",
+        "mac": "4c:cf:7c:31:0f:40"
+    },
+    {
+        "host": "worker_node23",
+        "mac": "4c:cf:7c:30:fd:4f"
+    },
+    {
+        "host": "worker_node24",
+        "mac": "4c:cf:7c:31:0e:10"
+    },
+    {
+        "host": "worker_node25",
+        "mac": "4c:cf:7c:2c:79:da"
+    },
+    {
+        "host": "worker_node26",
+        "mac": "4c:cf:7c:30:fe:7e"
+    },
+    {
+        "host": "worker_node27",
+        "mac": "4c:cf:7c:30:f2:ff"
+    }
+]

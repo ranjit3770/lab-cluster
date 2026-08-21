@@ -1,0 +1,105 @@
+---
+- name: Setup Slurm User, Directory Structure, and Runtime Persistence
+  hosts: head_nodes,cluster_nodes
+  become: yes
+  vars:
+    slurm_enable_cgroups: "{{ enable_slurm_cgroups | default(false) }}"
+
+  tasks:
+    # --- SECTION 1: CREATE SLURM USER ---
+    - name: Create slurm system user
+      user:
+        name: slurm
+        system: yes
+        shell: /bin/bash
+        create_home: yes
+        state: present
+        comment: "Slurm Workload Manager"
+
+    # --- SECTION 2: CREATE PERSISTENT DIRECTORIES ---
+    - name: Create required Slurm directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+      loop:
+        - /etc/slurm            # Configuration files
+        - /var/spool/slurmd     # Compute node state
+        - /var/log/slurm        # Log files
+        - /var/spool/slurmctld  # Controller state
+        - /var/spool/slurm      # General state base directory
+
+    # --- SECTION 3: RUNTIME & REBOOT PERSISTENCE (The PID Fix) ---
+    - name: Ensure Slurm runtime directory persists across reboots (tmpfiles.d)
+      copy:
+        dest: /etc/tmpfiles.d/slurm.conf
+        content: |
+          # Type Path            Mode UID   GID   Age Argument
+          d     /var/run/slurm   0755 slurm slurm -   -
+          d     /run/slurm       0755 slurm slurm -   -
+        mode: '0644'
+
+    - name: Create runtime directory for immediate use
+      file:
+        path: /var/run/slurm
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+
+    - name: Clear systemd failed states (ensures clean restart)
+      shell: systemctl reset-failed slurmd || true
+      changed_when: false
+
+    # --- SECTION 4: PERMISSIONS REINFORCEMENT ---
+    - name: Ensure correct ownership recursively on spool and logs
+      file:
+        path: "{{ item }}"
+        owner: slurm
+        group: slurm
+        recurse: yes
+      loop:
+        - /var/spool/slurmd
+        - /var/spool/slurmctld
+        - /var/log/slurm
+
+    # --- SECTION 4.5: CGROUP CONFIGURATION ---
+    - name: Create slurm cgroup.conf when strict cgroup enforcement is enabled
+      copy:
+        dest: /etc/slurm/cgroup.conf
+        content: |
+          CgroupPlugin=autodetect
+          EnableControllers=yes
+          IgnoreSystemd=no
+          ConstrainCores=yes
+          ConstrainRAMSpace=yes
+          ConstrainSwapSpace=yes
+          ConstrainDevices=yes
+          AllowedRAMSpace=100
+          AllowedSwapSpace=0
+        owner: slurm
+        group: slurm
+        mode: '0644'
+      when: slurm_enable_cgroups | bool
+
+    - name: Create slurm cgroup.conf for stable compatibility mode
+      copy:
+        dest: /etc/slurm/cgroup.conf
+        content: |
+          CgroupPlugin=cgroup/v1
+        owner: slurm
+        group: slurm
+        mode: '0644'
+      when: not (slurm_enable_cgroups | bool)
+
+    # --- SECTION 5: VERIFICATION ---
+    - name: Verify directory creation and permissions
+      shell: ls -ld /etc/slurm /var/spool/slurmd /var/log/slurm /var/run/slurm
+      register: dir_check
+      changed_when: false
+
+    - name: Show directory status
+      debug:
+        msg: "{{ dir_check.stdout_lines }}"

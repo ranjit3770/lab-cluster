@@ -1,0 +1,43 @@
+---
+- name: Setup Munge Directories and Permissions
+  hosts: cluster_nodes
+  become: yes
+  tasks:
+    - name: Create Munge directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: munge
+        group: munge
+        mode: '0700' # Defaulting to strict, will override below
+      with_items:
+        - /etc/munge
+        - /var/lib/munge
+        - /var/log/munge
+        - /run/munge
+
+    - name: Apply specific directory permissions
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: munge
+        group: munge
+        mode: "{{ item.mode }}"
+      with_items:
+        - { path: '/etc/munge', mode: '0700' }
+        - { path: '/var/lib/munge', mode: '0700' }
+        - { path: '/var/log/munge', mode: '0750' }
+        - { path: '/run/munge', mode: '0755' }
+
+    - name: Ensure munge user owns the directories recursively
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: munge
+        group: munge
+        recurse: yes
+      with_items:
+        - /etc/munge
+        - /var/lib/munge
+        - /var/log/munge
+        - /run/munge

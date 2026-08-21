@@ -1,0 +1,72 @@
+---
+- name: Verify and Sync SSH Keys
+  hosts: head_nodes,cluster_nodes
+  become: yes
+  tasks:
+    # --- CHECK PHASE ---
+    - name: Check if SSH Private Key exists on Head Node
+      stat:
+        path: /root/.ssh/id_rsa
+      register: ssh_key_stat
+      when: "'head_nodes' in group_names"
+
+    - name: Report if Key is missing on Head Node
+      debug:
+        msg: "SSH Key not found. It will be generated in the next step."
+      # Wrapped the entire expression in double quotes to avoid YAML parsing errors
+      when: "'head_nodes' in group_names and not ssh_key_stat.stat.exists"
+
+    # --- ACTION PHASE (Head Node) ---
+    - name: Generate SSH key if it does not exist
+      user:
+        name: root
+        generate_ssh_key: yes
+        ssh_key_bits: 2048
+        ssh_key_file: .ssh/id_rsa
+      when: "'head_nodes' in group_names"
+
+    - name: Slurp the Public Key for distribution
+      slurp:
+        src: /root/.ssh/id_rsa.pub
+      register: head_pub_key
+      delegate_to: head_node
+      run_once: true
+
+    # --- ACTION PHASE (Worker Nodes) ---
+    - name: Ensure Public Key is present on Worker Nodes
+      authorized_key:
+        user: root
+        state: present
+        key: "{{ head_pub_key['content'] | b64decode }}"
+      when: "'cluster_nodes' in group_names" # Added this to ensure it only runs on workers
+      register: auth_key_result
+
+    - name: Report status of Worker Node Key
+      debug:
+        msg: "Key was already present (No change needed)"
+      when: 
+        - "'cluster_nodes' in group_names"
+        - "not auth_key_result.changed"
+
+    # --- ACTION PHASE (Local User Passwordless Ansible) ---
+    - name: Generate SSH key for local user (if missing)
+      delegate_to: localhost
+      run_once: true
+      become: no
+      command: ssh-keygen -t rsa -N "" -f "{{ lookup('env', 'HOME') }}/.ssh/id_rsa"
+      args:
+        creates: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa"
+
+    - name: Slurp the local user's Public Key
+      delegate_to: localhost
+      run_once: true
+      become: no
+      slurp:
+        src: "{{ lookup('env', 'HOME') }}/.ssh/id_rsa.pub"
+      register: local_pub_key
+
+    - name: Ensure Local User's Public Key is authorized for root on all Nodes
+      authorized_key:
+        user: root
+        state: present
+        key: "{{ local_pub_key['content'] | b64decode }}"

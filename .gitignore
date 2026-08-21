@@ -1,0 +1,21 @@
+# Runtime artifacts
+logs/*.log
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Node
+node_modules/
+
+# Environment / secrets
+.env
+*.vault-pass
+
+# Ansible transient state
+.ansible-local/
+ansible-fact-cache/
+/tmp/ansible_fact_cache

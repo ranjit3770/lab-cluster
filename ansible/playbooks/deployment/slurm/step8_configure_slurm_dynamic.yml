@@ -1,0 +1,221 @@
+---
+- name: Production Slurm Configuration and Auto-Resume
+  hosts: head_nodes,cluster_nodes
+  become: yes
+  gather_facts: yes
+  vars:
+    slurm_conf_dir: "/usr/local/slurm/etc"
+    slurm_state_dir: "/var/spool/slurmctld"
+    cluster_name: "demo-cluster"
+    jwt_key_path: "/var/spool/slurm/statesave/jwt_hs256.key"
+    slurm_bin: "/usr/local/slurm/bin"
+    slurm_resource_confirmation: "{{ confirm_slurm_resources | default(true) }}"
+    slurm_enable_cgroups: "{{ enable_slurm_cgroups | default(false) }}"
+
+  tasks:
+    - name: 0. Refresh hardware and network facts for Slurm node definitions
+      ansible.builtin.setup:
+        gather_subset:
+          - hardware
+          - network
+
+    - name: 0b. Get Slurm hardware topology from slurmd
+      ansible.builtin.shell: |
+        /usr/local/slurm/sbin/slurmd -C | awk '
+          NR == 1 {
+            for (i = 1; i <= NF; i++) {
+              split($i, field, "=")
+              values[field[1]] = field[2]
+            }
+            print values["CPUs"], values["CoresPerSocket"], values["ThreadsPerCore"], values["RealMemory"]
+          }
+        '
+      register: slurmd_topology
+      changed_when: false
+
+    - name: 0c. Check for Intel GPU render device
+      ansible.builtin.stat:
+        path: /dev/dri/renderD128
+      register: intel_gpu_render
+
+    - name: 0d. Show detected Slurm scheduling resources before generating slurm.conf
+      ansible.builtin.debug:
+        msg: |
+          Detected node resources that will be advertised to Slurm:
+          {% for host in groups['head_nodes'] + groups['cluster_nodes'] %}
+          {% set hvars = hostvars[host] %}
+          {% set topology = (hvars['slurmd_topology']['stdout'] | default('')).split() %}
+          {% set detected_cpus = (topology[0] if topology | length > 0 else hvars['ansible_processor_vcpus'] | default(0)) | int %}
+          {% set detected_mem = (topology[3] if topology | length > 3 else (hvars['ansible_memtotal_mb'] | default(0) * 0.9) | int) | int %}
+          - {{ host | replace('_', '-') }} ({{ hvars['ansible_host'] | default('unknown-ip') }}): {{ detected_cpus }} CPUs, {{ detected_mem }} MB RAM
+          {% endfor %}
+
+          Optional caps:
+          - slurm_cpu_cap_per_node={{ slurm_cpu_cap_per_node | default('detected') }}
+          - slurm_memory_cap_mb_per_node={{ slurm_memory_cap_mb_per_node | default('detected') }}
+
+          Slurm resource plugin mode:
+          - enable_slurm_cgroups={{ slurm_enable_cgroups }}
+          - Default mode keeps slurmd stable with linuxproc/task affinity.
+          - Strict cgroup enforcement can be enabled after OS/kernel cgroup support is verified.
+      run_once: true
+
+    - name: 0e. Ask operator for CPU cores to advertise per node
+      ansible.builtin.pause:
+        prompt: |
+
+          ================================================================================
+          [SLURM RESOURCE CONFIRMATION]
+          Review the detected CPU/RAM values above.
+
+          CPU cores per node to advertise to Slurm:
+          - Press Enter to use detected CPU count per node.
+          - Enter a number such as 12 to cap every node at that CPU count.
+          - Type 'abort' to stop before slurm.conf is written.
+          ================================================================================
+          CPU cores per node:
+      register: slurm_cpu_cap_prompt
+      run_once: true
+      when: slurm_resource_confirmation | bool
+
+    - name: 0f. Ask operator for RAM to advertise per node
+      ansible.builtin.pause:
+        prompt: |
+
+          ================================================================================
+          RAM per node to advertise to Slurm, in MB:
+          - Press Enter to use detected RAM per node.
+          - Enter a number such as 12288 to cap every node at 12 GB.
+          Type 'abort' to stop before slurm.conf is written.
+          ================================================================================
+          RAM MB per node:
+      register: slurm_memory_cap_prompt
+      run_once: true
+      when: slurm_resource_confirmation | bool
+
+    - name: 0g. Stop if Slurm resource policy was aborted
+      ansible.builtin.fail:
+        msg: "Slurm resource generation aborted by operator before writing slurm.conf."
+      when:
+        - slurm_resource_confirmation | bool
+        - (slurm_cpu_cap_prompt.user_input | default('') | lower) in ['abort', 'no', 'n', 'stop'] or
+          (slurm_memory_cap_prompt.user_input | default('') | lower) in ['abort', 'no', 'n', 'stop']
+      run_once: true
+
+    - name: 0h. Save operator resource caps for slurm.conf generation
+      ansible.builtin.set_fact:
+        slurm_operator_cpu_cap_per_node: >-
+          {{ slurm_cpu_cap_per_node | default((slurm_cpu_cap_prompt | default({})).user_input | default('')) | string | trim }}
+        slurm_operator_memory_cap_mb_per_node: >-
+          {{ slurm_memory_cap_mb_per_node | default((slurm_memory_cap_prompt | default({})).user_input | default('')) | string | trim }}
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
+    - name: 0i. Validate operator CPU/RAM caps
+      ansible.builtin.assert:
+        that:
+          - hostvars['localhost']['slurm_operator_cpu_cap_per_node'] == '' or
+            hostvars['localhost']['slurm_operator_cpu_cap_per_node'] is match('^[1-9][0-9]*$')
+          - hostvars['localhost']['slurm_operator_memory_cap_mb_per_node'] == '' or
+            hostvars['localhost']['slurm_operator_memory_cap_mb_per_node'] is match('^[1-9][0-9]*$')
+        fail_msg: "CPU and RAM caps must be blank or positive integers."
+      run_once: true
+
+    - name: 1. Ensure Slurm directory structure exists
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+        recurse: yes
+      loop:
+        - /var/run/slurm
+        - /var/log/slurm
+        - "{{ slurm_state_dir }}"
+        - /var/spool/slurmd
+        - "{{ slurm_conf_dir }}"
+
+    - name: 2. Generate slurm.conf with explicit newlines
+      ansible.builtin.copy:
+        dest: "{{ slurm_conf_dir }}/slurm.conf"
+        owner: slurm
+        group: slurm
+        mode: '0644'
+        # The '-' in '%- for' and 'endfor -%' controls whitespace and ensures clean line breaks
+        content: |
+          ClusterName={{ cluster_name }}
+          ControlMachine=head-node
+          ControlAddr={{ hostvars[groups['head_nodes'][0]]['ansible_host'] | default(hostvars[groups['head_nodes'][0]]['ansible_default_ipv4']['address']) }}
+
+          # Authentication & Security
+          AuthType=auth/munge
+          AuthAltTypes=auth/jwt
+          AuthAltParameters=jwt_key={{ jwt_key_path }}
+          CryptoType=crypto/munge
+          
+          # Accounting
+          AccountingStorageType=accounting_storage/slurmdbd
+          AccountingStorageHost=head-node
+          AccountingStoragePort=6819
+          JobAcctGatherType={{ 'jobacct_gather/cgroup' if slurm_enable_cgroups | bool else 'jobacct_gather/linux' }}
+          JobAcctGatherFrequency=30
+
+          # Paths & Daemons
+          SlurmctldPort=6817
+          SlurmdPort=6818
+          SlurmdSpoolDir=/var/spool/slurmd
+          StateSaveLocation={{ slurm_state_dir }}
+          SlurmUser=slurm
+          SlurmdUser=root
+          ProctrackType={{ 'proctrack/cgroup' if slurm_enable_cgroups | bool else 'proctrack/linuxproc' }}
+          TaskPlugin={{ 'task/cgroup' if slurm_enable_cgroups | bool else 'task/affinity' }}
+          SelectType=select/cons_tres
+          SelectTypeParameters=CR_Core_Memory
+
+          # Logging
+          SlurmctldLogFile=/var/log/slurm/slurmctld.log
+          SlurmdLogFile=/var/log/slurm/slurmd.log
+          SlurmctldPidFile=/var/run/slurm/slurmctld.pid
+
+          GresTypes=gpu
+
+          # --- DYNAMIC NODE DEFINITIONS ---
+          {% for host in groups['head_nodes'] + groups['cluster_nodes'] %}
+          {% set hvars = hostvars[host] %}
+          {% set topology = (hvars['slurmd_topology']['stdout'] | default('')).split() %}
+          {% set detected_vcpus = (topology[0] if topology | length > 0 else hvars['ansible_processor_vcpus'] | default(12)) | int %}
+          {% set detected_mem = (topology[3] if topology | length > 3 else (hvars['ansible_memtotal_mb'] | default(4000) * 0.9) | int) | int %}
+          {% set cpu_cap = hostvars['localhost']['slurm_operator_cpu_cap_per_node'] | default(0) | int %}
+          {% set mem_cap = hostvars['localhost']['slurm_operator_memory_cap_mb_per_node'] | default(0) | int %}
+          {% set vcpus = ([detected_vcpus, cpu_cap] | min) if cpu_cap > 0 else detected_vcpus %}
+          {% set mem = ([detected_mem, mem_cap] | min) if mem_cap > 0 else detected_mem %}
+          {% set detected_threads = (topology[2] if topology | length > 2 else hvars['ansible_processor_threads_per_core'] | default(1)) | int %}
+          {% set threads = detected_threads if detected_threads > 0 and vcpus >= detected_threads and vcpus % detected_threads == 0 else 1 %}
+          {% set cores = ((vcpus / threads) | int) if threads > 0 else vcpus %}
+          NodeName={{ host | replace('_', '-') }} NodeAddr={{ hvars['ansible_host'] | default(hvars['ansible_default_ipv4']['address']) }} Sockets=1 CoresPerSocket={{ cores }} ThreadsPerCore={{ threads }} CPUs={{ vcpus }} RealMemory={{ mem }} State=UNKNOWN {% if 'cluster_nodes' in hvars['group_names'] and hvars['intel_gpu_render']['stat']['exists'] | default(false) %}Gres=gpu:intel:1{% endif %}
+          
+          {% endfor %}
+
+          # --- PARTITION DEFINITIONS ---
+          PartitionName=main Nodes=ALL Default=YES MaxTime=INFINITE State=UP
+
+    - name: 3. Deploy gres.conf only when Intel render device exists
+      ansible.builtin.copy:
+        dest: "{{ slurm_conf_dir }}/gres.conf"
+        owner: slurm
+        group: slurm
+        mode: '0644'
+        content: "Name=gpu Type=intel File=/dev/dri/renderD128\n"
+      when:
+        - "'cluster_nodes' in group_names"
+        - intel_gpu_render.stat.exists
+
+    - name: 4. Remove stale gres.conf when Intel render device is absent
+      ansible.builtin.file:
+        path: "{{ slurm_conf_dir }}/gres.conf"
+        state: absent
+      when:
+        - "'cluster_nodes' in group_names"
+        - not intel_gpu_render.stat.exists

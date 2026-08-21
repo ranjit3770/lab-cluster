@@ -1,0 +1,79 @@
+---
+- name: Force Fix and Update Apt
+  hosts: cluster_nodes
+  become: yes
+  gather_facts: yes
+  tasks:
+    - name: 1. Kill any stuck apt/dpkg processes
+      shell: |
+        killall apt apt-get dpkg || true
+      ignore_errors: yes
+
+    - name: 2. Forcefully remove lock files
+      file:
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - /var/lib/dpkg/lock
+        - /var/lib/dpkg/lock-frontend
+        - /var/lib/dpkg/lock
+        - /var/lib/apt/lists/lock
+        - /var/cache/apt/archives/lock
+
+    - name: 3. Fix interrupted dpkg configuration
+      shell: dpkg --configure -a
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: 4. Force repair broken dependencies
+      shell: apt-get install -f -y
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+
+    - name: Check if antigravity.list exists
+      stat:
+        path: /etc/apt/sources.list.d/antigravity.list
+      register: antigravity_stat
+
+    - name: Fix Antigravity APT source architecture (Add arch=amd64)
+      replace:
+        path: /etc/apt/sources.list.d/antigravity.list
+        regexp: '^deb \[(signed-by=[^ \]]*)\]'
+        replace: 'deb [\1 arch=amd64]'
+      when: antigravity_stat.stat.exists
+
+    - name: Check if nodesource.list exists
+      stat:
+        path: /etc/apt/sources.list.d/nodesource.list
+      register: nodesource_stat
+
+    - name: Fix NodeSource APT source architecture (Add arch=amd64)
+      replace:
+        path: /etc/apt/sources.list.d/nodesource.list
+        regexp: '^deb \[(signed-by=[^ \]]*)\]'
+        replace: 'deb [\1 arch=amd64]'
+      when: nodesource_stat.stat.exists
+
+    - name: Disable unreachable Veyon PPA to prevent apt update errors
+      shell: rm -f /etc/apt/sources.list.d/*veyon*.list /etc/apt/sources.list.d/*veyon*.sources || true
+      ignore_errors: yes
+
+    - name: Confirm APT Cache Update
+      pause:
+        prompt: |
+
+          ================================================================================
+          [ATTENTION REQUIRED] Playbook is about to update the APT cache.
+          Type 'yes' to proceed with the update.
+          Type 'no' to skip updating the cache.
+          ================================================================================
+          Your choice: 
+      register: apt_prompt
+      run_once: true
+
+    - name: 5. Update apt cache (The Goal)
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+      ignore_errors: yes
+      when: (apt_prompt.user_input | default('yes') | lower) in ['y', 'yes']

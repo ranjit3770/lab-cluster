@@ -1,0 +1,37 @@
+---
+- name: Set Ubuntu as default GRUB boot entry
+  hosts: head_nodes,cluster_nodes
+  become: yes
+  tasks:
+    - name: Ensure GRUB_DEFAULT is set to 0 (usually Ubuntu)
+      lineinfile:
+        path: /etc/default/grub
+        regexp: '^GRUB_DEFAULT='
+        line: 'GRUB_DEFAULT=0'
+      register: grub_change
+
+    - name: Update GRUB configuration
+      command: update-grub
+      when: grub_change.changed
+
+    - name: Confirm Reboot
+      pause:
+        prompt: |
+
+          ================================================================================
+          [ATTENTION REQUIRED] GRUB changes applied. Nodes may require a reboot.
+          Type 'yes' to reboot modified nodes now.
+          Type 'no' to skip rebooting and continue.
+          ================================================================================
+          Your choice: 
+      register: reboot_prompt
+      run_once: true
+
+    - name: Reboot nodes to apply changes (Optional)
+      reboot:
+        msg: "Rebooting to apply new default boot order"
+        # Adding a test_command bypasses the 'local connection' safety check
+        test_command: whoami
+      when: 
+        - grub_change.changed
+        - (reboot_prompt.user_input | default('yes') | lower) in ['y', 'yes']

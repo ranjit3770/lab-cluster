@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+sqlalchemy
+mysql-connector-python
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+pydantic-settings
+email-validator
+requests
+pytz
+paramiko
+pywinrm
+pywinrm[credssp]
+websockets
+requests-unixsocket
+gunicorn

@@ -1,0 +1,4 @@
+---
+# Single point of change when this repository is relocated to another
+# host or path. Playbooks reference it as "{{ cluster_root }}/...".
+cluster_root: "/opt/amritacluster/SLURM-COMPLETE-SETUP"

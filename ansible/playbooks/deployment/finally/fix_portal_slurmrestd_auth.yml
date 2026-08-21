@@ -1,0 +1,64 @@
+---
+- name: Fix portal Slurm REST JWT authentication user
+  hosts: head_nodes
+  become: yes
+  gather_facts: no
+  vars:
+    portal_root: "{{ cluster_root }}/cluster-portal"
+    slurm_rest_version: "v0.0.41"
+    slurm_rest_url: "http://127.0.0.1:6820/slurm/{{ slurm_rest_version }}"
+    slurm_node_api: "{{ slurm_rest_url }}/nodes"
+    slurm_jwt_user: "slurmapi"
+
+  tasks:
+    - name: Explain portal Slurm REST authentication fix
+      ansible.builtin.debug:
+        msg:
+          - "slurmrestd is running, but Slurm rejects portal requests authenticated as slurmrestd."
+          - "This playbook makes the portal use the Slurm REST service account: {{ slurm_jwt_user }}."
+
+    - name: Remove old managed backend block from docker-compose.yml
+      ansible.builtin.replace:
+        path: "{{ portal_root }}/docker-compose.yml"
+        regexp: '(?ms)^      # BEGIN ANSIBLE MANAGED BLOCK portal backend slurm rest\n.*?^      # END ANSIBLE MANAGED BLOCK portal backend slurm rest\n'
+        replace: ''
+
+    - name: Remove old managed job-api block from docker-compose.yml
+      ansible.builtin.replace:
+        path: "{{ portal_root }}/docker-compose.yml"
+        regexp: '(?ms)^      # BEGIN ANSIBLE MANAGED BLOCK portal job-api slurm rest\n.*?^      # END ANSIBLE MANAGED BLOCK portal job-api slurm rest\n'
+        replace: ''
+
+    - name: Change backend default JWT user from slurmrestd to slurmapi
+      ansible.builtin.replace:
+        path: "{{ portal_root }}/backend/app/core/config.py"
+        regexp: 'os\.getenv\("SLURM_JWT_USER", "slurmrestd"\)'
+        replace: 'os.getenv("SLURM_JWT_USER", "{{ slurm_jwt_user }}")'
+
+    - name: Change job-api default JWT user from slurmrestd to slurmapi
+      ansible.builtin.replace:
+        path: "{{ portal_root }}/backend/job-api/app/config.py"
+        regexp: 'os\.getenv\("SLURM_JWT_USER", "slurmrestd"\)'
+        replace: 'os.getenv("SLURM_JWT_USER", "{{ slurm_jwt_user }}")'
+
+    - name: Update seeded setting description
+      ansible.builtin.replace:
+        path: "{{ portal_root }}/backend/app/initial_data.py"
+        regexp: 'e\.g\. slurmrestd'
+        replace: 'e.g. {{ slurm_jwt_user }}'
+
+    - name: Update frontend placeholder for JWT user
+      ansible.builtin.replace:
+        path: "{{ portal_root }}/frontend/src/pages/management/PlatformConfigPage.tsx"
+        regexp: 'placeholder="slurmrestd"'
+        replace: 'placeholder="{{ slurm_jwt_user }}"'
+
+    - name: Show follow-up verification endpoints
+      ansible.builtin.debug:
+        msg:
+          - "After restart, portal Slurm REST calls should authenticate as {{ slurm_jwt_user }}."
+          - "Docker, docker-compose, and container restart are intentionally not handled by this Slurm Ansible playbook."
+          - "This playbook only removes the accidental compose YAML block from the previous run and updates source defaults."
+          - "Backend health: http://localhost:8000/health"
+          - "Job API health: http://localhost:9000/health"
+          - "Job API Slurm ping: http://localhost:9000/slurm/ping"
