@@ -10,12 +10,18 @@ Use this when:
 
 Do not use this procedure just to add one worker to an already working cluster. For that, use [Append a New Slurm Worker Node](APPEND-NEW-NODE.md).
 
+## Path Convention
+
+`<deploy-path>` is the directory where this repository lives on your machine
+(for example `/opt/amritacluster/SLURM-COMPLETE-SETUP`). Substitute your actual
+path in every command.
+
 ## Recommended Entrypoint
 
 Run the guided management playbook:
 
 ```bash
-cd /opt/amritacluster/SLURM-COMPLETE-SETUP/ansible
+cd <deploy-path>/ansible
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/cluster_manage.yml --ask-vault-pass
 ```
 

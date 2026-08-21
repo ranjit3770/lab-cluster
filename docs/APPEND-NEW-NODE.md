@@ -4,6 +4,12 @@ This document is the future reference procedure for adding one new worker node t
 
 Use this when the cluster is already running and you only want to append a new Linux worker, for example `worker_node29`.
 
+## Path Convention
+
+`<deploy-path>` is the directory where this repository lives on your machine
+(for example `/opt/amritacluster/SLURM-COMPLETE-SETUP`). Substitute your actual
+path in every command.
+
 ## Important Rule
 
 Do not run the full setup playbook just to add one worker.
@@ -65,7 +71,7 @@ If this cluster also has matching Windows inventory entries, add those only if y
 From the repository directory:
 
 ```bash
-cd /opt/amritacluster/SLURM-COMPLETE-SETUP/ansible
+cd <deploy-path>/ansible
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/cluster_manage.yml --ask-vault-pass
 ```
 

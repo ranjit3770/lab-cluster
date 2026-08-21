@@ -21,10 +21,12 @@ in Windows, Slurm may still hold it in the `DOWN` state. This script:
 
 ### Cron Installation
 
-On the head node, run every 2 minutes as root:
+On the head node, run every 2 minutes as root. Set `REPO` to the directory
+where this repository is deployed:
 
 ```cron
-*/2 * * * * /opt/amritacluster/SLURM-COMPLETE-SETUP/scripts/slurm-resume-nodes.sh >> /var/log/slurm-resume.log 2>&1
+REPO=/full/path/to/SLURM-COMPLETE-SETUP
+*/2 * * * * $REPO/scripts/slurm-resume-nodes.sh >> /var/log/slurm-resume.log 2>&1
 ```
 
 Requires passwordless root SSH from the head node to all workers (the Ansible

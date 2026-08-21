@@ -48,7 +48,8 @@ Use Ansible for infrastructure state. Use the portal for user-facing cluster ope
 ### Full cluster deployment
 
 ```bash
-cd /opt/amritacluster/SLURM-COMPLETE-SETUP/ansible
+# from the repository root
+cd ansible
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/deployment/cluster_manage.yml --ask-vault-pass
 ```
 
@@ -57,7 +58,8 @@ Choose `setup` for a fresh build, or `append` to add one new worker.
 ### Start the portal stack
 
 ```bash
-cd /opt/amritacluster/SLURM-COMPLETE-SETUP/cluster-portal
+# from the repository root
+cd cluster-portal
 docker compose up -d --build
 ```
 
@@ -73,7 +75,8 @@ python3 scripts/os-swapper/swapper.py        # interactive fleet tool
 Or use the targeted Ansible workflow:
 
 ```bash
-cd /opt/amritacluster/SLURM-COMPLETE-SETUP/ansible
+# from the repository root
+cd ansible
 ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory/hosts.ini playbooks/os-switching/ensure_ubuntu_boot_target_auto.yml -e target_hosts=worker_node28 --ask-vault-pass
 ```
 
