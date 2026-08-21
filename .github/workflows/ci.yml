@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  repo-checks:
+    name: Repo checks (YAML + docs links)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+
+      - name: Run repository checks
+        run: pytest tests -v
+
+  ansible-syntax:
+    name: Ansible playbook syntax
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ansible
+        run: pip install ansible-core
+
+      - name: Syntax-check main entrypoints
+        run: |
+          for pb in \
+            playbooks/deployment/cluster_manage.yml \
+            playbooks/deployment/step4_main.yml \
+            playbooks/deployment/finally/append_slurm_node.yml \
+            playbooks/os-switching/ensure_ubuntu_boot_target_auto.yml
+          do
+            echo "::group::--syntax-check $pb"
+            ANSIBLE_LOCAL_TEMP=/tmp/ansible-local \
+              ansible-playbook -i inventory/hosts.ini "$pb" --syntax-check
+            echo "::endgroup::"
+          done
+
+  job-api-tests:
+    name: Job-API planner tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        # The planner tests are dependency-free by design (stdlib only);
+        # heavy runtime requirements such as `notebook` are not needed.
+        run: pip install pytest
+
+      - name: Run job-api unit tests
+        run: pytest cluster-portal/backend/job-api/tests -v
+
+  backend-tests:
+    name: Backend schema tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install minimal schema dependencies
+        # Only what the Pydantic schema modules import. The FastAPI app object
+        # itself is not imported because it auto-installs requirements and
+        # provisions the database at import time.
+        run: pip install pytest pydantic pydantic-settings sqlalchemy email-validator
+
+      - name: Run backend schema tests
+        run: pytest cluster-portal/backend/tests -v
+
+  frontend-build:
+    name: Frontend type-check, lint and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cluster-portal/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cluster-portal/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build (tsc + vite)
+        run: npm run build
