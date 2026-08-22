@@ -1,47 +1,21 @@
-import { 
-    Files, 
-    Upload, 
-    Search, 
-    FileText, 
-    HardDrive, 
-    Download, 
-    Trash2, 
+import {
+    Files,
+    Upload,
+    Search,
+    FileText,
+    Download,
+    Trash2,
     Folder,
-    Check,
     X,
     Menu,
-    Code,
-    AlertCircle,
     FolderPlus,
     FilePlus,
     Plus,
     ChevronDown,
     ChevronRight,
-    SearchX,
-    Database,
-    Zap,
-    Layers,
     Terminal,
-    LayoutGrid,
+    Database,
     RefreshCcw,
-    FileJson,
-    Trash,
-    Scan,
-    ArrowRight,
-    ArrowUpRight,
-    Command,
-    Info,
-    Signal,
-    Activity,
-    Orbit,
-    Power,
-    History,
-    Network,
-    Globe,
-    Loader2,
-    Lock,
-    Unlock,
-    ShieldCheck,
     Edit2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,9 +33,9 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PageLoader from "@/components/PageLoader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { filesApi } from "@/api/files";
 import { userApi } from "@/api/user";
 import { useAuth } from "@/context/AuthContext";
@@ -130,25 +104,25 @@ const DataTreeItem = ({ folder, path, token, activePath, setPath }: any) => {
             <div 
                 onClick={handleSelect}
                 className={cn(
-                    "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer mb-1",
+                    "mb-0.5 flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-colors",
                     isActive 
                         ? "bg-primary/10 text-primary" 
-                        : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground"
                 )}
             >
-                <div onClick={handleToggle} className={cn("p-1 rounded hover:bg-gray-200", isActive ? "hover:bg-primary/20" : "")}>
+                <div onClick={handleToggle} className={cn("rounded p-1 hover:bg-accent", isActive && "hover:bg-primary/20")}>
                     {loading ? (
                         <div className="h-3 w-3 animate-spin rounded-full border border-primary border-t-transparent" />
                     ) : (
                         isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />
                     )}
                 </div>
-                <Folder className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-gray-400")} />
-                <span className="truncate flex-1">{folder.name}</span>
+                <Folder className={cn("h-4 w-4 shrink-0", isActive ? "text-primary" : "text-muted-foreground")} />
+                <span className="flex-1 truncate">{folder.name}</span>
             </div>
             
             {isOpen && hasCheckedChildren && children.length > 0 && (
-                <div className="ml-4 pl-2 border-l border-gray-200 mt-1 space-y-0.5">
+                <div className="ml-4 mt-1 space-y-0.5 border-l border-border pl-2">
                     {children.map(child => (
                         <DataTreeItem 
                             key={child.name} 
@@ -357,56 +331,56 @@ export default function FilesPage() {
     };
 
     return (
-        <div className="flex flex-col lg:flex-row gap-4 h-[calc(100vh-140px)] animate-in fade-in duration-300">
+        <div className="flex h-[calc(100vh-140px)] flex-col gap-4 lg:flex-row">
             
             <aside className={cn(
-                "w-full lg:w-72 flex flex-col bg-white border border-gray-200 rounded-xl shrink-0 transition-all duration-300 z-50 fixed lg:relative h-full overflow-hidden",
+                "fixed z-50 flex h-full w-full shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xs transition-all duration-300 lg:relative lg:w-72",
                 isSidebarOpen ? "translate-x-0 inset-0 lg:inset-auto" : "-translate-x-full lg:translate-x-0"
             )}>
-                <div className="p-4 border-b border-gray-200">
-                    <div className="flex items-center justify-between mb-3">
+                <div className="border-b border-border p-3">
+                    <div className="mb-3 flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                            <div className="p-1.5 bg-primary/10 rounded-lg">
-                                <Database className="h-4 w-4 text-primary" />
-                            </div>
-                            <span className="text-sm font-semibold text-gray-900">Folders</span>
+                            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+                                <Database className="h-4 w-4 text-primary" aria-hidden />
+                            </span>
+                            <span className="text-sm font-semibold text-foreground">Folders</span>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={() => setIsSidebarOpen(false)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 lg:hidden" onClick={() => setIsSidebarOpen(false)} aria-label="Close folders panel">
                             <X className="h-4 w-4" />
                         </Button>
                     </div>
                     
-                    <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="w-full h-8 text-xs"
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 w-full text-xs"
                         onClick={() => navigate(`/editor/root?dir=${encodeURIComponent(path)}`)}
                     >
-                        <Terminal className="h-3 w-3 mr-2" />
+                        <Terminal className="h-3.5 w-3.5" />
                         Open in Editor
                     </Button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-2">
-                    <button 
+                <div className="custom-scrollbar flex-1 overflow-y-auto p-2">
+                    <button
                         onClick={() => { setPath(""); setIsSidebarOpen(false); }}
                         className={cn(
-                            "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all mb-1",
-                            path === "" ? "bg-primary/10 text-primary" : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"
+                            "mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs font-medium transition-colors",
+                            path === "" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-accent hover:text-foreground"
                         )}
                     >
-                        <Files className="h-4 w-4" /> 
+                        <Files className="h-4 w-4" />
                         Root
                     </button>
 
                     <div className="space-y-0.5">
                         {rootFolders.map(folder => (
-                            <DataTreeItem 
-                                key={folder.name} 
-                                folder={folder} 
-                                path="" 
-                                token={token} 
-                                activePath={path} 
+                            <DataTreeItem
+                                key={folder.name}
+                                folder={folder}
+                                path=""
+                                token={token}
+                                activePath={path}
                                 setPath={(p: string) => { setPath(p); setIsSidebarOpen(false); }}
                             />
                         ))}
@@ -414,39 +388,46 @@ export default function FilesPage() {
                 </div>
 
                 {stats && (
-                    <div className="p-4 border-t border-gray-200 bg-gray-50">
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-[10px] font-medium text-gray-500 uppercase">Storage Used</span>
-                            <span className="text-xs font-medium text-gray-900">{Math.min(100, Math.round((stats.storage_used_gb / stats.storage_limit_gb) * 100))}%</span>
+                    <div className="border-t border-border bg-muted/50 p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Storage Used</span>
+                            <span className="text-xs font-medium tabular-nums text-foreground">{Math.min(100, Math.round((stats.storage_used_gb / stats.storage_limit_gb) * 100))}%</span>
                         </div>
-                        <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
-                            <div 
-                                className="h-full bg-primary rounded-full" 
+                        <div
+                            role="progressbar"
+                            aria-label="Storage used"
+                            aria-valuenow={Math.min(100, Math.round((stats.storage_used_gb / stats.storage_limit_gb) * 100))}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                        >
+                            <div
+                                className="h-full rounded-full bg-primary transition-all"
                                 style={{ width: `${Math.min(100, (stats.storage_used_gb / stats.storage_limit_gb) * 100)}%` }}
                             />
                         </div>
-                        <p className="text-[9px] text-gray-400 mt-1">{stats.storage_used_gb.toFixed(2)} / {stats.storage_limit_gb} GB</p>
+                        <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">{stats.storage_used_gb.toFixed(2)} / {stats.storage_limit_gb} GB</p>
                     </div>
                 )}
             </aside>
 
-            <main className="flex-1 flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden">
-                <header className="h-14 px-4 flex items-center justify-between border-b border-gray-200 shrink-0">
-                    <div className="flex items-center gap-3 min-w-0">
-                        <Button variant="ghost" size="icon" className="h-9 w-9 lg:hidden" onClick={() => setIsSidebarOpen(true)}>
+            <main className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+                <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 lg:hidden" onClick={() => setIsSidebarOpen(true)} aria-label="Open folders panel">
                             <Menu className="h-4 w-4" />
                         </Button>
-                        <div className="flex flex-col min-w-0">
-                            <h1 className="text-base font-semibold text-gray-900 truncate">{activeFolderName}</h1>
-                            <div className="flex items-center gap-1 text-[10px] text-gray-500">
-                                <span onClick={() => setPath("")} className="hover:text-primary cursor-pointer">Root</span>
+                        <div className="flex min-w-0 flex-col">
+                            <h1 className="truncate text-sm font-semibold text-foreground">{activeFolderName}</h1>
+                            <div className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+                                <span onClick={() => setPath("")} className="cursor-pointer hover:text-primary">Root</span>
                                 {path.split('/').filter(Boolean).map((p, idx, arr) => (
                                     <span key={p} className="flex items-center gap-1">
-                                        <ChevronRight className="h-3 w-3 text-gray-300" />
-                                        <span 
+                                        <ChevronRight className="h-3 w-3 text-muted-foreground/40" aria-hidden />
+                                        <span
                                             onClick={() => setPath(arr.slice(0, idx + 1).join('/'))}
                                             className={cn(
-                                                idx === arr.length - 1 ? "text-gray-900 font-medium" : "hover:text-primary cursor-pointer"
+                                                idx === arr.length - 1 ? "font-medium text-foreground" : "cursor-pointer hover:text-primary"
                                             )}
                                         >
                                             {p}
@@ -457,14 +438,15 @@ export default function FilesPage() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2">
                         <div className="relative hidden md:block">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
-                            <Input 
-                                placeholder="Search..." 
-                                className="pl-8 h-8 w-40 bg-gray-50 border-gray-200 rounded-lg text-xs"
+                            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                            <Input
+                                placeholder="Search..."
+                                className="h-8 w-40 pl-8 text-xs"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
+                                aria-label="Search files"
                             />
                         </div>
                         
@@ -477,136 +459,143 @@ export default function FilesPage() {
                                 onChange={handleFileUpload}
                             />
                             <Button variant="outline" size="sm" className="h-8" onClick={() => document.getElementById('file-upload')?.click()}>
-                                <Upload className="h-3 w-3 mr-1" />
+                                <Upload className="h-3.5 w-3.5" />
                                 Upload
                             </Button>
                         </div>
 
                         <div className="relative">
-                            <Button 
-                                variant="outline" 
-                                size="sm" 
+                            <Button
+                                variant="outline"
+                                size="sm"
                                 className="h-8"
+                                aria-expanded={createMenuOpen}
                                 onClick={() => setCreateMenuOpen(!createMenuOpen)}
                             >
-                                <Plus className="h-3 w-3 mr-1" />
+                                <Plus className="h-3.5 w-3.5" />
                                 Create
                             </Button>
                             {createMenuOpen && (
-                                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1 min-w-[140px]">
-                                    <button 
-                                        className="w-full px-3 py-2 text-xs text-left hover:bg-gray-50 flex items-center gap-2"
+                                <div className="absolute right-0 top-full z-10 mt-1 min-w-[140px] overflow-hidden rounded-md border border-border bg-popover py-1 shadow-md">
+                                    <button
+                                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-accent"
                                         onClick={() => {
                                             setCreateFolderDialog({ open: true, name: "" });
                                             setCreateMenuOpen(false);
                                         }}
                                     >
-                                        <FolderPlus className="h-3 w-3" /> New Folder
+                                        <FolderPlus className="h-3.5 w-3.5" /> New Folder
                                     </button>
-                                    <button 
-                                        className="w-full px-3 py-2 text-xs text-left hover:bg-gray-50 flex items-center gap-2"
+                                    <button
+                                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-accent"
                                         onClick={() => {
                                             navigate(`/editor/new?dir=${encodeURIComponent(path)}`);
                                             setCreateMenuOpen(false);
                                         }}
                                     >
-                                        <FilePlus className="h-3 w-3" /> New File
+                                        <FilePlus className="h-3.5 w-3.5" /> New File
                                     </button>
                                 </div>
                             )}
                         </div>
 
-                        <Button variant="outline" size="sm" className="h-8" onClick={fetchFiles}>
-                            <RefreshCcw className={cn("h-3 w-3", loading && "animate-spin")} />
+                        <Button variant="outline" size="sm" className="h-8 px-2" onClick={fetchFiles} aria-label="Refresh files">
+                            <RefreshCcw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
                         </Button>
                     </div>
                 </header>
 
                 {selectedFiles.size > 0 && (
-                    <div className="h-10 px-4 flex items-center justify-between bg-primary/5 border-b border-primary/20">
+                    <div className="flex h-10 shrink-0 items-center justify-between border-b border-primary/20 bg-primary/5 px-4">
                         <span className="text-xs font-medium text-primary">{selectedFiles.size} selected</span>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={handleDownload}>
-                                <Download className="h-3 w-3 mr-1" /> Download
+                                <Download className="h-3.5 w-3.5" /> Download
                             </Button>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={handleDelete}>
-                                <Trash2 className="h-3 w-3 mr-1" /> Delete
+                            <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleDelete}>
+                                <Trash2 className="h-3.5 w-3.5" /> Delete
                             </Button>
                             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedFiles(new Set())}>
-                                <X className="h-3 w-3 mr-1" /> Clear
+                                <X className="h-3.5 w-3.5" /> Clear
                             </Button>
                         </div>
                     </div>
                 )}
 
-                <div className="flex-1 overflow-auto">
+                <div className="custom-scrollbar flex-1 overflow-auto">
                     {loading ? (
-                        <div className="flex items-center justify-center h-full">
+                        <div className="flex h-full items-center justify-center">
                             <PageLoader message="Loading files..." />
                         </div>
                     ) : displayFiles.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                            <Files className="h-12 w-12 mb-2" />
-                            <p className="text-sm">No files found</p>
+                        <div className="flex h-full items-center justify-center p-6">
+                            <EmptyState
+                                icon={Files}
+                                title="No files found"
+                                description="This folder is empty or no items match your search."
+                            />
                         </div>
                     ) : (
                         <table className="w-full text-left">
-                            <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+                            <thead className="sticky top-0 z-[1] border-b border-border bg-muted">
                                 <tr>
-                                    <th className="px-4 py-2 w-8">
-                                        <input 
-                                            type="checkbox" 
+                                    <th className="w-8 px-3 py-2.5">
+                                        <input
+                                            type="checkbox"
                                             checked={selectedFiles.size === displayFiles.length && displayFiles.length > 0}
                                             onChange={selectAll}
-                                            className="rounded border-gray-300"
+                                            className="h-3.5 w-3.5 accent-primary"
+                                            aria-label="Select all files"
                                         />
                                     </th>
-                                    <th className="px-4 py-2 text-[10px] font-semibold text-gray-500 uppercase">Name</th>
-                                    <th className="px-4 py-2 text-[10px] font-semibold text-gray-500 uppercase w-20">Type</th>
-                                    <th className="px-4 py-2 text-[10px] font-semibold text-gray-500 uppercase w-20">Actions</th>
+                                    <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Name</th>
+                                    <th className="w-20 px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Type</th>
+                                    <th className="w-20 px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-border">
                                 {displayFiles.map((file) => (
-                                    <tr 
-                                        key={file.name} 
+                                    <tr
+                                        key={file.name}
                                         className={cn(
-                                            "hover:bg-gray-50 cursor-pointer transition-colors",
+                                            "cursor-pointer transition-colors hover:bg-accent/40",
                                             selectedFiles.has(file.name) && "bg-primary/5"
                                         )}
                                         onClick={(e) => toggleFileSelection(file.name, e)}
                                         onDoubleClick={() => handleItemDoubleClick(file)}
                                     >
-                                        <td className="px-4 py-2">
-                                            <input 
-                                                type="checkbox" 
+                                        <td className="px-3 py-2">
+                                            <input
+                                                type="checkbox"
                                                 checked={selectedFiles.has(file.name)}
                                                 onChange={() => {}}
                                                 onClick={(e) => e.stopPropagation()}
-                                                className="rounded border-gray-300"
+                                                className="h-3.5 w-3.5 accent-primary"
+                                                aria-label={`Select ${file.name}`}
                                             />
                                         </td>
-                                        <td className="px-4 py-2">
+                                        <td className="px-3 py-2">
                                             <div className="flex items-center gap-2">
                                                 {file.isFolder ? (
-                                                    <Folder className="h-4 w-4 text-primary" />
+                                                    <Folder className="h-4 w-4 shrink-0 text-primary" aria-hidden />
                                                 ) : (
-                                                    <FileText className="h-4 w-4 text-gray-400" />
+                                                    <FileText className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                                                 )}
-                                                <span className="text-sm text-gray-900">{file.name}</span>
+                                                <span className="truncate text-sm text-foreground">{file.name}</span>
                                             </div>
                                         </td>
-                                        <td className="px-4 py-2">
-                                            <Badge variant="outline" className="text-[9px]">
+                                        <td className="px-3 py-2">
+                                            <Badge variant="outline" size="sm">
                                                 {file.isFolder ? "Folder" : file.type || "File"}
                                             </Badge>
                                         </td>
-                                        <td className="px-4 py-2">
+                                        <td className="px-3 py-2">
                                             {!file.isFolder && (
-                                                <Button 
-                                                    size="sm" 
-                                                    variant="ghost" 
-                                                    className="h-7 text-xs"
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-7 px-1.5"
+                                                    aria-label={`Download ${file.name}`}
                                                     onClick={async (e) => {
                                                         e.stopPropagation();
                                                         const target = path ? `${path}/${file.name}` : file.name;
@@ -622,13 +611,14 @@ export default function FilesPage() {
                                                         document.body.removeChild(a);
                                                     }}
                                                 >
-                                                    <Download className="h-3 w-3" />
+                                                    <Download className="h-3.5 w-3.5" />
                                                 </Button>
                                             )}
-                                            <Button 
-                                                size="sm" 
-                                                variant="ghost" 
-                                                className="h-7 text-xs"
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                className="h-7 px-1.5"
+                                                aria-label={`Rename ${file.name}`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     setRenameDialog({
@@ -638,7 +628,7 @@ export default function FilesPage() {
                                                     });
                                                 }}
                                             >
-                                                <Edit2 className="h-3 w-3" />
+                                                <Edit2 className="h-3.5 w-3.5" />
                                             </Button>
                                         </td>
                                     </tr>
@@ -659,7 +649,7 @@ export default function FilesPage() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={executeDelete} className="bg-rose-500 hover:bg-rose-600">
+                        <AlertDialogAction onClick={executeDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                             Delete
                         </AlertDialogAction>
                     </AlertDialogFooter>
@@ -674,7 +664,7 @@ export default function FilesPage() {
                             Enter a name for the new folder.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <Input 
+                    <Input
                         value={createFolderDialog.name}
                         onChange={(e) => setCreateFolderDialog({ ...createFolderDialog, name: e.target.value })}
                         placeholder="Folder name"
@@ -697,7 +687,7 @@ export default function FilesPage() {
                             Enter a new name for this {renameDialog.path.includes('.') ? 'file' : 'folder'}.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <Input 
+                    <Input
                         value={renameDialog.name}
                         onChange={(e) => setRenameDialog({ ...renameDialog, name: e.target.value })}
                         placeholder="New name"

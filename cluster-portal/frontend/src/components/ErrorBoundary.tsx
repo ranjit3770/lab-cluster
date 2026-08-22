@@ -37,37 +37,37 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             }
 
             return (
-                <div className="min-h-screen bg-[#020202] flex items-center justify-center p-6">
-                    <div className="max-w-md w-full bg-[#0a0a0a] border border-white/10 rounded-2xl p-8 shadow-2xl">
-                        <div className="flex flex-col items-center text-center space-y-6">
-                            <div className="h-16 w-16 bg-rose-500/10 rounded-2xl flex items-center justify-center">
-                                <AlertTriangle className="h-8 w-8 text-rose-500" />
+                <div className="flex min-h-screen items-center justify-center bg-background p-6">
+                    <div className="w-full max-w-md rounded-lg border border-border bg-card p-8 shadow-sm">
+                        <div className="flex flex-col items-center space-y-6 text-center">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-md bg-destructive/10 border border-destructive/20">
+                                <AlertTriangle className="h-7 w-7 text-destructive" aria-hidden />
                             </div>
                             <div className="space-y-2">
-                                <h1 className="text-xl font-bold text-white">Something went wrong</h1>
+                                <h1 className="text-lg font-semibold text-foreground">Something went wrong</h1>
                                 <p className="text-sm text-muted-foreground">
                                     An unexpected error occurred. Please try again or return to the dashboard.
                                 </p>
                             </div>
-                            <div className="flex gap-3 w-full">
+                            <div className="flex w-full gap-3">
                                 <Button
                                     variant="outline"
                                     onClick={() => window.location.href = '/'}
-                                    className="flex-1 h-10"
+                                    className="h-9 flex-1"
                                 >
-                                    <Home className="h-4 w-4 mr-2" />
+                                    <Home className="mr-2 h-4 w-4" />
                                     Dashboard
                                 </Button>
                                 <Button
                                     onClick={this.handleReset}
-                                    className="flex-1 h-10 bg-white text-black hover:bg-white/90"
+                                    className="h-9 flex-1"
                                 >
-                                    <RefreshCw className="h-4 w-4 mr-2" />
+                                    <RefreshCw className="mr-2 h-4 w-4" />
                                     Retry
                                 </Button>
                             </div>
                             {this.state.error && (
-                                <pre className="w-full text-[10px] text-muted-foreground/50 bg-white/5 p-3 rounded-lg overflow-x-auto text-left">
+                                <pre className="custom-scrollbar max-h-40 w-full overflow-auto rounded-md bg-muted/50 p-3 text-left font-mono text-[11px] text-muted-foreground">
                                     {this.state.error.message}
                                 </pre>
                             )}

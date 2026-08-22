@@ -1,22 +1,21 @@
 import { useEffect, useState } from "react";
-import { 
-    Shield, Save, Loader2, Settings as SettingsIcon, 
-    Globe, Clock, Lock, Terminal, Plus, Trash2, Network,
-    Server, Info, UserCheck, Hash, AlertCircle,
-    Zap, Activity, Database, Orbit, Power, History,
-    Cpu, Scan, Signal, LayoutGrid, Monitor, Command,
-    ArrowRight, ArrowUpRight, CheckCircle2, XCircle, ShieldAlert
+import {
+    Shield, Save, Loader2,
+    Clock, Lock, Terminal, Plus, Trash2,
+    Info, Activity, Power,
+    CheckCircle2, XCircle, ShieldAlert
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { settingsApi } from "@/api/settings";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/shared/PageHeader";
 import {
     Dialog,
     DialogContent,
@@ -145,106 +144,95 @@ export default function PlatformConfigPage() {
     };
 
     return (
-        <div className="flex flex-col gap-4 pb-4 max-w-[1200px] mx-auto w-full animate-in fade-in duration-300">
-            <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-4 rounded-xl border border-gray-100 shadow-sm mb-4">
-                <div>
-                    <h1 className="text-xl lg:text-2xl font-bold text-gray-900 tracking-tight">System Configuration</h1>
-                    <p className="text-xs text-gray-500 mt-0.5">Manage cluster settings and connection details</p>
-                </div>
-            </header>
+        <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 pb-4">
+            <PageHeader
+                title="System Configuration"
+                description="Manage cluster settings and connection details"
+            />
 
-            {/* Persistent Control Bar */}
-            <div className="fixed bottom-6 right-6 z-[100] pointer-events-none">
-                <div className="pointer-events-auto">
-                    <Button 
-                        onClick={handleUpdateConfig} 
-                        disabled={loading} 
-                        size="lg"
-                        className="h-14 px-8 rounded-full shadow-2xl bg-black hover:bg-gray-800 text-white font-bold text-base flex items-center gap-2 border border-white/20"
-                    >
-                        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
-                        Save Configuration
-                    </Button>
-                </div>
+            {/* Persistent Save action */}
+            <div className="pointer-events-none fixed bottom-6 right-6 z-[100]">
+                <Button
+                    onClick={handleUpdateConfig}
+                    disabled={loading}
+                    className="pointer-events-auto h-auto gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-lg hover:bg-primary/90"
+                >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    Save Configuration
+                </Button>
             </div>
 
             {user?.role === 'developer' && (
                 <Card className={cn(
-                    "border-none transition-all duration-500 overflow-hidden relative shadow-2xl",
-                    isMaintenanceOn 
-                        ? "bg-white border-2 border-amber-600 shadow-[0_30px_60px_-15px_rgba(245,158,11,0.4)]" 
-                        : "bg-white border border-gray-200 shadow-sm"
+                    "overflow-hidden rounded-lg border shadow-xs transition-colors",
+                    isMaintenanceOn ? "border-warning/40" : "border-border"
                 )}>
-                    {isMaintenanceOn && (
-                        <div className="absolute top-0 right-0 p-1">
-                            <Badge className="bg-amber-100 text-amber-700 border border-amber-200 text-[9px] font-black animate-pulse uppercase tracking-widest">System Restricted</Badge>
-                        </div>
-                    )}
-                    <CardContent className="p-6 flex items-center justify-between relative z-10 bg-white">
-                        <div className="flex items-center gap-5">
-                            <div className={cn(
-                                "h-14 w-14 rounded-2xl flex items-center justify-center transition-all duration-500 shadow-xl",
-                                isMaintenanceOn 
-                                    ? "bg-amber-600 text-white shadow-amber-600/20 rotate-12" 
-                                    : "bg-emerald-600 text-white shadow-emerald-600/10"
-                            )}>
-                                {isMaintenanceOn ? <Lock className="h-7 w-7" /> : <Power className="h-7 w-7" />}
-                            </div>
-                            <div>
-                                <h3 className={cn(
-                                    "text-lg font-bold tracking-tight mb-1",
-                                    isMaintenanceOn ? "text-amber-700" : "text-gray-900"
+                    <CardContent className="p-4">
+                        <div className="flex items-center justify-between gap-4">
+                            <div className="flex min-w-0 items-center gap-4">
+                                <div className={cn(
+                                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors",
+                                    isMaintenanceOn ? "bg-warning/10 text-warning" : "bg-success/10 text-success"
                                 )}>
-                                    System Maintenance Mode
-                                </h3>
-                                <div className="flex items-center gap-2">
-                                    <div className={cn(
-                                        "h-2 w-2 rounded-full", 
-                                        isMaintenanceOn ? "bg-amber-600 animate-ping" : "bg-emerald-600"
-                                    )} />
-                                    <p className={cn(
-                                        "text-xs font-bold uppercase tracking-[0.1em]",
-                                        isMaintenanceOn ? "text-amber-600" : "text-emerald-700"
-                                    )}>
-                                        {isMaintenanceOn ? "Restricted Access Protocol" : "Public Operational State"}
-                                    </p>
+                                    {isMaintenanceOn ? <Lock className="h-5 w-5" aria-hidden /> : <Power className="h-5 w-5" aria-hidden />}
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <h3 className={cn(
+                                            "text-sm font-semibold tracking-tight",
+                                            isMaintenanceOn ? "text-warning" : "text-foreground"
+                                        )}>
+                                            System Maintenance Mode
+                                        </h3>
+                                        {isMaintenanceOn && (
+                                            <Badge className="animate-pulse border border-warning/20 bg-warning/10 text-[9px] font-bold uppercase tracking-widest text-warning">
+                                                System Restricted
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <div className="mt-1 flex items-center gap-2">
+                                        <span className={cn(
+                                            "h-1.5 w-1.5 rounded-full",
+                                            isMaintenanceOn ? "animate-pulse bg-warning" : "bg-success"
+                                        )} aria-hidden />
+                                        <p className={cn(
+                                            "text-xs font-medium",
+                                            isMaintenanceOn ? "text-warning" : "text-success"
+                                        )}>
+                                            {isMaintenanceOn ? "Restricted Access Protocol" : "Public Operational State"}
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="flex items-center gap-3">
-                                {toggleLoading && <Loader2 className="h-5 w-5 animate-spin text-gray-400" />}
+
+                            <div className="flex shrink-0 items-center gap-3">
+                                {toggleLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />}
                                 <div className="flex flex-col items-end gap-1">
-                                    <Label className={cn("text-[9px] font-black uppercase tracking-widest", isMaintenanceOn ? "text-amber-600/50" : "text-gray-400")}>
+                                    <Label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                                         {isMaintenanceOn ? "Deactivate" : "Activate"}
                                     </Label>
-                                    <Switch 
+                                    <Switch
                                         checked={isMaintenanceOn}
                                         onCheckedChange={toggleMaintenance}
                                         disabled={toggleLoading}
-                                        className={cn(
-                                            "scale-125 transition-all outline-none ring-offset-background",
-                                            "data-[state=checked]:bg-amber-600 data-[state=unchecked]:bg-gray-200",
-                                            isMaintenanceOn && "shadow-[0_0_20px_rgba(245,158,11,0.3)]"
-                                        )}
+                                        className="data-[state=checked]:bg-warning"
                                     />
                                 </div>
                             </div>
                         </div>
                     </CardContent>
-                    
+
                     {isMaintenanceOn && (
-                        <div className="px-6 py-2 bg-amber-50 border-t border-amber-100 flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-[10px] text-amber-700 font-bold">
-                                <Info className="h-3 w-3" />
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-warning/20 bg-warning/10 px-4 py-2">
+                            <div className="flex items-center gap-2 text-[11px] font-medium text-warning">
+                                <Info className="h-3 w-3 shrink-0" aria-hidden />
                                 <span>External Job Submissions are currently rejected for all non-whitelisted IPs.</span>
                             </div>
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={() => setShowMaintenanceDialog(true)}
-                                className="h-6 text-[10px] text-amber-600 hover:bg-amber-100 hover:text-amber-700 font-bold uppercase"
+                                className="h-6 px-2 text-[11px] font-semibold uppercase tracking-wide text-warning hover:bg-warning/10 hover:text-warning"
                             >
                                 Manage Protocol Whitelist
                             </Button>
@@ -253,30 +241,28 @@ export default function PlatformConfigPage() {
                 </Card>
             )}
 
-            <Card className="bg-white border-gray-200 shadow-sm">
-                <CardHeader className="p-4 pb-2">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        <Info className="h-4 w-4" />
+            <Card className="rounded-lg border-border shadow-xs">
+                <CardHeader className="border-b border-border px-4 py-3 [.border-b]:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Info className="h-3.5 w-3.5 text-primary" aria-hidden />
                         Cluster Info
-                    </h3>
+                    </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 pt-0 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <CardContent className="space-y-3 p-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Cluster Name</Label>
-                            <Input 
-                                value={config.cluster_name} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Cluster Name</Label>
+                            <Input
+                                value={config.cluster_name}
                                 onChange={e => setConfig({...config, cluster_name: e.target.value})}
-                                className="h-10 mt-1 bg-white"
                                 placeholder="Cluster Name"
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Description</Label>
-                            <Input 
-                                value={config.cluster_description} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Description</Label>
+                            <Input
+                                value={config.cluster_description}
                                 onChange={e => setConfig({...config, cluster_description: e.target.value})}
-                                className="h-10 mt-1 bg-white"
                                 placeholder="Short description"
                             />
                         </div>
@@ -284,106 +270,103 @@ export default function PlatformConfigPage() {
                 </CardContent>
             </Card>
 
-            <Card className="bg-white border-gray-200 shadow-sm">
-                <CardHeader className="p-4 pb-2">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
+            <Card className="rounded-lg border-border shadow-xs">
+                <CardHeader className="border-b border-border px-4 py-3 [.border-b]:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Clock className="h-3.5 w-3.5 text-primary" aria-hidden />
                         Update Speeds
-                    </h3>
+                    </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 pt-0 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
+                <CardContent className="space-y-3 p-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Session length (seconds)</Label>
-                            <Input 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Session length (seconds)</Label>
+                            <Input
                                 type="number"
-                                value={config.session_timeout_seconds} 
+                                value={config.session_timeout_seconds}
                                 onChange={e => setConfig({...config, session_timeout_seconds: parseInt(e.target.value)})}
-                                className="h-10 mt-1 bg-white"
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Sync Speed (ms)</Label>
-                            <Input 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Sync Speed (ms)</Label>
+                            <Input
                                 type="number"
-                                value={config.sync_interval_ms} 
+                                value={config.sync_interval_ms}
                                 onChange={e => setConfig({...config, sync_interval_ms: parseInt(e.target.value)})}
-                                className="h-10 mt-1 bg-white"
                             />
                         </div>
                     </div>
                 </CardContent>
             </Card>
 
-            <Card className="bg-white border-gray-200 shadow-sm">
-                <CardHeader className="p-4 pb-2">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        <Terminal className="h-4 w-4" />
+            <Card className="rounded-lg border-border shadow-xs">
+                <CardHeader className="border-b border-border px-4 py-3 [.border-b]:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Terminal className="h-3.5 w-3.5 text-primary" aria-hidden />
                         Slurm Connection
-                    </h3>
+                    </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 pt-0 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <CardContent className="space-y-3 p-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">REST API URL</Label>
-                            <Input 
-                                value={config.slurm_rest_url} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">REST API URL</Label>
+                            <Input
+                                value={config.slurm_rest_url}
                                 onChange={e => setConfig({...config, slurm_rest_url: e.target.value})}
-                                className="h-10 mt-1 font-mono bg-white"
+                                className="font-mono text-xs"
                                 placeholder="http://..."
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Node API URL</Label>
-                            <Input 
-                                value={config.slurm_node_api} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Node API URL</Label>
+                            <Input
+                                value={config.slurm_node_api}
                                 onChange={e => setConfig({...config, slurm_node_api: e.target.value})}
-                                className="h-10 mt-1 font-mono bg-white"
+                                className="font-mono text-xs"
                                 placeholder="http://..."
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Job API URL</Label>
-                            <Input 
-                                value={config.external_job_api_url} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Job API URL</Label>
+                            <Input
+                                value={config.external_job_api_url}
                                 onChange={e => setConfig({...config, external_job_api_url: e.target.value})}
-                                className="h-10 mt-1 font-mono bg-white"
+                                className="font-mono text-xs"
                                 placeholder="http://..."
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Slurm Version</Label>
-                            <Input 
-                                value={config.slurm_version} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Slurm Version</Label>
+                            <Input
+                                value={config.slurm_version}
                                 onChange={e => setConfig({...config, slurm_version: e.target.value})}
-                                className="h-10 mt-1 bg-white"
                                 placeholder="v0.0.41"
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">JWT User (Slurmrestd)</Label>
-                            <Input 
-                                value={config.slurm_jwt_user} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">JWT User (Slurmrestd)</Label>
+                            <Input
+                                value={config.slurm_jwt_user}
                                 onChange={e => setConfig({...config, slurm_jwt_user: e.target.value})}
-                                className="h-10 mt-1 bg-white font-mono"
+                                className="font-mono text-xs"
                                 placeholder="slurmrestd"
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Slurm Path (Bin/Sbin)</Label>
-                            <Input 
-                                value={config.slurm_path} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Slurm Path (Bin/Sbin)</Label>
+                            <Input
+                                value={config.slurm_path}
                                 onChange={e => setConfig({...config, slurm_path: e.target.value})}
-                                className="h-10 mt-1 bg-white font-mono"
+                                className="font-mono text-xs"
                                 placeholder="/usr/local/slurm/bin..."
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Slurm Lib Path (LD_LIBRARY_PATH)</Label>
-                            <Input 
-                                value={config.slurm_lib_path} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Slurm Lib Path (LD_LIBRARY_PATH)</Label>
+                            <Input
+                                value={config.slurm_lib_path}
                                 onChange={e => setConfig({...config, slurm_lib_path: e.target.value})}
-                                className="h-10 mt-1 bg-white font-mono"
+                                className="font-mono text-xs"
                                 placeholder="/usr/local/slurm/lib"
                             />
                         </div>
@@ -391,33 +374,33 @@ export default function PlatformConfigPage() {
                 </CardContent>
             </Card>
 
-            <Card className="bg-white border-gray-200 shadow-sm">
-                <CardHeader className="p-4 pb-2">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        <Shield className="h-4 w-4" />
+            <Card className="rounded-lg border-border shadow-xs">
+                <CardHeader className="border-b border-border px-4 py-3 [.border-b]:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Shield className="h-3.5 w-3.5 text-primary" aria-hidden />
                         System Health
-                    </h3>
+                    </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 pt-0">
+                <CardContent className="space-y-3 p-4">
                     {integrityData && (
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                             {Object.entries(integrityData).filter(([k]) => k !== 'overall').map(([key, value]: [string, any]) => (
-                                <div key={key} className="p-3 bg-white border border-gray-100 rounded-lg flex items-center justify-between">
-                                    <div>
-                                        <p className="text-[10px] text-gray-500 uppercase">{key.replace('_', ' ')}</p>
-                                        <p className={cn("text-xs font-medium", value.status === 'healthy' ? "text-emerald-600" : "text-rose-600")}>{value.status}</p>
+                                <div key={key} className="flex items-center justify-between rounded-md border border-border bg-muted/30 p-3">
+                                    <div className="min-w-0">
+                                        <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{key.replace('_', ' ')}</p>
+                                        <p className={cn("text-xs font-medium", value.status === 'healthy' ? "text-success" : "text-destructive")}>{value.status}</p>
                                     </div>
                                     {value.status === 'healthy' ? (
-                                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                        <CheckCircle2 className="h-4 w-4 shrink-0 text-success" aria-hidden />
                                     ) : (
-                                        <XCircle className="h-4 w-4 text-rose-500" />
+                                        <XCircle className="h-4 w-4 shrink-0 text-destructive" aria-hidden />
                                     )}
                                 </div>
                             ))}
                         </div>
                     )}
-                    <Button onClick={runIntegrityCheck} disabled={integrityLoading} variant="outline" size="sm" className="bg-white">
-                        {integrityLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Activity className="h-4 w-4 mr-2" />}
+                    <Button onClick={runIntegrityCheck} disabled={integrityLoading} variant="outline" size="sm">
+                        {integrityLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
                         Check Health Now
                     </Button>
                 </CardContent>
@@ -426,26 +409,26 @@ export default function PlatformConfigPage() {
             <div className="h-20" />
 
             <Dialog open={showMaintenanceDialog} onOpenChange={setShowMaintenanceDialog}>
-                <DialogContent className="sm:max-w-md !bg-white border-none shadow-[0_50px_100px_rgba(0,0,0,0.3)] !text-black overflow-hidden p-0">
-                    <DialogHeader className="p-6 pb-2">
-                        <DialogTitle className="flex items-center gap-2 text-black font-black text-xl">
-                            <ShieldAlert className="h-6 w-6 text-amber-600" />
+                <DialogContent className="gap-0 overflow-hidden rounded-xl p-0 sm:max-w-md">
+                    <DialogHeader className="border-b border-border px-5 py-4">
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <ShieldAlert className="h-4 w-4 text-warning" aria-hidden />
                             Maintenance Protocol
                         </DialogTitle>
-                        <DialogDescription className="text-gray-500 text-xs font-medium">
+                        <DialogDescription className="mt-1 text-xs">
                             Whitelist administrative endpoints before system-wide lockdown.
                         </DialogDescription>
                     </DialogHeader>
-                    
-                    <div className="space-y-3">
+
+                    <div className="space-y-3 px-5 py-4">
                         <div className="flex gap-2">
-                            <Input 
+                            <Input
                                 value={newIP}
                                 onChange={e => setNewIP(e.target.value)}
                                 placeholder="192.168.1.1"
-                                className="flex-1"
+                                className="flex-1 font-mono text-xs"
                             />
-                            <Button 
+                            <Button
                                 size="sm"
                                 onClick={async () => {
                                     setAddIPLoading(true);
@@ -455,7 +438,7 @@ export default function PlatformConfigPage() {
                                         const res = await settingsApi.getMaintenanceIPs(token!);
                                         setMaintenanceIPs(res.data);
                                         toast.success("IP added to whitelist.");
-                                    } catch(e) { toast.error("Failed to add IP."); } 
+                                    } catch(e) { toast.error("Failed to add IP."); }
                                     finally { setAddIPLoading(false); }
                                 }}
                                 disabled={addIPLoading || !newIP}
@@ -464,27 +447,27 @@ export default function PlatformConfigPage() {
                             </Button>
                         </div>
 
-                        <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                        <div className="max-h-[300px] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                             {maintenanceIPs.length === 0 ? (
-                                <div className="p-10 text-center border-2 border-dashed border-gray-100 rounded-2xl flex flex-col items-center gap-2">
-                                    <ShieldAlert className="h-8 w-8 text-gray-200" />
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">No IP Security Exceptions</p>
+                                <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-border px-6 py-8">
+                                    <ShieldAlert className="h-6 w-6 text-muted-foreground/40" aria-hidden />
+                                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">No IP Security Exceptions</p>
                                 </div>
                             ) : maintenanceIPs.map(ip => (
-                                <div key={ip.id} className="flex justify-between items-center p-3 bg-white border border-gray-100 shadow-sm rounded-xl hover:border-gray-300 transition-all hover:translate-x-1 group">
-                                    <div className="flex items-center gap-3">
-                                        <div className="h-2 w-2 rounded-full bg-emerald-500" />
-                                        <span className="text-xs font-mono font-bold text-gray-700">{ip.ip_address}</span>
+                                <div key={ip.id} className="group flex items-center justify-between rounded-md border border-border bg-card px-3 py-2 transition-colors hover:bg-accent/40">
+                                    <div className="flex items-center gap-2.5">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+                                        <span className="font-mono text-xs font-medium text-foreground">{ip.ip_address}</span>
                                     </div>
-                                    <Button 
-                                        variant="ghost" 
-                                        size="sm" 
-                                        className="h-7 text-rose-500 hover:text-rose-600"
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
                                         onClick={async () => {
-                                            try { 
-                                                await settingsApi.removeMaintenanceIP(token!, ip.id); 
-                                                const res = await settingsApi.getMaintenanceIPs(token!); 
-                                                setMaintenanceIPs(res.data); 
+                                            try {
+                                                await settingsApi.removeMaintenanceIP(token!, ip.id);
+                                                const res = await settingsApi.getMaintenanceIPs(token!);
+                                                setMaintenanceIPs(res.data);
                                             } catch(e){}
                                         }}
                                     >
@@ -495,10 +478,10 @@ export default function PlatformConfigPage() {
                         </div>
                     </div>
 
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setShowMaintenanceDialog(false)}>Cancel</Button>
-                        <Button onClick={handleActivateMaintenance} disabled={maintenanceIPs.length === 0 || maintenanceLoading}>
-                            {maintenanceLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
+                    <DialogFooter className="border-t border-border bg-muted/30 px-5 py-3">
+                        <Button variant="outline" size="sm" onClick={() => setShowMaintenanceDialog(false)}>Cancel</Button>
+                        <Button onClick={handleActivateMaintenance} disabled={maintenanceIPs.length === 0 || maintenanceLoading} size="sm">
+                            {maintenanceLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
                             Enable Maintenance Mode
                         </Button>
                     </DialogFooter>

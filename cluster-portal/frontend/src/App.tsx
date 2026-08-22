@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import Layout from '@/components/Layout';
@@ -29,13 +30,18 @@ import DiagnosticConsolePage from '@/pages/management/DiagnosticConsolePage';
 function MaintenanceBanner({ active }: { active: boolean }) {
   if (!active) return null;
   return (
-    <div className="bg-[#f97316] text-white px-6 py-1.5 flex items-center justify-center gap-4 text-[10px] font-black uppercase tracking-[0.2em] shadow-lg sticky top-0 z-[9999]">
+    <div
+      role="status"
+      className="sticky top-0 z-[9999] flex items-center justify-center gap-4 bg-warning px-6 py-1.5 text-warning-foreground"
+    >
         <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)] animate-pulse" />
-            <span>Operational Mode: Lock</span>
+            <div className="h-2 w-2 animate-pulse rounded-full bg-current" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Operational Mode: Lock</span>
         </div>
-        <div className="hidden md:block w-px h-3 bg-white/20 mx-2" />
-        <p className="opacity-95 text-center">SYSTEM IN MAINTENANCE MODE — CERTAIN FEATURES MAY BE RESTRICTED</p>
+        <div className="hidden h-3 w-px bg-current/25 md:block" />
+        <p className="text-center text-[11px] font-medium opacity-90">
+          System in maintenance mode — certain features may be restricted
+        </p>
     </div>
   );
 }
@@ -144,11 +150,13 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <ErrorBoundary>
-          <AppContent />
-        </ErrorBoundary>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <ErrorBoundary>
+            <AppContent />
+          </ErrorBoundary>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

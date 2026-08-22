@@ -1,48 +1,27 @@
 import { useState } from 'react';
-import { 
-    Send, Bug, 
-    Star, Layout, Gauge, 
+import {
+    Send, Bug,
+    Star, Layout, Gauge,
     Shield, Folder, Cpu, Info,
-    Terminal,
-    Globe,
-    Zap,
-    Box,
-    Layers,
-    Monitor,
-    ChevronRight,
-    ArrowRight,
-    MessageSquare,
-    Signal,
-    Command,
-    Sparkles,
-    Database,
-    Network,
     RefreshCcw,
-    Activity,
-    Orbit,
-    Power,
-    History,
-    Scan,
-    ArrowUpRight,
-    Cpu as CpuIcon,
-    Loader2
+    MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { feedbackApi } from "@/api/feedback";
 import { useAuth } from "@/context/AuthContext";
 
 const FEEDBACK_TYPES = [
-    { id: 'bug', label: 'Bug Report', icon: Bug, color: 'text-rose-500' },
-    { id: 'feature', label: 'Feature', icon: Star, color: 'text-amber-500' },
-    { id: 'performance', label: 'Performance', icon: Gauge, color: 'text-emerald-500' },
-    { id: 'other', label: 'Other', icon: Info, color: 'text-blue-500' }
+    { id: 'bug', label: 'Bug Report', icon: Bug },
+    { id: 'feature', label: 'Feature', icon: Star },
+    { id: 'performance', label: 'Performance', icon: Gauge },
+    { id: 'other', label: 'Other', icon: Info }
 ];
 
 const CATEGORIES = [
@@ -87,62 +66,65 @@ export default function FeedbackPage() {
     };
 
     return (
-        <div className="flex flex-col gap-4 pb-4 max-w-[1200px] mx-auto w-full animate-in fade-in duration-300">
-            <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                    <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Feedback</h1>
-                    <p className="text-xs text-gray-500 flex items-center gap-2 mt-1">
-                        <MessageSquare className="h-3 w-3" />
+        <div className="flex flex-col pb-4 max-w-[1200px] mx-auto w-full">
+            <PageHeader
+                title="Feedback"
+                description={
+                    <span className="flex items-center gap-1.5">
+                        <MessageSquare className="h-3 w-3" aria-hidden />
                         Submit bug reports, feature requests, or suggestions
-                    </p>
-                </div>
-            </header>
+                    </span>
+                }
+            />
 
             <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
-                <Card className="bg-white border-gray-200 min-h-[400px]">
-                    <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-sm font-semibold text-gray-900">Submit Feedback</CardTitle>
+                <Card>
+                    <CardHeader className="border-b border-border px-4 py-3 [.border-b]:pb-3">
+                        <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            <Send className="h-3.5 w-3.5 text-primary" aria-hidden />
+                            Submit Feedback
+                        </CardTitle>
                     </CardHeader>
-                    <CardContent className="p-4 pt-0 overflow-visible">
+                    <CardContent className="p-4 overflow-visible">
                         <form onSubmit={handleSubmit} className="space-y-4">
                             <div>
-                                <Label className="text-[10px] font-medium text-gray-500 uppercase mb-2 block">Type</Label>
-                                <div className="grid grid-cols-4 gap-2">
+                                <Label className="text-xs font-medium text-foreground">Type</Label>
+                                <div className="mt-1.5 grid grid-cols-4 gap-2">
                                     {FEEDBACK_TYPES.map((type) => (
                                         <button
                                             key={type.id}
                                             type="button"
                                             onClick={() => setFormData({ ...formData, type: type.id })}
                                             className={cn(
-                                                "p-2 rounded-lg border text-xs font-medium transition-all flex flex-col items-center gap-1",
-                                                formData.type === type.id 
-                                                    ? "bg-primary/10 border-primary text-primary" 
-                                                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                                                "flex flex-col items-center gap-1 rounded-md border p-2 text-xs font-medium transition-colors",
+                                                formData.type === type.id
+                                                    ? "border-primary bg-primary/10 text-primary"
+                                                    : "border-border bg-card text-muted-foreground hover:bg-accent/40 hover:text-foreground"
                                             )}
                                         >
-                                            <type.icon className="h-4 w-4" />
-                                            <span className="text-[10px]">{type.label}</span>
+                                            <type.icon className="h-4 w-4" aria-hidden />
+                                            <span className="text-[11px]">{type.label}</span>
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
                             <div>
-                                <Label className="text-[10px] font-medium text-gray-500 uppercase mb-2 block">Category</Label>
-                                <div className="grid grid-cols-2 gap-2">
+                                <Label className="text-xs font-medium text-foreground">Category</Label>
+                                <div className="mt-1.5 grid grid-cols-2 gap-2">
                                     {CATEGORIES.map((cat) => (
                                         <button
                                             key={cat.id}
                                             type="button"
                                             onClick={() => setFormData({ ...formData, category: cat.id })}
                                             className={cn(
-                                                "p-2 rounded-lg border text-xs font-medium transition-all flex items-center gap-2",
-                                                formData.category === cat.id 
-                                                    ? "bg-primary/10 border-primary text-primary" 
-                                                    : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                                                "flex items-center gap-2 rounded-md border p-2 text-xs font-medium transition-colors",
+                                                formData.category === cat.id
+                                                    ? "border-primary bg-primary/10 text-primary"
+                                                    : "border-border bg-card text-muted-foreground hover:bg-accent/40 hover:text-foreground"
                                             )}
                                         >
-                                            <cat.icon className="h-3 w-3" />
+                                            <cat.icon className="h-3.5 w-3.5" aria-hidden />
                                             {cat.label}
                                         </button>
                                     ))}
@@ -150,10 +132,11 @@ export default function FeedbackPage() {
                             </div>
 
                             <div>
-                                <Label className="text-[10px] font-medium text-gray-500 uppercase mb-2 block">Subject</Label>
-                                <Input 
+                                <Label htmlFor="feedback-subject" className="text-xs font-medium text-foreground">Subject</Label>
+                                <Input
+                                    id="feedback-subject"
                                     placeholder="Brief summary of your feedback"
-                                    className="h-10 bg-gray-50 border-gray-200"
+                                    className="mt-1.5 h-9"
                                     value={formData.subject}
                                     onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                                     required
@@ -161,26 +144,27 @@ export default function FeedbackPage() {
                             </div>
 
                             <div>
-                                <Label className="text-[10px] font-medium text-gray-500 uppercase mb-2 block">Message</Label>
-                                <Textarea 
+                                <Label htmlFor="feedback-message" className="text-xs font-medium text-foreground">Message</Label>
+                                <Textarea
+                                    id="feedback-message"
                                     placeholder="Describe your feedback in detail..."
-                                    className="min-h-[120px] bg-gray-50 border-gray-200 resize-none"
+                                    className="mt-1.5 min-h-[120px] resize-none"
                                     value={formData.message}
                                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                                     required
                                 />
                             </div>
 
-                            <div className="pt-2">
-                                <Button 
+                            <div className="pt-1">
+                                <Button
                                     type="submit"
                                     disabled={submitting}
-                                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                                    className="w-full"
                                 >
                                     {submitting ? (
-                                        <RefreshCcw className="mr-2 h-4 w-4 animate-spin" />
+                                        <RefreshCcw className="animate-spin" aria-hidden />
                                     ) : (
-                                        <Send className="mr-2 h-4 w-4" />
+                                        <Send aria-hidden />
                                     )}
                                     {submitting ? 'Submitting...' : 'Submit Feedback'}
                                 </Button>

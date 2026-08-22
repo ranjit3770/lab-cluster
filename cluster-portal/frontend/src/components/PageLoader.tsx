@@ -7,7 +7,7 @@ export default function PageLoader({ message = "Loading..." }: { message?: strin
         <Loader2 className="h-10 w-10 text-primary animate-spin" />
         <div className="absolute inset-0 bg-primary/10 blur-xl rounded-full" />
       </div>
-      <p className="text-sm text-gray-500 uppercase tracking-widest font-medium animate-pulse">
+      <p className="text-sm text-muted-foreground uppercase tracking-widest font-medium animate-pulse">
         {message}
       </p>
     </div>

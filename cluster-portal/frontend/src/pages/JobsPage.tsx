@@ -4,31 +4,12 @@ import { filesApi } from '@/api/files';
 import { useAuth } from '@/context/AuthContext';
 import PageLoader from '@/components/PageLoader';
 import { ControllerFailureAlert } from '@/components/ControllerFailureAlert';
-import { 
-    Search, FileText, RefreshCcw, Activity, User, Trash2,
-    BarChart3, Monitor, Layers, FileJson,
-    XCircle, Clock, Terminal, ChevronRight, Zap, Play, Plus, Trash,
-    ArrowRight,
-    ArrowUpRight,
-    Command,
-    Info,
-    Signal,
-    Orbit,
-    Power,
-    History,
-    Network,
-    Globe,
-    Lock,
-    Unlock,
-    ShieldCheck,
-    Cpu,
-    Database,
-    Loader2,
-    Scan,
-    Sparkles,
-    X,
-    Send,
-    ExternalLink
+import {
+    Search, RefreshCcw, Trash2, Monitor, XCircle,
+    Terminal, ChevronRight, Play, Info, Signal,
+    Orbit, Power, Loader2, Sparkles, X, Send,
+    ExternalLink, Rocket, Activity, Clock,
+    CheckCircle2, Ban, Layers
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -47,6 +28,10 @@ import {
     AlertDialogCancel,
     AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { MetricCard } from "@/components/shared/MetricCard";
+import { StatusBadge } from "@/components/ui/status-badge";
 
 interface Job {
     id: number;
@@ -72,6 +57,20 @@ interface FileItem {
     path: string;
     isFolder: boolean;
 }
+
+const JOB_STATUS_TONES: Record<string, { badge: string; dot: string }> = {
+    RUNNING: { badge: 'bg-primary/10 text-primary border-primary/25', dot: 'bg-primary animate-pulse' },
+    PENDING: { badge: 'bg-warning/10 text-warning border-warning/25', dot: 'bg-warning' },
+    WAITING: { badge: 'bg-info/10 text-info border-info/20', dot: 'bg-info' },
+    COMPLETED: { badge: 'bg-success/10 text-success border-success/20', dot: 'bg-success' },
+    FAILED: { badge: 'bg-destructive/10 text-destructive border-destructive/20', dot: 'bg-destructive' },
+    CANCELLED: { badge: 'bg-muted text-muted-foreground border-border', dot: 'bg-muted-foreground/60' },
+};
+
+const jobStatusLabel = (status: string) =>
+    status === 'PENDING' ? 'Queued / starting' :
+    status === 'WAITING' ? 'Waiting for quota' :
+    status;
 
 export default function JobsPage() {
     const { token, user } = useAuth();
@@ -119,9 +118,9 @@ export default function JobsPage() {
     const [jobToStop, setJobToStop] = useState<Job | null>(null);
     const [infoJob, setInfoJob] = useState<Job | null>(null);
     const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
-    
+
     const [elapsedTimes, setElapsedTimes] = useState<Record<number, string>>({});
-    
+
     const [selectedApp, setSelectedApp] = useState<'jupyter' | 'python' | null>(null);
     const [isAppSelectorOpen, setIsAppSelectorOpen] = useState(false);
     const [scriptsLoading, setScriptsLoading] = useState(false);
@@ -164,8 +163,8 @@ export default function JobsPage() {
     // Click outside handler
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (openDropdown && 
-                ((dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) && 
+            if (openDropdown &&
+                ((dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) &&
                  (reqDropdownRef.current && !reqDropdownRef.current.contains(event.target as Node)))) {
                 setOpenDropdown(null);
             }
@@ -199,11 +198,11 @@ export default function JobsPage() {
         try {
             const res = await filesApi.getFileTree(token!);
             const tree: FileItem[] = res.data;
-            
+
             const isExcluded = (path: string) => {
                 const parts = path.split('/');
                 return parts.some(p => [
-                    'venv', '.venv', 'env', '.env', 'bin', 'lib', 'include', 
+                    'venv', '.venv', 'env', '.env', 'bin', 'lib', 'include',
                     'Lib', 'Scripts', 'site-packages', 'jobs', '__pycache__', '.git'
                 ].includes(p));
             };
@@ -285,8 +284,8 @@ export default function JobsPage() {
             return;
         }
 
-        const nameExists = jobs.some(j => 
-            j.job_name.toLowerCase() === formData.job_name.toLowerCase() && 
+        const nameExists = jobs.some(j =>
+            j.job_name.toLowerCase() === formData.job_name.toLowerCase() &&
             ['PENDING', 'RUNNING'].includes(j.status)
         );
 
@@ -314,12 +313,12 @@ export default function JobsPage() {
                 walltime: normalizedBatchWalltime,
                 job_type: formData.job_type || 'distributed'
             });
-            
+
             toast.success("Job submitted successfully.");
-            setFormData({ 
-                job_name: '', 
-                script_path: '', 
-                requirements_path: '', 
+            setFormData({
+                job_name: '',
+                script_path: '',
+                requirements_path: '',
                 dependency_path: '',
                 total_cpu: '1',
                 total_ram: '1',
@@ -339,10 +338,10 @@ export default function JobsPage() {
         const matchesSearch = j.job_name.toLowerCase().includes(search.toLowerCase()) ||
                              (j.script_path && j.script_path.toLowerCase().includes(search.toLowerCase())) ||
                              j.id.toString().includes(search);
-        
+
         const matchesStatus = statusFilter === 'ALL' || j.status === statusFilter;
         const matchesOwner = ownerFilter === 'ALL' || j.owner?.username === ownerFilter;
-        
+
         return matchesSearch && matchesStatus && matchesOwner;
     });
 
@@ -365,7 +364,7 @@ export default function JobsPage() {
              toast.error("Running jobs cannot be deleted in bulk. Stop them first.");
              return;
         }
-        setSelectedJobIds(prev => 
+        setSelectedJobIds(prev =>
             prev.includes(jid) ? prev.filter(id => id !== jid) : [...prev, jid]
         );
     };
@@ -405,7 +404,7 @@ export default function JobsPage() {
         try {
             const res = await jobsApi.getJupyterUrl(token!, job.id);
             const data = res.data;
-            
+
             if (data.status === 'RUNNING' && data.url) {
                 window.open(data.url, '_blank');
             } else if (data.status === 'PENDING') {
@@ -485,7 +484,7 @@ export default function JobsPage() {
         streamAbortController.current = controller;
 
         setIsLive(true);
-        setLiveLogs(''); 
+        setLiveLogs('');
         const jobApiUrl = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:8000`;
 
         const performPoll = async () => {
@@ -497,10 +496,10 @@ export default function JobsPage() {
                 });
                 if (!response.ok) throw new Error("Connection failed");
                 const text = await response.text();
-                
+
                 if (controller.signal.aborted) return;
                 setLiveLogs(text);
-                
+
                 if (!controller.signal.aborted) {
                     setTimeout(performPoll, 3000);
                 }
@@ -508,14 +507,14 @@ export default function JobsPage() {
                 if (err.name !== 'AbortError') {
                     console.error("Slurm Poll Error:", err);
                     setLiveLogs(prev => prev || monitoringJob?.output_log || monitoringJob?.error_log || '');
-                    
+
                     if (!controller.signal.aborted) {
                         setTimeout(performPoll, 5000);
                     }
                 }
             }
         };
-        
+
         performPoll();
     };
 
@@ -552,47 +551,36 @@ export default function JobsPage() {
         : '';
 
     const JobList = ({ showHeader = true }) => (
-        <div className="flex flex-col h-full gap-3">
+        <div className="flex h-full flex-col gap-3">
             {showHeader && (
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-base font-semibold text-gray-900">Jobs</h2>
-                        <p className="text-xs text-muted-foreground">{filteredJobs.length} total</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {!isAdmin && selectedJobIds.length > 0 && (
-                            <Button 
-                                onClick={() => setShowBulkDeleteModal(true)}
-                                size="sm"
-                                variant="destructive"
-                                className="h-8 text-[10px] font-bold uppercase px-3 shadow-lg shadow-rose-900/20"
-                            >
-                                <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                                Delete ({selectedJobIds.length})
-                            </Button>
-                        )}
-                        <Button 
-                             onClick={() => fetchJobs()}
-                             size="sm"
-                             variant="outline"
-                             className={cn("h-8 w-8 p-0", refreshing && "animate-spin")}
+                <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{filteredJobs.length}</span> total
+                    </p>
+                    {!isAdmin && selectedJobIds.length > 0 && (
+                        <Button
+                            onClick={() => setShowBulkDeleteModal(true)}
+                            size="sm"
+                            variant="destructive"
+                            className="h-8 px-3 text-xs"
                         >
-                            <RefreshCcw className="h-3.5 w-3.5" />
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                            Delete ({selectedJobIds.length})
                         </Button>
-                    </div>
+                    )}
                 </div>
             )}
-            
-            <Card className="overflow-hidden border-white/5 bg-white/[0.02] flex-1">
+
+            <div className="flex-1 overflow-hidden rounded-lg border border-border bg-card shadow-xs">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead>
-                            <tr className="border-b border-white/5">
-                                <th className="px-3 py-2.5 w-10">
+                            <tr className="border-b border-border bg-muted/50">
+                                <th className="w-10 px-3 py-2.5">
                                     {!isAdmin && (
-                                        <input 
-                                            type="checkbox" 
-                                            className="h-3.5 w-3.5 accent-primary bg-black border-white/10 rounded cursor-pointer"
+                                        <input
+                                            type="checkbox"
+                                            className="h-3.5 w-3.5 cursor-pointer rounded border-input accent-primary"
                                             checked={selectedJobIds.length > 0 && selectedJobIds.length === filteredJobs.filter(j => j.status !== 'RUNNING').length}
                                             onChange={() => {
                                                 const selectable = filteredJobs.filter(j => j.status !== 'RUNNING');
@@ -603,18 +591,18 @@ export default function JobsPage() {
                                         />
                                     )}
                                 </th>
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Job</th>
+                                <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Job</th>
                                 {isAdmin && (
-                                    <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Owner</th>
+                                    <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Owner</th>
                                 )}
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">Status</th>
+                                <th className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</th>
                                 {isAdmin && (
-                                    <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Script</th>
+                                    <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Script</th>
                                 )}
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">Actions</th>
+                                <th className="px-3 py-2.5 text-right text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-white/5">
+                        <tbody className="divide-y divide-border">
                             {filteredJobs.length === 0 ? (
                                 <tr>
                                     <td colSpan={isAdmin ? 5 : 3} className="px-3 py-12 text-center">
@@ -623,13 +611,13 @@ export default function JobsPage() {
                                 </tr>
                             ) : (
                                 filteredJobs.map((j) => (
-                                    <tr key={j.id} className={cn("hover:bg-white/[0.02] transition-colors", selectedJobIds.includes(j.id) && "bg-primary/[0.03]")}>
+                                    <tr key={j.id} className={cn("transition-colors hover:bg-accent/40", selectedJobIds.includes(j.id) && "bg-primary/5")}>
                                         <td className="px-3 py-2.5">
                                             {!isAdmin && (
-                                                <input 
+                                                <input
                                                     type="checkbox"
                                                     disabled={j.status === 'RUNNING'}
-                                                    className={cn("h-3.5 w-3.5 accent-primary bg-black border-white/10 rounded cursor-pointer", j.status === 'RUNNING' && "opacity-50 cursor-not-allowed")}
+                                                    className={cn("h-3.5 w-3.5 cursor-pointer rounded border-input accent-primary", j.status === 'RUNNING' && "cursor-not-allowed opacity-50")}
                                                     checked={selectedJobIds.includes(j.id)}
                                                     onChange={() => toggleJobSelection(j.id)}
                                                 />
@@ -637,12 +625,12 @@ export default function JobsPage() {
                                         </td>
                                         <td className="px-3 py-2.5">
                                             <div className="flex items-center gap-2.5">
-                                                <div className="h-8 w-8 flex items-center justify-center bg-white/5 rounded-md">
-                                                    <Terminal className={cn("h-4 w-4", j.status === 'RUNNING' ? "text-primary animate-pulse" : "text-muted-foreground")} />
+                                                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted">
+                                                    <Terminal className={cn("h-4 w-4", j.status === 'RUNNING' ? "animate-pulse text-primary" : "text-muted-foreground")} />
                                                 </div>
                                                 <div>
-                                                    <div className="text-sm font-medium text-gray-900">{j.job_name}</div>
-                                                    <div className="text-[10px] text-muted-foreground">{j.slurm_job_id ? `#${j.slurm_job_id}` : `ID: ${j.id}`}</div>
+                                                    <div className="text-sm font-medium text-foreground">{j.job_name}</div>
+                                                    <div className="text-[11px] text-muted-foreground">{j.slurm_job_id ? `#${j.slurm_job_id}` : `ID: ${j.id}`}</div>
                                                 </div>
                                             </div>
                                         </td>
@@ -652,22 +640,14 @@ export default function JobsPage() {
                                             </td>
                                         )}
                                         <td className="px-3 py-2.5 text-center">
-                                            <span className={cn(
-                                                j.status === 'RUNNING' ? "bg-primary/10 text-primary" :
-                                                j.status === 'PENDING' ? "bg-amber-500/10 text-amber-500" :
-                                                j.status === 'WAITING' ? "bg-indigo-500/10 text-indigo-500" :
-                                                j.status === 'COMPLETED' ? "bg-emerald-500/10 text-emerald-500" :
-                                                j.status === 'FAILED' ? "bg-rose-500/10 text-rose-500" : 
-                                                j.status === 'CANCELLED' ? "bg-white/5 text-muted-foreground" : "bg-white/5 text-muted-foreground"
-                                            )}>
-                                                {j.status === 'PENDING' ? 'Queued / starting' :
-                                                 j.status === 'WAITING' ? 'Waiting for quota' :
-                                                 j.status}
-                                            </span>
+                                            <Badge variant="outline" className={cn('gap-1.5 font-medium', (JOB_STATUS_TONES[j.status] ?? JOB_STATUS_TONES.CANCELLED).badge)}>
+                                                <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', (JOB_STATUS_TONES[j.status] ?? JOB_STATUS_TONES.CANCELLED).dot)} aria-hidden />
+                                                {jobStatusLabel(j.status)}
+                                            </Badge>
                                         </td>
                                         {isAdmin && (
                                             <td className="px-3 py-2.5">
-                                                <span className="text-xs text-muted-foreground truncate max-w-[150px] block">{j.script_path?.split('/').pop() || '-'}</span>
+                                                <span className="block max-w-[150px] truncate text-xs text-muted-foreground">{j.script_path?.split('/').pop() || '-'}</span>
                                             </td>
                                         )}
                                         <td className="px-3 py-2.5 text-right">
@@ -678,45 +658,50 @@ export default function JobsPage() {
                                                         onClick={() => handleOpenJupyter(j)}
                                                         size="sm"
                                                         variant="ghost"
-                                                        className="h-7 text-emerald-500 hover:text-emerald-400 hover:bg-emerald-500/10"
+                                                        className="h-7 w-7 p-0 text-success hover:bg-success/10 hover:text-success"
                                                         title="Open Jupyter"
+                                                        aria-label="Open Jupyter"
                                                     >
                                                         <ExternalLink className="h-3.5 w-3.5" />
                                                     </Button>
                                                 )}
-                                                <Button 
+                                                <Button
                                                     onClick={() => setInfoJob(j)}
                                                     size="sm"
                                                     variant="ghost"
-                                                    className="h-7 text-sky-500 hover:text-sky-400 hover:bg-sky-500/10"
+                                                    className="h-7 w-7 p-0 text-info hover:bg-info/10 hover:text-info"
                                                     title="View Info"
+                                                    aria-label="View job details"
                                                 >
                                                     <Info className="h-3.5 w-3.5" />
                                                 </Button>
-                                                <Button 
+                                                <Button
                                                     onClick={() => setMonitoringJob(j)}
                                                     size="sm"
                                                     variant="ghost"
-                                                    className="h-7"
+                                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                                                    aria-label="Monitor job logs"
                                                 >
                                                     <Monitor className="h-3.5 w-3.5" />
                                                 </Button>
-                                                
+
                                                 {['RUNNING', 'PENDING'].includes(j.status) ? (
-                                                    <Button 
+                                                    <Button
                                                         onClick={() => setJobToStop(j)}
                                                         size="sm"
-                                                        variant="ghost"
-                                                        className="h-7 text-amber-500"
+                                                        variant="outline"
+                                                        className="h-7 w-7 border-warning/30 p-0 text-warning hover:bg-warning/10 hover:text-warning"
+                                                        aria-label="Stop job"
                                                     >
                                                         <XCircle className="h-3.5 w-3.5" />
                                                     </Button>
                                                 ) : (
-                                                    <Button 
+                                                    <Button
                                                         onClick={() => handleDeleteJob(j)}
                                                         size="sm"
-                                                        variant="ghost"
-                                                        className="h-7 text-rose-500"
+                                                        variant="outline"
+                                                        className="h-7 w-7 border-destructive/30 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                        aria-label="Delete job"
                                                     >
                                                         <Trash2 className="h-3.5 w-3.5" />
                                                     </Button>
@@ -729,373 +714,385 @@ export default function JobsPage() {
                         </tbody>
                     </table>
                 </div>
-            </Card>
+            </div>
         </div>
     );
 
     return (
-        <div className="flex flex-col gap-3 pb-4 selection:bg-primary/30 max-w-[1900px] mx-auto w-full animate-in fade-in duration-300">
-            <header className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                    <h1 className="page-title text-xl lg:text-2xl font-bold text-gray-900">Jobs</h1>
-                    <p className="page-subtitle text-xs text-muted-foreground mt-1">
-                        {isAdmin ? "Manage all cluster jobs" : "View and submit jobs"}
-                    </p>
-                </div>
-                {isAdmin && (
-                <div className="flex items-center gap-3">
-                    {isAdmin && (
-                        <div className="flex items-center gap-2">
-                             <select 
-                                className="h-8 bg-white/5 border border-white/5 rounded-md text-[10px] px-2 text-white outline-none focus:border-primary/50 font-bold uppercase"
-                                value={ownerFilter}
-                                onChange={(e) => setOwnerFilter(e.target.value)}
-                            >
-                                <option value="ALL">All Owners</option>
-                                {Array.from(new Set(jobs.map(j => j.owner?.username).filter(Boolean))).map(u => (
-                                    <option key={u} value={u!}>{u}</option>
-                                ))}
-                            </select>
-                            <select 
-                                className="h-8 bg-white/5 border border-white/5 rounded-md text-[10px] px-2 text-white outline-none focus:border-primary/50 font-bold uppercase"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                            >
-                                <option value="ALL">All Status</option>
-                                <option value="RUNNING">Running</option>
-                                <option value="PENDING">Queued</option>
-                                <option value="COMPLETED">Completed</option>
-                                <option value="FAILED">Failed</option>
-                                <option value="WAITING">Waiting (Local)</option>
-                            </select>
-                        </div>
-                    )}
-                    {!isAdmin && (
-                        <div className="relative w-full sm:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                            <Input 
-                                placeholder="Search jobs..." 
-                                className="pl-9 h-8 bg-white/5 border-white/5 text-xs rounded-md"
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                            />
-                        </div>
-                    )}
-                </div>
-                )}
-            </header>
+        <div className="flex flex-col pb-4">
+            <PageHeader
+                title="Jobs"
+                description={isAdmin ? "Manage all cluster jobs" : "View and submit jobs"}
+                actions={
+                    <>
+                        {isAdmin && (
+                            <>
+                                <select
+                                    aria-label="Filter by owner"
+                                    className="h-8 rounded-md border border-input bg-card px-2 text-xs"
+                                    value={ownerFilter}
+                                    onChange={(e) => setOwnerFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Owners</option>
+                                    {Array.from(new Set(jobs.map(j => j.owner?.username).filter(Boolean))).map(u => (
+                                        <option key={u} value={u!}>{u}</option>
+                                    ))}
+                                </select>
+                                <select
+                                    aria-label="Filter by status"
+                                    className="h-8 rounded-md border border-input bg-card px-2 text-xs"
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Status</option>
+                                    <option value="RUNNING">Running</option>
+                                    <option value="PENDING">Queued</option>
+                                    <option value="COMPLETED">Completed</option>
+                                    <option value="FAILED">Failed</option>
+                                    <option value="WAITING">Waiting (Local)</option>
+                                </select>
+                            </>
+                        )}
+                        {!isAdmin && (
+                            <div className="relative w-full sm:w-64">
+                                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                                <Input
+                                    placeholder="Search jobs..."
+                                    className="h-8 pl-9 text-xs"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    aria-label="Search jobs"
+                                />
+                            </div>
+                        )}
+                        <Button
+                            onClick={() => fetchJobs()}
+                            size="sm"
+                            variant="outline"
+                            className="h-8 w-8 p-0"
+                            aria-label="Refresh jobs"
+                        >
+                            <RefreshCcw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+                        </Button>
+                    </>
+                }
+            />
 
             {isAdmin && (
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                    {[
-                        { label: 'Running', count: stats.running, color: 'text-primary', bg: 'bg-primary/10' },
-                        { label: 'Queued', count: stats.pending, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                        { label: 'Completed', count: stats.completed, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-                        { label: 'Failed', count: stats.failed, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-                        { label: 'Cancelled', count: stats.cancelled, color: 'text-muted-foreground', bg: 'bg-white/5' },
-                    ].map((s) => (
-                        <Card key={s.label} className={cn("p-3 border-white/5", s.bg)}>
-                            <div className={cn("text-xs font-bold uppercase", s.color)}>{s.label}</div>
-                            <div className="text-2xl font-black mt-1 text-gray-900">{s.count}</div>
-                        </Card>
-                    ))}
+                <div className="grid grid-cols-2 gap-2 pb-4 sm:grid-cols-5">
+                    <MetricCard label="Running" value={stats.running} icon={Activity} tone="primary" />
+                    <MetricCard label="Queued" value={stats.pending} icon={Clock} tone="warning" />
+                    <MetricCard label="Completed" value={stats.completed} icon={CheckCircle2} tone="success" />
+                    <MetricCard label="Failed" value={stats.failed} icon={XCircle} tone="danger" />
+                    <MetricCard label="Cancelled" value={stats.cancelled} icon={Ban} tone="neutral" />
                 </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
                 {!isAdmin && (
-                    <div className="lg:col-span-4 flex flex-col h-full gap-3">
-                        <Button 
+                    <div className="flex h-full flex-col gap-3 lg:col-span-4">
+                        <Button
                             onClick={() => setIsAppSelectorOpen(true)}
-                            className="w-full h-14 bg-primary/10 hover:bg-primary/20 text-primary font-bold uppercase tracking-widest transition-all shadow-lg shadow-primary/10 rounded-2xl flex items-center justify-center gap-3 border border-primary/20"
+                            variant="outline"
+                            className="h-12 w-full justify-center gap-2 rounded-lg text-sm font-medium"
                         >
-                            <Sparkles className="h-5 w-5" />
+                            <Sparkles className="h-4 w-4 text-primary" />
                             Integrated Apps
                         </Button>
 
                         {!selectedApp && (
-                            <Card className="p-8 border-dashed border-white/10 bg-transparent flex-1 flex flex-col items-center justify-center text-center text-muted-foreground mt-2">
-                                <Layers className="h-8 w-8 mb-3 opacity-20" />
-                                <p className="text-[10px] font-medium uppercase tracking-widest opacity-50">Select an App</p>
-                            </Card>
+                            <EmptyState
+                                icon={Layers}
+                                title="Select an App"
+                                description="Choose an integrated app to configure and launch."
+                                className="mt-2 flex-1"
+                            />
                         )}
 
                         {selectedApp === 'jupyter' && (
-                        <Card className="p-4 bg-primary border-none">
-                            <div className="flex items-center justify-between mb-3">
-                                <CardTitle className="text-lg font-bold text-black flex items-center gap-2">
-                                    <Orbit className="h-5 w-5" />
-                                    Jupyter Lab
-                                </CardTitle>
-                                <Badge className="bg-black/10 text-black text-[10px]">Interactive</Badge>
-                            </div>
-                            <CardDescription className="text-black/60 text-xs mb-3">
-                                Launch an interactive notebook session
-                            </CardDescription>
+                        <Card className="rounded-lg shadow-xs">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                                        <Orbit className="h-4 w-4 text-primary" />
+                                        Jupyter Lab
+                                    </CardTitle>
+                                    <Badge variant="secondary" size="sm">Interactive</Badge>
+                                </div>
+                                <CardDescription className="text-xs">
+                                    Launch an interactive notebook session
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-medium">CPU Cores</Label>
+                                        <Input
+                                            type="text"
+                                            inputMode="numeric"
+                                            min={1}
+                                            max={isAdmin ? 128 : quotas.cpu_limit}
+                                            value={jupyterResources.total_cpu}
+                                            onChange={(e) => setJupyterResources({...jupyterResources, total_cpu: e.target.value.replace(/[^\d]/g, '')})}
+                                            onBlur={(e) => setJupyterResources({...jupyterResources, total_cpu: normalizeIntInput(e.target.value, 1)})}
+                                            className="h-9 min-w-0 text-xs"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label className="text-xs font-medium">RAM (GB)</Label>
+                                        <Input
+                                            type="text"
+                                            inputMode="numeric"
+                                            min={1}
+                                            max={isAdmin ? 512 : quotas.memory_limit_gb}
+                                            value={jupyterResources.total_ram}
+                                            onChange={(e) => setJupyterResources({...jupyterResources, total_ram: e.target.value.replace(/[^\d]/g, '')})}
+                                            onBlur={(e) => setJupyterResources({...jupyterResources, total_ram: normalizeIntInput(e.target.value, 1)})}
+                                            className="h-9 min-w-0 text-xs"
+                                        />
+                                    </div>
+                                    <div className="col-span-2 space-y-1">
+                                        <Label className="text-xs font-medium">Wall Time</Label>
+                                        <Input
+                                            placeholder="HH:MM:SS"
+                                            value={jupyterResources.walltime}
+                                            onChange={(e) => setJupyterResources({...jupyterResources, walltime: e.target.value})}
+                                            onBlur={(e) => setJupyterResources({...jupyterResources, walltime: normalizeWalltime(e.target.value, 1800)})}
+                                            className="h-9 min-w-0 font-mono text-xs"
+                                        />
+                                    </div>
+                                </div>
 
-                            <div className="grid grid-cols-2 gap-2 mb-4">
-                                <div>
-                                    <Label className="text-[9px] font-bold text-black/50 uppercase">CPU Cores</Label>
-                                    <Input 
-                                        type="text"
-                                        inputMode="numeric"
-                                        min={1}
-                                        max={isAdmin ? 128 : quotas.cpu_limit}
-                                        value={jupyterResources.total_cpu}
-                                        onChange={(e) => setJupyterResources({...jupyterResources, total_cpu: e.target.value.replace(/[^\d]/g, '')})}
-                                        onBlur={(e) => setJupyterResources({...jupyterResources, total_cpu: normalizeIntInput(e.target.value, 1)})}
-                                        className="h-9 sm:h-8 min-w-0 rounded-lg bg-black/5 border-black/10 text-xs text-black font-bold focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:border-black/30"
-                                    />
-                                </div>
-                                <div>
-                                    <Label className="text-[9px] font-bold text-black/50 uppercase">RAM (GB)</Label>
-                                    <Input 
-                                        type="text"
-                                        inputMode="numeric"
-                                        min={1}
-                                        max={isAdmin ? 512 : quotas.memory_limit_gb}
-                                        value={jupyterResources.total_ram}
-                                        onChange={(e) => setJupyterResources({...jupyterResources, total_ram: e.target.value.replace(/[^\d]/g, '')})}
-                                        onBlur={(e) => setJupyterResources({...jupyterResources, total_ram: normalizeIntInput(e.target.value, 1)})}
-                                        className="h-9 sm:h-8 min-w-0 rounded-lg bg-black/5 border-black/10 text-xs text-black font-bold focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:border-black/30"
-                                    />
-                                </div>
-                                <div className="col-span-2">
-                                    <Label className="text-[9px] font-bold text-black/50 uppercase">Wall Time</Label>
-                                    <Input 
-                                        placeholder="HH:MM:SS"
-                                        value={jupyterResources.walltime}
-                                        onChange={(e) => setJupyterResources({...jupyterResources, walltime: e.target.value})}
-                                        onBlur={(e) => setJupyterResources({...jupyterResources, walltime: normalizeWalltime(e.target.value, 1800)})}
-                                        className="h-9 sm:h-8 min-w-0 rounded-lg bg-black/5 border-black/10 text-xs text-black font-bold focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:border-black/30 font-mono"
-                                    />
-                                </div>
-                            </div>
+                                <Button
+                                    onClick={handleLaunchJupyter}
+                                    disabled={submitting}
+                                    size="sm"
+                                    className="w-full"
+                                >
+                                    <Play className="mr-1.5 h-3.5 w-3.5" />
+                                    Launch
+                                </Button>
 
-                            <Button 
-                                onClick={handleLaunchJupyter}
-                                disabled={submitting}
-                                size="sm"
-                                className="w-full bg-black text-white hover:bg-white/90 hover:text-black transition-all"
-                            >
-                                <Play className="h-3.5 w-3.5 mr-1.5" />
-                                Launch
-                            </Button>
-                            
-                            {!isAdmin && (
-                                <div className="mt-2 text-[9px] font-bold text-black/40 uppercase tracking-tight text-center">
-                                    Quota: {quotas.cpu_limit}C / {quotas.memory_limit_gb}G
-                                </div>
-                            )}
+                                {!isAdmin && (
+                                    <p className="text-center text-[11px] text-muted-foreground">
+                                        Quota: {quotas.cpu_limit}C / {quotas.memory_limit_gb}G
+                                    </p>
+                                )}
+                            </CardContent>
                         </Card>
                         )}
 
                         {selectedApp === 'python' && scriptsLoading ? (
-                        <Card className="p-4 border border-gray-100 bg-white flex-1 shadow-sm">
-                            <div className="flex flex-col items-center justify-center py-8 gap-3">
-                                <Loader2 className="h-6 w-6 text-primary animate-spin" />
-                                <p className="text-[10px] text-gray-400 uppercase tracking-wider">Loading environment...</p>
-                            </div>
+                        <Card className="flex-1 rounded-lg shadow-xs">
+                            <CardContent className="flex flex-col items-center justify-center gap-3 py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Loading environment...</p>
+                            </CardContent>
                         </Card>
                         ) : selectedApp === 'python' && (
-                        <Card className="p-4 border border-gray-100 bg-white flex-1 shadow-sm">
-                            <CardHeader className="p-0 pb-3 flex flex-row items-center justify-between">
-                                <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                                    <Terminal className="h-4 w-4 text-emerald-500" />
-                                    Python App
-                                </CardTitle>
-                                <Badge className="bg-emerald-500/10 text-emerald-500 border-none text-[10px]">Batch</Badge>
+                        <Card className="flex-1 rounded-lg shadow-xs">
+                            <CardHeader className="pb-3">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="flex items-center gap-2 text-base font-semibold">
+                                        <Terminal className="h-4 w-4 text-success" />
+                                        Python App
+                                    </CardTitle>
+                                    <Badge variant="success" size="sm">Batch</Badge>
+                                </div>
                             </CardHeader>
-                            <form onSubmit={handleSubmit} className="space-y-3">
-                                <div>
-                                    <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Job Name</Label>
-                                    <Input 
-                                        placeholder="Example: training_run_01"
-                                        className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 transition-colors placeholder:text-gray-400 focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
-                                        value={formData.job_name}
-                                        onChange={(e) => setFormData({...formData, job_name: e.target.value})}
-                                        required
-                                    />
-                                </div>
-
-                                <div ref={dropdownRef}>
-                                    <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Script</Label>
-                                    <div className="relative mt-1">
-                                        <div 
-                                            className={cn(
-                                                "w-full min-w-0 bg-gray-50 border border-gray-200 rounded-lg h-10 sm:h-9 flex items-center justify-between gap-2 px-3 cursor-pointer text-xs text-gray-900 transition-colors hover:bg-white hover:border-gray-300",
-                                                openDropdown === 'script' ? "border-primary/60 ring-2 ring-primary/10 bg-white" : ""
-                                            )}
-                                            onClick={() => setOpenDropdown(openDropdown === 'script' ? null : 'script')}
-                                        >
-                                            <span className={cn("min-w-0 truncate font-medium", formData.script_path ? "text-gray-900" : "text-gray-400")}>
-                                                {formData.script_path ? formData.script_path.split('/').pop() : "Select script"}
-                                            </span>
-                                            <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform", openDropdown === 'script' ? "rotate-90 text-primary" : "")} />
-                                        </div>
-                                        
-                                        {openDropdown === 'script' && (
-                                            <div className="absolute top-[calc(100%+4px)] left-0 w-full bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto py-1 ring-1 ring-black/5">
-                                                {scripts.length === 0 ? (
-                                                    <div className="px-3 py-2 text-[10px] text-gray-400 italic">No executable scripts discovered</div>
-                                                ) : scripts.map(s => (
-                                                    <div 
-                                                        key={s.path}
-                                                        className="px-3 py-2 hover:bg-primary/10 text-gray-900 transition-colors cursor-pointer text-xs truncate"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setFormData({...formData, script_path: s.path});
-                                                            setOpenDropdown(null);
-                                                        }}
-                                                    >
-                                                        {s.name}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                            <CardContent>
+                                <form onSubmit={handleSubmit} className="space-y-3">
+                                    <div className="space-y-1">
+                                        <Label htmlFor="job_name" className="text-xs font-medium">Job Name</Label>
+                                        <Input
+                                            id="job_name"
+                                            placeholder="Example: training_run_01"
+                                            className="h-9 min-w-0 text-xs"
+                                            value={formData.job_name}
+                                            onChange={(e) => setFormData({...formData, job_name: e.target.value})}
+                                            required
+                                        />
                                     </div>
-                                </div>
 
-                                <div ref={reqDropdownRef}>
-                                    <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Requirements (.txt)</Label>
-                                    <div className="relative mt-1">
-                                        <div 
-                                            className={cn(
-                                                "w-full min-w-0 bg-gray-50 border border-gray-200 rounded-lg h-10 sm:h-9 flex items-center justify-between gap-2 px-3 cursor-pointer text-xs transition-all hover:bg-white hover:border-gray-300",
-                                                openDropdown === 'req' ? "border-primary/60 ring-2 ring-primary/10 bg-white" : ""
-                                            )}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setOpenDropdown(openDropdown === 'req' ? null : 'req');
-                                            }}
-                                        >
-                                            <span className={cn("min-w-0 truncate font-medium", formData.requirements_path ? "text-gray-900" : "text-gray-400")}>
-                                                {formData.requirements_path ? formData.requirements_path.split('/').pop() : "Optional requirements.txt"}
-                                            </span>
-                                            <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform duration-200", openDropdown === 'req' ? "rotate-90 text-primary" : "")} />
-                                        </div>
-                                        
-                                        {openDropdown === 'req' && (
-                                            <div className="absolute top-[calc(100%+4px)] left-0 w-full bg-white border border-gray-200 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto py-1 ring-1 ring-black/5">
-                                                <div 
-                                                    className="px-3 py-2 hover:bg-rose-50 text-rose-500 font-bold cursor-pointer text-[10px] uppercase tracking-wide"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setFormData({...formData, requirements_path: ''});
-                                                        setOpenDropdown(null);
-                                                    }}
-                                                >
-                                                    -- Skip Dependency Injection --
+                                    <div ref={dropdownRef} className="space-y-1">
+                                        <Label className="text-xs font-medium">Script</Label>
+                                        <div className="relative">
+                                            <div
+                                                className={cn(
+                                                    "flex h-9 w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-xs transition-colors hover:bg-accent/40",
+                                                    openDropdown === 'script' && "border-primary/50 ring-2 ring-primary/15"
+                                                )}
+                                                onClick={() => setOpenDropdown(openDropdown === 'script' ? null : 'script')}
+                                            >
+                                                <span className={cn("min-w-0 truncate font-medium", formData.script_path ? "text-foreground" : "text-muted-foreground")}>
+                                                    {formData.script_path ? formData.script_path.split('/').pop() : "Select script"}
+                                                </span>
+                                                <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", openDropdown === 'script' && "rotate-90 text-primary")} />
+                                            </div>
+
+                                            {openDropdown === 'script' && (
+                                                <div className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-md">
+                                                    {scripts.length === 0 ? (
+                                                        <div className="px-3 py-2 italic text-[11px] text-muted-foreground">No executable scripts discovered</div>
+                                                    ) : scripts.map(s => (
+                                                        <div
+                                                            key={s.path}
+                                                            className="cursor-pointer truncate px-3 py-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setFormData({...formData, script_path: s.path});
+                                                                setOpenDropdown(null);
+                                                            }}
+                                                        >
+                                                            {s.name}
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                {textFiles.length === 0 ? (
-                                                    <div className="px-3 py-2 text-[10px] text-gray-400 italic">No requirements files found</div>
-                                                ) : textFiles.map(s => (
-                                                    <div 
-                                                        key={s.path}
-                                                        className="px-3 py-2 hover:bg-primary/10 text-gray-900 transition-colors cursor-pointer text-xs truncate border-t border-gray-100"
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div ref={reqDropdownRef} className="space-y-1">
+                                        <Label className="text-xs font-medium">Requirements (.txt)</Label>
+                                        <div className="relative">
+                                            <div
+                                                className={cn(
+                                                    "flex h-9 w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-xs transition-colors hover:bg-accent/40",
+                                                    openDropdown === 'req' && "border-primary/50 ring-2 ring-primary/15"
+                                                )}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setOpenDropdown(openDropdown === 'req' ? null : 'req');
+                                                }}
+                                            >
+                                                <span className={cn("min-w-0 truncate font-medium", formData.requirements_path ? "text-foreground" : "text-muted-foreground")}>
+                                                    {formData.requirements_path ? formData.requirements_path.split('/').pop() : "Optional requirements.txt"}
+                                                </span>
+                                                <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200", openDropdown === 'req' && "rotate-90 text-primary")} />
+                                            </div>
+
+                                            {openDropdown === 'req' && (
+                                                <div className="absolute left-0 top-[calc(100%+4px)] z-50 max-h-48 w-full overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-md">
+                                                    <div
+                                                        className="cursor-pointer px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-destructive transition-colors hover:bg-destructive/10"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            setFormData({...formData, requirements_path: s.path});
+                                                            setFormData({...formData, requirements_path: ''});
                                                             setOpenDropdown(null);
                                                         }}
                                                     >
-                                                        {s.name}
+                                                        -- Skip Dependency Injection --
                                                     </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                                    {textFiles.length === 0 ? (
+                                                        <div className="px-3 py-2 italic text-[11px] text-muted-foreground">No requirements files found</div>
+                                                    ) : textFiles.map(s => (
+                                                        <div
+                                                            key={s.path}
+                                                            className="cursor-pointer truncate border-t border-border px-3 py-2 text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setFormData({...formData, requirements_path: s.path});
+                                                                setOpenDropdown(null);
+                                                            }}
+                                                        >
+                                                            {s.name}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">CPU Cores</Label>
-                                        <Input 
-                                            type="text"
-                                            min={1}
-                                            inputMode="numeric"
-                                            className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 transition-colors focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
-                                            value={formData.total_cpu}
-                                            onChange={(e) => setFormData({...formData, total_cpu: e.target.value.replace(/[^\d]/g, '')})}
-                                            onBlur={(e) => setFormData({...formData, total_cpu: normalizeIntInput(e.target.value, 1)})}
-                                            required
-                                        />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                            <Label className="text-xs font-medium">CPU Cores</Label>
+                                            <Input
+                                                type="text"
+                                                min={1}
+                                                inputMode="numeric"
+                                                className="h-9 min-w-0 text-xs"
+                                                value={formData.total_cpu}
+                                                onChange={(e) => setFormData({...formData, total_cpu: e.target.value.replace(/[^\d]/g, '')})}
+                                                onBlur={(e) => setFormData({...formData, total_cpu: normalizeIntInput(e.target.value, 1)})}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs font-medium">RAM (GB)</Label>
+                                            <Input
+                                                type="text"
+                                                min={1}
+                                                inputMode="numeric"
+                                                className="h-9 min-w-0 text-xs"
+                                                value={formData.total_ram}
+                                                onChange={(e) => setFormData({...formData, total_ram: e.target.value.replace(/[^\d]/g, '')})}
+                                                onBlur={(e) => setFormData({...formData, total_ram: normalizeIntInput(e.target.value, 1)})}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs font-medium">Wall Time</Label>
+                                            <Input
+                                                placeholder="HH:MM:SS"
+                                                pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
+                                                className="h-9 min-w-0 font-mono text-xs"
+                                                value={formData.walltime}
+                                                onChange={(e) => setFormData({...formData, walltime: e.target.value})}
+                                                onBlur={(e) => setFormData({...formData, walltime: normalizeWalltime(e.target.value, 60)})}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <Label className="text-xs font-medium">GPU (Optional)</Label>
+                                            <Input
+                                                type="text"
+                                                min={0}
+                                                inputMode="numeric"
+                                                className="h-9 min-w-0 text-xs"
+                                                value={formData.gpu_count}
+                                                onChange={(e) => setFormData({...formData, gpu_count: e.target.value.replace(/[^\d]/g, '')})}
+                                                onBlur={(e) => setFormData({...formData, gpu_count: normalizeIntInput(e.target.value, 0)})}
+                                            />
+                                        </div>
+                                        <div className="col-span-2 space-y-1">
+                                            <Label className="text-xs font-medium">Job Type</Label>
+                                            <select
+                                                className="mt-1 h-9 w-full min-w-0 rounded-md border border-input bg-card px-3 text-xs outline-none transition-colors focus:border-primary/50 focus:ring-2 focus:ring-primary/15"
+                                                value={formData.job_type}
+                                                onChange={(e) => setFormData({...formData, job_type: e.target.value})}
+                                            >
+                                                <option value="distributed">Smart Distributed</option>
+                                                <option value="single_node">Single Node</option>
+                                                <option value="multithread">Multi-threaded</option>
+                                                <option value="mpi">MPI (Distributed)</option>
+                                                <option value="gpu">GPU Compute</option>
+                                            </select>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">RAM (GB)</Label>
-                                        <Input 
-                                            type="text"
-                                            min={1}
-                                            inputMode="numeric"
-                                            className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 transition-colors focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
-                                            value={formData.total_ram}
-                                            onChange={(e) => setFormData({...formData, total_ram: e.target.value.replace(/[^\d]/g, '')})}
-                                            onBlur={(e) => setFormData({...formData, total_ram: normalizeIntInput(e.target.value, 1)})}
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Wall Time</Label>
-                                        <Input 
-                                            placeholder="HH:MM:SS"
-                                            pattern="[0-9]{2}:[0-9]{2}:[0-9]{2}"
-                                            className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 font-mono transition-colors focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
-                                            value={formData.walltime}
-                                            onChange={(e) => setFormData({...formData, walltime: e.target.value})}
-                                            onBlur={(e) => setFormData({...formData, walltime: normalizeWalltime(e.target.value, 60)})}
-                                            required
-                                        />
-                                    </div>
-                                    <div>
-                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">GPU (Optional)</Label>
-                                        <Input 
-                                            type="text"
-                                            min={0}
-                                            inputMode="numeric"
-                                            className="h-10 sm:h-9 min-w-0 rounded-lg bg-gray-50 border-gray-200 text-xs text-gray-900 mt-1 transition-colors focus-visible:bg-white focus-visible:border-primary/60 focus-visible:ring-primary/20"
-                                            value={formData.gpu_count}
-                                            onChange={(e) => setFormData({...formData, gpu_count: e.target.value.replace(/[^\d]/g, '')})}
-                                            onBlur={(e) => setFormData({...formData, gpu_count: normalizeIntInput(e.target.value, 0)})}
-                                        />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <Label className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Job Type</Label>
-                                        <select 
-                                            className="w-full h-10 sm:h-9 min-w-0 bg-gray-50 border border-gray-200 rounded-lg text-xs px-3 text-gray-900 outline-none transition-colors focus:bg-white focus:border-primary/60 focus:ring-2 focus:ring-primary/20 mt-1"
-                                            value={formData.job_type}
-                                            onChange={(e) => setFormData({...formData, job_type: e.target.value})}
-                                        >
-                                            <option value="distributed">Smart Distributed</option>
-                                            <option value="single_node">Single Node</option>
-                                            <option value="multithread">Multi-threaded</option>
-                                            <option value="mpi">MPI (Distributed)</option>
-                                            <option value="gpu">GPU Compute</option>
-                                        </select>
-                                    </div>
-                                </div>
 
-                                <Button 
-                                    type="submit"
-                                    disabled={submitting}
-                                    className="w-full h-10 bg-black text-white hover:bg-white/90 hover:text-black font-bold transition-all mt-4 rounded-xl shadow-xl shadow-black/50"
-                                >
-                                    <Send className="h-4 w-4 mr-2" />
-                                    {submitting ? 'Submitting...' : 'Submit Job'}
-                                </Button>
+                                    <Button
+                                        type="submit"
+                                        disabled={submitting}
+                                        className="mt-4 w-full"
+                                    >
+                                        <Send className="mr-2 h-4 w-4" />
+                                        {submitting ? 'Submitting...' : 'Submit Job'}
+                                    </Button>
 
-                                {!isAdmin && (
-                                    <div className="text-[9px] font-medium text-muted-foreground/50 uppercase tracking-wider text-right px-1">
-                                        Available: {Math.max(0, quotas.cpu_limit - quotas.cpu_used)}C / {Math.max(0, quotas.memory_limit_gb - quotas.ram_used)}G
-                                    </div>
-                                )}
-                            </form>
+                                    {!isAdmin && (
+                                        <p className="px-1 text-right text-[11px] text-muted-foreground">
+                                            Available: {Math.max(0, quotas.cpu_limit - quotas.cpu_used)}C / {Math.max(0, quotas.memory_limit_gb - quotas.ram_used)}G
+                                        </p>
+                                    )}
+                                </form>
+                            </CardContent>
                         </Card>
                         )}
                     </div>
                 )}
 
                 <div className={cn(
-                    "flex flex-col h-full overflow-hidden",
+                    "flex h-full flex-col overflow-hidden",
                     isAdmin ? "lg:col-span-12" : "lg:col-span-8"
                 )}>
                     <JobList />
@@ -1104,36 +1101,37 @@ export default function JobsPage() {
 
             {/* Monitoring Nexus Modal */}
             <AlertDialog open={!!monitoringJob} onOpenChange={(o) => !o && setMonitoringJob(null)}>
-                <AlertDialogContent className="bg-[#020202] rounded-2xl border border-white/10 shadow-[0_100px_200px_rgba(0,0,0,1)] p-0 max-w-5xl h-[80vh] flex flex-col overflow-hidden">
-                    <AlertDialogHeader className="p-4 border-b border-white/5 bg-[#0a0a0a]/80 shrink-0">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className="h-12 w-12 bg-[#020202] rounded-xl flex items-center justify-center border border-white/5 relative">
-                                    <Terminal className={cn("h-6 w-6 text-primary", isLive && "animate-pulse")} />
+                <AlertDialogContent className="flex h-[80vh] max-w-5xl flex-col overflow-hidden rounded-lg border-border bg-card p-0 shadow-lg">
+                    <AlertDialogHeader className="shrink-0 space-y-0 border-b border-border bg-muted/40 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/20 bg-primary/10">
+                                    <Terminal className={cn("h-5 w-5 text-primary", isLive && "animate-pulse")} />
                                 </div>
-                                <div>
-                                    <div className="flex items-center gap-2 text-primary text-[10px] font-bold uppercase tracking-wider">
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                                         <Signal className="h-3 w-3" />
                                         <span>{monitoringJob?.status}</span>
                                     </div>
-                                    <AlertDialogTitle className="text-xl font-black text-white tracking-tight">{monitoringJob?.job_name}</AlertDialogTitle>
-                                    <AlertDialogDescription className="text-[10px] text-white/30 font-mono tracking-tighter">
+                                    <AlertDialogTitle className="truncate text-base font-semibold tracking-tight">{monitoringJob?.job_name}</AlertDialogTitle>
+                                    <AlertDialogDescription className="font-mono text-[11px] tracking-tight">
                                         ID: {monitoringJob?.slurm_job_id || 'LOCAL_IO'}
                                     </AlertDialogDescription>
                                 </div>
                             </div>
-                             <div className="flex items-center gap-3">
+                             <div className="flex shrink-0 items-center gap-2">
                                 {monitoringJob?.script_path === "__jupyter__" && monitoringJob?.status === 'RUNNING' && (
-                                    <Button 
+                                    <Button
                                         onClick={() => handleOpenJupyter(monitoringJob)}
                                         size="sm"
-                                        className="h-8 bg-emerald-500 hover:bg-emerald-600 text-black text-[10px] font-bold uppercase tracking-widest px-4 border-none rounded-lg shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-in slide-in-from-right-2"
+                                        variant="outline"
+                                        className="h-8 gap-1.5 border-success/30 px-3 text-xs font-medium text-success hover:bg-success/10 hover:text-success"
                                     >
-                                        <ArrowUpRight className="h-3.5 w-3.5 mr-1" />
-                                        🚀 Go to Jupyter
+                                        <Rocket className="h-3.5 w-3.5" />
+                                        Go to Jupyter
                                     </Button>
                                 )}
-                                <Button 
+                                <Button
                                     onClick={() => {
                                         if (!liveLogs) {
                                             toast.error("Telemetry buffer is currently empty.");
@@ -1152,17 +1150,20 @@ export default function JobsPage() {
                                         });
                                     }}
                                     size="sm"
-                                    className="h-8 bg-white/5 hover:bg-primary text-white text-[10px] font-bold uppercase tracking-widest px-4 border border-white/5 rounded-lg"
+                                    variant="outline"
+                                    className="h-8 px-3 text-xs"
                                 >
                                     Copy Logs
                                 </Button>
-                                <Badge className={cn("px-3 py-1 rounded-lg text-[10px] font-bold uppercase", isLive ? "bg-emerald-500 text-black border-none" : "bg-white/5 text-white/40 border-white/10")}>
+                                <Badge size="sm" className={cn("rounded-md", isLive ? "border-success/25 bg-success/15 text-success" : "border-border bg-muted text-muted-foreground")}>
                                     {isLive ? 'Link Active' : 'Stable'}
                                 </Badge>
-                                <Button 
+                                <Button
                                     onClick={() => setMonitoringJob(null)}
                                     size="icon"
-                                    className="h-8 w-8 bg-white text-black hover:bg-rose-500 hover:text-white rounded-lg transition-all"
+                                    variant="ghost"
+                                    className="h-8 w-8"
+                                    aria-label="Close log viewer"
                                 >
                                     <X className="h-4 w-4" />
                                 </Button>
@@ -1170,46 +1171,46 @@ export default function JobsPage() {
                         </div>
                     </AlertDialogHeader>
 
-                    <div className="flex-1 overflow-hidden bg-[#020202]">
-                        <div className="h-full overflow-y-auto p-0 font-mono text-[11px] selection:bg-primary/40 leading-relaxed bg-[#020202]">
+                    <div className="min-h-0 flex-1 overflow-hidden bg-[#0b0c10]">
+                        <div className="h-full overflow-y-auto bg-[#0b0c10] font-mono text-[11px] leading-relaxed selection:bg-primary/40">
                             {liveLogs ? (
-                                <div className="p-4 flex flex-col gap-1 min-h-full select-text cursor-text">
-                                    <div className="flex items-center gap-2 text-white/20 text-[9px] font-bold uppercase tracking-[0.2em] mb-4 border-b border-white/5 pb-2">
+                                <div className="flex min-h-full select-text cursor-text flex-col gap-1 p-4">
+                                    <div className="mb-4 flex items-center gap-2 border-b border-neutral-800 pb-2 text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-500">
                                         <Terminal className="h-3 w-3" />
                                         <span>Workload Telemetry Nexus v4.0.0-PROD</span>
                                     </div>
                                     {liveLogs.split('\n').map((line, i) => {
                                         const isError = line.toLowerCase().includes('error') || line.toLowerCase().includes('fail') || line.toLowerCase().includes('exception');
                                         return (
-                                            <div key={i} className="flex gap-4 group hover:bg-white/[0.04] transition-colors -mx-4 px-4 py-0.5 select-text cursor-text relative">
-                                                <span className="text-white/10 select-none text-right w-8 font-mono border-r border-white/5 pr-3">{i + 1}</span>
+                                            <div key={i} className="group relative -mx-4 flex gap-4 px-4 py-0.5 transition-colors select-text hover:bg-neutral-800/40 cursor-text">
+                                                <span className="w-8 select-none border-r border-neutral-800 pr-3 text-right font-mono text-neutral-600">{i + 1}</span>
                                                 <span className={cn(
                                                     "flex-1 break-all whitespace-pre-wrap font-medium select-text",
-                                                    isError ? "text-rose-500 font-bold" : "text-white"
+                                                    isError ? "font-bold text-rose-400" : "text-neutral-200"
                                                 )}>
                                                     {line || <br />}
                                                 </span>
                                             </div>
                                         );
                                     })}
-                                    <div className="flex gap-4 mt-2 -mx-4 px-4 py-1 bg-primary/5">
-                                        <span className="text-white/10 selection-none text-right w-8 pr-3">::</span>
-                                        <div className="flex items-center gap-2 text-primary animate-pulse font-bold text-[10px]">
+                                    <div className="-mx-4 mt-2 flex gap-4 bg-primary/10 px-4 py-1">
+                                        <span className="w-8 select-none pr-3 text-right text-neutral-600">::</span>
+                                        <div className="flex items-center gap-2 animate-pulse font-bold text-[10px] text-primary">
                                             <Signal className="h-3 w-3" />
                                             <span>Stream Synchronized</span>
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex flex-col gap-3 opacity-30 p-10 py-20 items-center justify-center text-center">
-                                  <Loader2 className="h-8 w-8 text-emerald-500 animate-spin mb-4" />
-                                  <div className="space-y-2 w-full max-w-sm">
-                                      <div className="h-1 bg-emerald-500/20 rounded-full w-full overflow-hidden">
-                                          <div className="h-full bg-emerald-500/40 w-1/3 animate-[shimmer_2s_infinite]" />
+                                <div className="flex flex-col items-center justify-center gap-3 p-10 py-20 text-center opacity-80">
+                                  <Loader2 className="mb-4 h-8 w-8 animate-spin text-success" />
+                                  <div className="w-full max-w-sm space-y-2">
+                                      <div className="h-1 w-full overflow-hidden rounded-full bg-success/20">
+                                          <div className="h-full w-1/3 animate-[shimmer_2s_infinite] bg-success/40" />
                                       </div>
-                                      <div className="h-1 bg-emerald-500/10 rounded-full w-2/3 mx-auto" />
+                                      <div className="mx-auto h-1 w-2/3 rounded-full bg-success/10" />
                                   </div>
-                                  <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-500 mt-6 animate-pulse">Establishing Signal...</div>
+                                  <div className="mt-6 animate-pulse text-[10px] font-bold uppercase tracking-widest text-success">Establishing Signal...</div>
                                 </div>
                             )}
                         </div>
@@ -1219,21 +1220,21 @@ export default function JobsPage() {
 
             {/* Stop Job Confirmation */}
             <AlertDialog open={!!jobToStop} onOpenChange={(o) => !o && setJobToStop(null)}>
-                <AlertDialogContent className="!bg-white !text-black border-none shadow-2xl rounded-[2rem] p-8 max-w-sm">
-                    <AlertDialogHeader className="items-center text-center">
-                        <div className="h-16 w-16 bg-amber-50 rounded-2xl flex items-center justify-center mb-4">
-                            <Power className="h-8 w-8 text-amber-500" />
+                <AlertDialogContent className="max-w-sm rounded-lg">
+                    <AlertDialogHeader className="items-center space-y-2 text-center">
+                        <div className="mx-auto mb-1 flex h-12 w-12 items-center justify-center rounded-lg bg-warning/10">
+                            <Power className="h-6 w-6 text-warning" />
                         </div>
-                        <AlertDialogTitle className="text-xl font-black text-gray-900">Stop Job?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-gray-500 text-xs mt-2 px-2">
-                           This will stop <span className="font-black text-amber-600">{jobToStop?.job_name}</span> immediately.
+                        <AlertDialogTitle>Stop Job?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs">
+                           This will stop <span className="font-semibold text-warning">{jobToStop?.job_name}</span> immediately.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="flex flex-col sm:flex-col gap-2 mt-6">
-                        <AlertDialogCancel className="rounded-xl font-bold h-10 border-gray-100">Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
-                            onClick={confirmStopJob} 
-                            className="rounded-xl h-12 shadow-lg shadow-amber-200 font-bold bg-amber-500 hover:bg-amber-600 border-none text-black"
+                    <AlertDialogFooter className="mt-2">
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmStopJob}
+                            className="bg-warning text-warning-foreground hover:bg-warning/90"
                         >
                             Stop Job
                         </AlertDialogAction>
@@ -1242,21 +1243,21 @@ export default function JobsPage() {
             </AlertDialog>
 
             <AlertDialog open={!!jobToDelete} onOpenChange={(o) => !o && setJobToDelete(null)}>
-                <AlertDialogContent className="!bg-white !text-black border-none shadow-2xl rounded-[2rem] p-8 max-w-sm">
-                    <AlertDialogHeader className="items-center text-center">
-                        <div className="h-16 w-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
-                            <Trash2 className="h-8 w-8 text-rose-500" />
+                <AlertDialogContent className="max-w-sm rounded-lg">
+                    <AlertDialogHeader className="items-center space-y-2 text-center">
+                        <div className="mx-auto mb-1 flex h-12 w-12 items-center justify-center rounded-lg bg-destructive/10">
+                            <Trash2 className="h-6 w-6 text-destructive" />
                         </div>
-                        <AlertDialogTitle className="text-xl font-black text-gray-900">Delete Job?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-gray-500 text-xs mt-2 px-2">
-                            This will remove <span className="font-black text-rose-600">"{jobToDelete?.job_name}"</span> from the list permanently.
+                        <AlertDialogTitle>Delete Job?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs">
+                            This will remove <span className="font-semibold text-destructive">"{jobToDelete?.job_name}"</span> from the list permanently.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="flex flex-col sm:flex-col gap-2 mt-6">
-                        <AlertDialogCancel className="rounded-xl font-bold h-10 border-gray-100">Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
-                            onClick={confirmDeleteJob} 
-                            className="rounded-xl h-12 shadow-lg shadow-rose-200 font-bold bg-rose-500 hover:bg-rose-600 border-none text-white"
+                    <AlertDialogFooter className="mt-2">
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmDeleteJob}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             Delete
                         </AlertDialogAction>
@@ -1266,21 +1267,21 @@ export default function JobsPage() {
 
             {/* Bulk Delete Modal */}
             <AlertDialog open={showBulkDeleteModal} onOpenChange={setShowBulkDeleteModal}>
-                <AlertDialogContent className="!bg-white !text-black border-none shadow-2xl rounded-[2rem] p-8 max-w-sm">
-                    <AlertDialogHeader className="items-center text-center">
-                        <div className="h-16 w-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
-                            <Trash2 className="h-8 w-8 text-rose-500" />
+                <AlertDialogContent className="max-w-sm rounded-lg">
+                    <AlertDialogHeader className="items-center space-y-2 text-center">
+                        <div className="mx-auto mb-1 flex h-12 w-12 items-center justify-center rounded-lg bg-destructive/10">
+                            <Trash2 className="h-6 w-6 text-destructive" />
                         </div>
-                        <AlertDialogTitle className="text-xl font-black text-gray-900">Purge {selectedJobIds.length} Jobs?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-gray-500 text-xs mt-2 px-2">
+                        <AlertDialogTitle>Purge {selectedJobIds.length} Jobs?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs">
                             This will permanently remove the selected jobs.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="flex flex-col sm:flex-col gap-2 mt-6">
-                        <AlertDialogCancel className="rounded-xl font-bold h-10 border-gray-100">Cancel</AlertDialogCancel>
-                        <AlertDialogAction 
-                            onClick={confirmBulkDelete} 
-                            className="rounded-xl h-12 shadow-lg shadow-rose-200 font-bold bg-rose-500 hover:bg-rose-600 border-none text-white"
+                    <AlertDialogFooter className="mt-2">
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={confirmBulkDelete}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             Purge Records
                         </AlertDialogAction>
@@ -1290,35 +1291,35 @@ export default function JobsPage() {
 
             {/* Integrated Apps Modal */}
             {isAppSelectorOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsAppSelectorOpen(false)}>
-                    <Card className="w-full max-w-md bg-[#0a0a0a] border-white/10 shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/[0.02]">
-                            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                                <Sparkles className="h-5 w-5 text-primary" />
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setIsAppSelectorOpen(false)}>
+                    <Card className="w-full max-w-md overflow-hidden rounded-lg border-border bg-popover shadow-lg" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between border-b border-border p-4">
+                            <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                                <Sparkles className="h-4 w-4 text-primary" />
                                 Integrated Apps
                             </h2>
-                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-muted-foreground hover:text-white" onClick={() => setIsAppSelectorOpen(false)}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => setIsAppSelectorOpen(false)} aria-label="Close app selector">
                                 <X className="h-4 w-4" />
                             </Button>
                         </div>
-                        <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <button 
+                        <div className="grid grid-cols-1 gap-3 p-6 sm:grid-cols-2">
+                            <button
                                 onClick={() => { setSelectedApp('jupyter'); setIsAppSelectorOpen(false); }}
-                                className="flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-orange-500/10 hover:border-orange-500/50 transition-all group"
+                                className="group flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card p-6 transition-colors hover:border-ring/40 hover:bg-accent/40"
                             >
-                                <div className="h-16 w-16 rounded-full bg-orange-500/20 flex items-center justify-center p-3 group-hover:scale-110 transition-transform">
-                                    <img src="https://jupyter.org/assets/homepage/main-logo.svg" alt="Jupyter Logo" className="w-full h-full object-contain" />
+                                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted p-3">
+                                    <img src="https://jupyter.org/assets/homepage/main-logo.svg" alt="Jupyter Logo" className="h-full w-full object-contain" />
                                 </div>
-                                <span className="text-xs font-bold uppercase tracking-widest text-white/80 group-hover:text-white">Jupyter</span>
+                                <span className="text-xs font-medium text-foreground">Jupyter</span>
                             </button>
-                            <button 
+                            <button
                                 onClick={() => { setSelectedApp('python'); setIsAppSelectorOpen(false); }}
-                                className="flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border border-white/10 bg-white/[0.02] hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all group"
+                                className="group flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card p-6 transition-colors hover:border-ring/40 hover:bg-accent/40"
                             >
-                                <div className="h-16 w-16 rounded-full bg-emerald-500/20 flex items-center justify-center p-3 group-hover:scale-110 transition-transform">
-                                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/250px-Python-logo-notext.svg.png" alt="Python Logo" className="w-full h-full object-contain" />
+                                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted p-3">
+                                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/250px-Python-logo-notext.svg.png" alt="Python Logo" className="h-full w-full object-contain" />
                                 </div>
-                                <span className="text-xs font-bold uppercase tracking-widest text-white/80 group-hover:text-white">Python</span>
+                                <span className="text-xs font-medium text-foreground">Python</span>
                             </button>
                         </div>
                     </Card>
@@ -1327,45 +1328,39 @@ export default function JobsPage() {
 
             {/* Job Info Modal */}
             <AlertDialog open={!!infoJob} onOpenChange={(o) => !o && setInfoJob(null)}>
-                <AlertDialogContent className="bg-white rounded-2xl border-none shadow-2xl p-0 gap-0 w-[calc(100vw-2rem)] max-w-md sm:max-w-lg max-h-[calc(100dvh-2rem)] overflow-hidden flex flex-col">
-                    <AlertDialogHeader className="px-5 sm:px-6 pt-5 sm:pt-6 pb-3 shrink-0 min-w-0">
-                        <AlertDialogTitle className="text-xl font-black text-gray-900">
+                <AlertDialogContent className="flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] max-w-md flex-col gap-0 overflow-hidden rounded-lg p-0 sm:max-w-lg">
+                    <AlertDialogHeader className="min-w-0 shrink-0 space-y-1 px-5 pb-3 pt-5 sm:px-6 sm:pt-6">
+                        <AlertDialogTitle className="text-base font-semibold">
                             Job Details
                         </AlertDialogTitle>
                     </AlertDialogHeader>
-                    <div className="space-y-3 px-5 sm:px-6 pb-2 overflow-y-auto min-h-0 max-w-full">
-                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">Job ID</span>
-                            <span className="text-sm font-mono text-gray-900 font-semibold min-w-0 text-right break-all">{infoJob?.slurm_job_id || infoJob?.id}</span>
+                    <div className="min-h-0 max-w-full space-y-3 overflow-y-auto px-5 pb-2 sm:px-6">
+                        <div className="flex min-w-0 items-center justify-between gap-4 border-b border-border pb-2">
+                            <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">Job ID</dt>
+                            <dd className="min-w-0 break-all text-right font-mono text-sm font-medium text-foreground">{infoJob?.slurm_job_id || infoJob?.id}</dd>
                         </div>
-                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">Status</span>
-                            <Badge className={cn("border-none capitalize", 
-                                infoStatus === 'RUNNING' ? "bg-primary/20 text-primary" :
-                                infoStatus === 'PENDING' ? "bg-amber-100 text-amber-600" :
-                                infoStatus === 'COMPLETED' ? "bg-emerald-100 text-emerald-600" :
-                                infoStatus === 'FAILED' ? "bg-rose-100 text-rose-600" :
-                                "bg-gray-100 text-gray-600"
-                            )}>
-                                {infoStatus === 'PENDING' ? 'Queued / starting' : (infoStatus || infoJob?.status)}
-                            </Badge>
+                        <div className="flex min-w-0 items-center justify-between gap-4 border-b border-border pb-2">
+                            <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</dt>
+                            <dd className="min-w-0">
+                                <StatusBadge status={infoStatus || undefined} label={infoStatus === 'PENDING' ? 'Queued / starting' : undefined} />
+                            </dd>
                         </div>
-                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">CPU</span>
-                            <span className="text-sm font-mono text-gray-900 font-semibold min-w-0 text-right break-all">{(infoJob as any)?.total_cpu || 1}</span>
+                        <div className="flex min-w-0 items-center justify-between gap-4 border-b border-border pb-2">
+                            <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">CPU</dt>
+                            <dd className="min-w-0 break-all text-right font-mono text-sm font-medium text-foreground">{(infoJob as any)?.total_cpu || 1}</dd>
                         </div>
-                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">RAM</span>
-                            <span className="text-sm font-mono text-gray-900 font-semibold min-w-0 text-right break-all">{(infoJob as any)?.total_ram || 1} GB</span>
+                        <div className="flex min-w-0 items-center justify-between gap-4 border-b border-border pb-2">
+                            <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">RAM</dt>
+                            <dd className="min-w-0 break-all text-right font-mono text-sm font-medium text-foreground">{(infoJob as any)?.total_ram || 1} GB</dd>
                         </div>
-                        <div className="flex justify-between items-center gap-4 border-b border-gray-100 pb-2 min-w-0">
-                            <span className="text-xs text-gray-400 uppercase font-bold tracking-widest shrink-0">Time</span>
-                            <span className="text-sm font-mono text-gray-900 font-semibold min-w-0 text-right break-all">{infoStatus === 'RUNNING' && infoJob ? (elapsedTimes[infoJob.id] || '00:00:00') : ((infoJob as any)?.walltime || '04:00:00')}</span>
+                        <div className="flex min-w-0 items-center justify-between gap-4 border-b border-border pb-2">
+                            <dt className="shrink-0 text-xs font-medium uppercase tracking-wide text-muted-foreground">Time</dt>
+                            <dd className="min-w-0 break-all text-right font-mono text-sm font-medium text-foreground">{infoStatus === 'RUNNING' && infoJob ? (elapsedTimes[infoJob.id] || '00:00:00') : ((infoJob as any)?.walltime || '04:00:00')}</dd>
                         </div>
 
                         <div className="mt-4 min-w-0">
-                            <span className="text-[10px] text-gray-400 uppercase font-black tracking-widest block mb-2">Primary Output / Environment Trace</span>
-                            <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 sm:p-4 text-[11px] font-mono whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] max-w-full max-h-[34dvh] sm:max-h-56 overflow-auto leading-relaxed text-gray-700 overscroll-contain">
+                            <span className="mb-2 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Primary Output / Environment Trace</span>
+                            <div className="max-h-[34dvh] max-w-full overflow-auto overscroll-contain whitespace-pre-wrap break-words rounded-md border border-border bg-muted/50 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] [word-break:break-word] sm:max-h-56">
                                 {infoTrace ||
                                  (infoStatus === 'WAITING' ? 'Queued due to quota. Waiting for resources to become available.' :
                                   infoStatus === 'PENDING' ? 'Job accepted by Slurm. It is queued or starting.' :
@@ -1373,8 +1368,8 @@ export default function JobsPage() {
                             </div>
                         </div>
                     </div>
-                    <AlertDialogFooter className="px-5 sm:px-6 pt-4 pb-5 sm:pb-6 shrink-0">
-                        <AlertDialogCancel className="w-full bg-gray-100 hover:bg-gray-200 text-gray-900 border-none h-10 rounded-xl font-bold transition-colors mt-0">Close</AlertDialogCancel>
+                    <AlertDialogFooter className="shrink-0 px-5 pb-5 pt-4 sm:px-6 sm:pb-6">
+                        <AlertDialogCancel className="w-full sm:w-auto">Close</AlertDialogCancel>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

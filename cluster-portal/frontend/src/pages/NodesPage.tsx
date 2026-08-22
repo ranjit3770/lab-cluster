@@ -4,15 +4,16 @@ import { devNodesApi, type DevNode } from '@/api/devNodes';
 import { useAuth } from '@/context/AuthContext';
 import PageLoader from '@/components/PageLoader';
 import { ControllerFailureAlert } from '@/components/ControllerFailureAlert';
-import { 
-    Server, Search, RefreshCcw, Terminal, 
+import {
+    Server, Search, RefreshCcw, Terminal,
     Monitor,
-    ArrowRight, Loader2,
+    Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -105,150 +106,137 @@ export default function NodesPage() {
     if (loading) return <PageLoader message="Loading nodes..." />;
 
     return (
-        <div className="flex flex-col gap-3 pb-4">
-            <header className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                    <h1 className="page-title text-xl lg:text-2xl font-bold text-gray-900">Nodes</h1>
-                    <p className="page-subtitle text-xs text-muted-foreground mt-1">
-                        {refreshing ? (
-                            <span className="inline-flex items-center gap-1.5">
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                                Refreshing...
-                            </span>
-                        ) : (
-                            `${nodes.length} compute nodes · ${auxiliaryNodes.length} management nodes`
-                        )}
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input 
-                            placeholder="Search nodes..." 
-                            className="pl-9 h-8 bg-white/5 border-white/5 text-xs rounded-md"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
-                    </div>
-                    <Button 
-                        onClick={() => fetchData(true)}
-                        size="sm"
-                        variant="outline"
-                        disabled={refreshing}
-                        className="h-8 px-2"
-                    >
-                        <RefreshCcw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-                    </Button>
-                </div>
-            </header>
+        <div className="flex flex-col pb-4">
+            <PageHeader
+                title="Nodes"
+                description={
+                    refreshing ? (
+                        <span className="inline-flex items-center gap-1.5">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Refreshing...
+                        </span>
+                    ) : (
+                        `${nodes.length} compute nodes · ${auxiliaryNodes.length} management nodes`
+                    )
+                }
+                actions={
+                    <>
+                        <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                            <Input
+                                placeholder="Search nodes..."
+                                className="h-8 pl-9 text-xs"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                aria-label="Search nodes"
+                            />
+                        </div>
+                        <Button
+                            onClick={() => fetchData(true)}
+                            size="sm"
+                            variant="outline"
+                            disabled={refreshing}
+                            className="h-8 px-2"
+                            aria-label="Refresh nodes"
+                        >
+                            <RefreshCcw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+                        </Button>
+                    </>
+                }
+            />
 
             {nodes.length === 0 && auxiliaryNodes.length === 0 ? (
-                <div className="flex flex-col items-center justify-center min-h-[300px] rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-6 py-12 text-center">
-                    <Server className="mb-3 h-10 w-10 text-gray-300" />
-                    <p className="text-base font-bold text-gray-900">No nodes found</p>
-                    <p className="mt-1 max-w-sm text-sm leading-5 text-gray-500">
-                        No compute or management nodes are available. Check Slurm controller connectivity.
-                    </p>
-                </div>
+                <EmptyState
+                    icon={Server}
+                    title="No nodes found"
+                    description="No compute or management nodes are available. Check Slurm controller connectivity."
+                />
             ) : (
                 <>
                     {nodes.length > 0 && (
-                        <Card className="overflow-hidden border-white/5 bg-white/[0.02]">
+                        <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left">
                                     <thead>
-                                        <tr className="border-b border-white/5">
-                                            <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Node Name</th>
-                                            <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider hidden md:table-cell">IP Address</th>
-                                            <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">CPU</th>
-                                            <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">Memory</th>
-                                            <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center hidden sm:table-cell">OS</th>
-                                            <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">Status</th>
+                                        <tr className="border-b border-border bg-muted/50">
+                                            <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Node Name</th>
+                                            <th className="hidden px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:table-cell">IP Address</th>
+                                            <th className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">CPU</th>
+                                            <th className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Memory</th>
+                                            <th className="hidden px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:table-cell">OS</th>
+                                            <th className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                        {filteredNodes.map((node) => {
-                                            const isRegistered = devNodes.find(dn => dn.ip_address === node.ip_address);
-                                            
-                                            return (
-                                                <tr key={node.id} className="hover:bg-white/[0.02] transition-colors">
-                                                    <td className="px-3 py-2.5">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <div className="h-8 w-8 flex items-center justify-center bg-white/5 rounded-md">
-                                                                <Server className="h-4 w-4 text-muted-foreground" />
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-sm font-medium text-gray-900">{node.name}</div>
-                                                            </div>
+                                    <tbody className="divide-y divide-border">
+                                        {filteredNodes.map((node) => (
+                                            <tr key={node.id} className="transition-colors hover:bg-accent/40">
+                                                <td className="px-3 py-2.5">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted">
+                                                            <Server className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
                                                         </div>
-                                                    </td>
-                                                    <td className="px-3 py-2.5 hidden md:table-cell">
-                                                        <span className="text-xs text-muted-foreground font-mono">{node.ip_address || 'N/A'}</span>
-                                                    </td>
-                                                    <td className="px-3 py-2.5 text-center">
-                                                        <span className="text-sm font-semibold text-gray-900">{node.cpu_total} cores</span>
-                                                    </td>
-                                                    <td className="px-3 py-2.5 text-center">
-                                                        <span className="text-sm font-semibold text-gray-900">{Math.round(node.memory_total_mb / 1024)} GB</span>
-                                                    </td>
-                                                    <td className="px-3 py-2.5 text-center hidden sm:table-cell">
-                                                        <span className="text-xs text-muted-foreground">{node.operating_system || 'N/A'}</span>
-                                                    </td>
-                                                    <td className="px-3 py-2.5 text-center">
-                                                        <div className="flex items-center justify-center gap-2">
-                                                            <div className={cn(
-                                                                "h-2 w-2 rounded-full",
-                                                                node.status === 'idle' ? "bg-emerald-500" :
-                                                                node.status === 'down' ? "bg-rose-500" : "bg-blue-500 animate-pulse"
-                                                            )} />
-                                                            <span className={cn(
-                                                                "text-[10px] font-medium uppercase",
-                                                                node.status === 'idle' ? "text-emerald-500" :
-                                                                node.status === 'down' ? "text-rose-500" : "text-blue-500"
-                                                            )}>{node.status}</span>
+                                                        <div>
+                                                            <div className="text-sm font-medium text-foreground">{node.name}</div>
                                                         </div>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
+                                                    </div>
+                                                </td>
+                                                <td className="hidden px-3 py-2.5 md:table-cell">
+                                                    <span className="font-mono text-xs text-muted-foreground">{node.ip_address || 'N/A'}</span>
+                                                </td>
+                                                <td className="px-3 py-2.5 text-center">
+                                                    <span className="text-sm tabular-nums text-foreground">{node.cpu_total}</span>
+                                                </td>
+                                                <td className="px-3 py-2.5 text-center">
+                                                    <span className="text-sm tabular-nums text-foreground">{Math.round(node.memory_total_mb / 1024)} GB</span>
+                                                </td>
+                                                <td className="hidden px-3 py-2.5 text-center sm:table-cell">
+                                                    <span className="text-xs text-muted-foreground">{node.operating_system || 'N/A'}</span>
+                                                </td>
+                                                <td className="px-3 py-2.5 text-center">
+                                                    <StatusBadge status={node.status} />
+                                                </td>
+                                            </tr>
+                                        ))}
                                     </tbody>
                                 </table>
                             </div>
-                        </Card>
+                        </div>
                     )}
 
                     {auxiliaryNodes.length > 0 && (
-                        <div>
-                            <div className="flex items-center gap-2 mb-2">
-                                <div className="h-1.5 w-6 bg-blue-500 rounded-full" />
-                                <h2 className="text-xs font-medium text-muted-foreground uppercase">Management Nodes</h2>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        <section className="mt-6">
+                            <h2 className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                Management Nodes
+                                <span className="text-muted-foreground/60">({auxiliaryNodes.length})</span>
+                            </h2>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                 {auxiliaryNodes.map(node => (
-                                    <Card key={node.id} className="p-3 border-white/5 bg-white/[0.02] hover:border-white/10 transition-colors">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-8 w-8 flex items-center justify-center bg-white/5 rounded-md">
-                                                    <Monitor className="h-4 w-4 text-blue-400" />
-                                                </div>
-                                                <div>
-                                                    <div className="text-sm font-medium text-gray-900">{node.name}</div>
-                                                    <div className="text-[10px] text-muted-foreground">{node.ip_address}</div>
-                                                </div>
+                                    <div
+                                        key={node.id}
+                                        className="flex items-center justify-between rounded-lg border border-border bg-card p-3 shadow-xs transition-colors hover:border-ring/40 hover:bg-accent/40"
+                                    >
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-info/10">
+                                                <Monitor className="h-4 w-4 text-info" aria-hidden />
                                             </div>
-                                            <Button 
-                                                size="sm"
-                                                variant="outline"
-                                                className="h-7"
-                                                onClick={() => navigate(`/management/admin-tools/diagnostic-console?node=${node.id}`)}
-                                            >
-                                                <Terminal className="h-3 w-3" />
-                                            </Button>
+                                            <div>
+                                                <div className="text-sm font-medium text-foreground">{node.name}</div>
+                                                <div className="font-mono text-[11px] text-muted-foreground">{node.ip_address}</div>
+                                            </div>
                                         </div>
-                                    </Card>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 px-2"
+                                            onClick={() => navigate(`/management/admin-tools/diagnostic-console?node=${node.id}`)}
+                                            aria-label={`Open terminal for ${node.name}`}
+                                        >
+                                            <Terminal className="h-3.5 w-3.5" />
+                                        </Button>
+                                    </div>
                                 ))}
                             </div>
-                        </div>
+                        </section>
                     )}
                 </>
             )}

@@ -160,20 +160,20 @@ export default function EditorPage() {
                 <div 
                     onClick={handleClick}
                     className={cn(
-                        "flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded hover:bg-gray-100",
-                        isActive ? "bg-primary/10 text-primary" : "text-gray-600"
+                        "flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer rounded hover:bg-accent",
+                        isActive ? "bg-primary/10 text-primary" : "text-muted-foreground"
                     )}
                     style={{ paddingLeft: `${level * 12 + 8}px` }}
                 >
                     {file.isFolder ? (
                         <>
                             {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                            <Folder className="h-4 w-4 text-blue-500" />
+                            <Folder className="h-4 w-4 text-info" />
                         </>
                     ) : (
                         <>
                             <span className="w-4" />
-                            <FileCode className="h-4 w-4 text-blue-400" />
+                            <FileCode className="h-4 w-4 text-info/80" />
                         </>
                     )}
                     <span className="truncate">{file.name}</span>
@@ -194,14 +194,15 @@ export default function EditorPage() {
     return (
         <div 
             ref={containerRef}
-            className="flex flex-col h-[calc(100vh-4rem)] sm:h-[calc(100vh-3.5rem)] lg:h-screen -m-4 p-0"
+            className="flex h-full flex-col overflow-hidden bg-background"
         >
-            <header className="flex items-center justify-between gap-2 px-3 py-2 border-b border-gray-200 bg-white shrink-0">
+            <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-3 py-2">
                 <div className="flex items-center gap-2">
                     <Button 
                         variant="ghost" 
                         size="sm" 
                         onClick={() => navigate('/files')}
+                        aria-label="Back to files"
                     >
                         <ArrowLeft className="h-4 w-4" />
                     </Button>
@@ -210,11 +211,12 @@ export default function EditorPage() {
                         size="sm"
                         className="lg:hidden"
                         onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                        aria-label="Toggle file tree"
                     >
                         {isSidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
                     </Button>
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <FileCode className="h-5 w-5 text-blue-500 shrink-0" />
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <FileCode className="h-5 w-5 shrink-0 text-info" />
                         {fileId === 'new' ? (
                             <input 
                                 value={fileName}
@@ -222,21 +224,21 @@ export default function EditorPage() {
                                     setFileName(e.target.value);
                                     setIsDirty(true);
                                 }}
-                                className="bg-gray-100 border-b border-primary px-1 focus:outline-none text-sm font-medium w-full max-w-[200px]"
+                                className="w-full max-w-[200px] border-b border-primary bg-transparent px-1 text-sm font-medium outline-none"
                                 placeholder="filename.py"
                                 autoFocus
                             />
                         ) : (
-                            <span className="font-medium text-gray-900 text-sm truncate max-w-[150px] sm:max-w-none">{fileName}</span>
+                            <span className="max-w-[150px truncate text-sm font-medium text-foreground sm:max-w-none">{fileName}</span>
                         )}
-                        {isDirty && <span className="text-amber-500">*</span>}
+                        {isDirty && <span className="text-warning">*</span>}
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
                     {saveStatus && (
                         <span className={cn(
-                            "text-xs hidden sm:inline",
-                            saveStatus === 'Saved' ? "text-green-600" : "text-red-500"
+                            "hidden text-xs sm:inline",
+                            saveStatus === 'Saved' ? "text-success" : "text-destructive"
                         )}>
                             {saveStatus}
                         </span>
@@ -246,7 +248,7 @@ export default function EditorPage() {
                         onClick={handleSave}
                         disabled={!isDirty}
                     >
-                        <Save className="h-4 w-4 mr-1" />
+                        <Save className="h-4 w-4" />
                         <span className="hidden sm:inline">Save</span>
                     </Button>
                 </div>
@@ -255,18 +257,17 @@ export default function EditorPage() {
             <div className="flex flex-1 overflow-hidden">
                 {/* Sidebar - Responsive */}
                 <div className={cn(
-                    "w-48 sm:w-56 shrink-0 bg-white border-r border-gray-200 flex flex-col transition-all duration-200",
-                    isSidebarOpen ? "translate-x-0" : "-translate-x-full hidden",
-                    "absolute sm:relative inset-y-0 left-0 z-10 sm:translate-x-0 sm:flex"
+                    "absolute inset-y-0 left-0 z-10 flex w-48 shrink-0 flex-col border-r border-border bg-card transition-all duration-200 sm:relative sm:flex sm:w-56 sm:translate-x-0",
+                    isSidebarOpen ? "translate-x-0" : "hidden -translate-x-full",
                 )}>
-                    <div className="p-3 border-b border-gray-100">
-                        <h3 className="font-medium text-sm text-gray-700">Files</h3>
+                    <div className="border-b border-border p-3">
+                        <h3 className="text-sm font-medium text-muted-foreground">Files</h3>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2">
+                    <div className="custom-scrollbar flex-1 overflow-y-auto p-2">
                         {sidebarLoading ? (
-                            <p className="text-xs text-gray-400 p-2">Loading...</p>
+                            <p className="p-2 text-xs text-muted-foreground">Loading...</p>
                         ) : sidebarFiles.length === 0 ? (
-                            <p className="text-xs text-gray-400 p-2">No files found</p>
+                            <p className="p-2 text-xs text-muted-foreground">No files found</p>
                         ) : (
                             sidebarFiles.map(file => (
                                 <FileTreeItem key={file.name} file={file} path="" />

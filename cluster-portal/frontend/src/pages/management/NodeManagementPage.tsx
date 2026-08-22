@@ -37,8 +37,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { PageHeader } from '@/components/shared/PageHeader';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 type NodeFamily = 'ubuntu' | 'windows';
 
@@ -48,6 +49,8 @@ type ManagedNode = DevNode & {
 };
 
 const WINDOWS_PORTS = new Set([3389, 5985, 5986]);
+
+const FIELD_LABEL_CLASS = 'mb-1 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground';
 
 function classifyNode(node: DevNode): ManagedNode {
   if (node.auto_discovered) {
@@ -124,58 +127,57 @@ function formatDate(value: string) {
 function EmptyColumn({ family }: { family: NodeFamily }) {
   const label = family === 'ubuntu' ? 'Ubuntu nodes' : 'Windows nodes';
   return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-6 py-10 text-center">
-      <Network className="mb-3 h-8 w-8 text-gray-300" />
-      <p className="text-sm font-bold text-gray-900">No {label.toLowerCase()} registered</p>
-      <p className="mt-1 max-w-sm text-xs leading-5 text-gray-500">
-        Add nodes in Slurm configuration to see them here.
-      </p>
-    </div>
+    <EmptyState
+      icon={Network}
+      title={`No ${label.toLowerCase()} registered`}
+      description="Add nodes in Slurm configuration to see them here."
+      className="min-h-[220px] justify-center"
+    />
   );
 }
 
-const slurmdStatusConfig: Record<string, { label: string; dotClass: string; bgClass: string }> = {
+const slurmdStatusConfig: Record<string, { label: string; dotClass: string; badgeClass: string }> = {
   active: {
     label: 'Active',
-    dotClass: 'bg-emerald-500',
-    bgClass: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+    dotClass: 'bg-success',
+    badgeClass: 'border-success/20 bg-success/10 text-success',
   },
   inactive: {
     label: 'Inactive',
-    dotClass: 'bg-red-500',
-    bgClass: 'bg-red-50 text-red-700 border-red-100',
+    dotClass: 'bg-destructive',
+    badgeClass: 'border-destructive/20 bg-destructive/10 text-destructive',
   },
   failed: {
     label: 'Failed',
-    dotClass: 'bg-red-500',
-    bgClass: 'bg-red-50 text-red-700 border-red-100',
+    dotClass: 'bg-destructive',
+    badgeClass: 'border-destructive/20 bg-destructive/10 text-destructive',
   },
   'not-found': {
     label: 'Not Found',
-    dotClass: 'bg-amber-400',
-    bgClass: 'bg-amber-50 text-amber-700 border-amber-100',
+    dotClass: 'bg-warning',
+    badgeClass: 'border-warning/25 bg-warning/10 text-warning',
   },
   not_found: {
     label: 'Not Found',
-    dotClass: 'bg-amber-400',
-    bgClass: 'bg-amber-50 text-amber-700 border-amber-100',
+    dotClass: 'bg-warning',
+    badgeClass: 'border-warning/25 bg-warning/10 text-warning',
   },
   activating: {
     label: 'Activating',
-    dotClass: 'bg-blue-400',
-    bgClass: 'bg-blue-50 text-blue-700 border-blue-100',
+    dotClass: 'bg-info',
+    badgeClass: 'border-info/20 bg-info/10 text-info',
   },
   unknown: {
     label: 'Unknown',
-    dotClass: 'bg-gray-300',
-    bgClass: 'bg-gray-50 text-gray-500 border-gray-100',
+    dotClass: 'bg-muted-foreground/60',
+    badgeClass: 'border-border bg-muted text-muted-foreground',
   },
 };
 
 function SlurmdBadge({ status }: { status?: string | null }) {
   const config = slurmdStatusConfig[status || 'unknown'] || slurmdStatusConfig.unknown;
   return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-bold', config.bgClass)}>
+    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-medium', config.badgeClass)}>
       <span className={cn('h-1.5 w-1.5 rounded-full', config.dotClass)} />
       {config.label}
     </span>
@@ -184,10 +186,10 @@ function SlurmdBadge({ status }: { status?: string | null }) {
 
 function UptimeValue({ uptime, uptimeSeconds }: { uptime?: string | null; uptimeSeconds?: number | null }) {
   if (!uptime || uptime === 'N/A') {
-    return <span className="text-sm font-bold text-gray-400">N/A</span>;
+    return <span className="text-sm font-medium text-muted-foreground">N/A</span>;
   }
   return (
-    <span className="text-sm font-bold text-gray-900" title={uptimeSeconds ? `${uptimeSeconds}s` : undefined}>
+    <span className="text-sm font-semibold tabular-nums text-foreground" title={uptimeSeconds ? `${uptimeSeconds}s` : undefined}>
       {uptime}
     </span>
   );
@@ -221,35 +223,35 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
 
   return (
     <div className={cn(
-      'rounded-xl border p-4 shadow-sm transition-all',
-      selected ? 'border-sky-400 ring-2 ring-sky-200 bg-sky-50/30' : 'border-gray-100 bg-white hover:border-gray-200 hover:shadow-md'
+      'rounded-lg border p-3 shadow-xs transition-colors',
+      selected ? 'border-info/40 bg-info/10' : 'border-border bg-card hover:border-ring/40'
     )}>
       <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-start gap-2 flex-1">
+        <div className="flex min-w-0 flex-1 items-start gap-2">
           {isWindows && (
-            <button onClick={() => onSelect(node.id)} className="mt-2 shrink-0 cursor-pointer">
+            <button onClick={() => onSelect(node.id)} className="mt-0.5 shrink-0 cursor-pointer" aria-label={`Select ${node.name}`}>
               {selected ? (
-                <CheckSquare className="h-5 w-5 text-sky-600" />
+                <CheckSquare className="h-4.5 w-4.5 text-info" />
               ) : (
-                <Square className="h-5 w-5 text-gray-300 hover:text-gray-400" />
+                <Square className="h-4.5 w-4.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground" />
               )}
             </button>
           )}
           <div
             className={cn(
-              'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border',
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border',
               isWindows
-                ? 'border-sky-100 bg-sky-50 text-sky-700'
-                : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                ? 'border-info/20 bg-info/10 text-info'
+                : 'border-success/20 bg-success/10 text-success'
             )}
           >
-            <Icon className="h-5 w-5" />
+            <Icon className="h-4 w-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-black uppercase tracking-tight text-gray-950">
+            <h3 className="truncate text-sm font-semibold text-foreground">
               {node.name}
             </h3>
-            <p className="mt-0.5 truncate font-mono text-xs font-semibold text-gray-500">
+            <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
               {node.ip_address || 'No IP registered'}
             </p>
           </div>
@@ -257,19 +259,19 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
         <div className="flex shrink-0 items-center gap-1.5">
           {isAuto && (
             <Badge
-              variant="secondary"
-              className="border-violet-100 bg-violet-50 text-[10px] font-black uppercase tracking-[0.12em] text-violet-700"
+              variant="outline"
+              className="border-primary/20 bg-primary/10 text-[10px] font-semibold uppercase tracking-wide text-primary"
             >
               Slurm
             </Badge>
           )}
           <Badge
-            variant="secondary"
+            variant="outline"
             className={cn(
-              'shrink-0 border px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em]',
+              'shrink-0 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
               isWindows
-                ? 'border-sky-100 bg-sky-50 text-sky-700'
-                : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                ? 'border-info/20 bg-info/10 text-info'
+                : 'border-success/20 bg-success/10 text-success'
             )}
           >
             {node.family}
@@ -287,7 +289,7 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
                 onClick={handleSetupIdle}
                 disabled={setupIdleLoading}
                 size="sm"
-                className="flex-1 gap-1.5 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:text-sky-800 font-black text-[10px] uppercase tracking-wider h-9 px-2"
+                className="h-8 flex-1 gap-1.5 border-info/25 bg-info/10 px-2 text-[10px] font-semibold uppercase tracking-wider text-info hover:bg-info/20 hover:text-info"
               >
                 {setupIdleLoading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -302,7 +304,7 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
                 onClick={handleSwitchToCluster}
                 disabled={switchOsLoading}
                 size="sm"
-                className="flex-1 gap-1.5 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:text-amber-800 font-black text-[10px] uppercase tracking-wider h-9 px-2"
+                className="h-8 flex-1 gap-1.5 border-warning/25 bg-warning/10 px-2 text-[10px] font-semibold uppercase tracking-wider text-warning hover:bg-warning/20 hover:text-warning"
               >
                 {switchOsLoading ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -312,14 +314,14 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
                 Switch to Cluster
               </Button>
             </div>
-            <div className="col-span-2 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
+            <div className="col-span-2 rounded-md border border-border bg-muted/40 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 <Timer className="h-3 w-3" />
                 Uptime
               </div>
               <div className="mt-1">
                 {isAuto ? (
-                  <span className="text-xs font-bold text-gray-400">No SSH</span>
+                  <span className="text-xs font-medium text-muted-foreground">No SSH</span>
                 ) : (
                   <UptimeValue uptime={node.uptime} uptimeSeconds={node.uptime_seconds} />
                 )}
@@ -328,8 +330,8 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
           </>
         ) : (
           <>
-            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 <Activity className="h-3 w-3" />
                 Slurmd Service
               </div>
@@ -337,14 +339,14 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
                 <SlurmdBadge status={node.slurmd_status} />
               </div>
             </div>
-            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-              <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-gray-400">
+            <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 <Timer className="h-3 w-3" />
                 Uptime
               </div>
               <div className="mt-1">
                 {isAuto ? (
-                  <span className="text-xs font-bold text-gray-400">No SSH</span>
+                  <span className="text-xs font-medium text-muted-foreground">No SSH</span>
                 ) : (
                   <UptimeValue uptime={node.uptime} uptimeSeconds={node.uptime_seconds} />
                 )}
@@ -354,7 +356,7 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-gray-100 pt-3 text-xs text-gray-500">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <Laptop className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">{node.detectionReason}</span>
@@ -362,15 +364,15 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
         {!isAuto && (
           <span
             className={cn(
-              'inline-flex items-center gap-1.5 font-bold shrink-0',
-              node.detected_reachable ? 'text-emerald-600' : 'text-amber-600'
+              'inline-flex shrink-0 items-center gap-1.5 font-medium',
+              node.detected_reachable ? 'text-success' : 'text-warning'
             )}
           >
-            <span className={cn('h-2 w-2 rounded-full', node.detected_reachable ? 'bg-emerald-500' : 'bg-amber-400')} />
+            <span className={cn('h-2 w-2 rounded-full', node.detected_reachable ? 'bg-success' : 'bg-warning')} />
             {node.detected_reachable ? 'reachable' : 'fallback'}
           </span>
         )}
-        <span className="inline-flex items-center gap-1.5 shrink-0">
+        <span className="inline-flex shrink-0 items-center gap-1.5">
           <Clock className="h-3.5 w-3.5" />
           {formatDate(node.created_at)}
         </span>
@@ -436,47 +438,42 @@ function NodeColumn({
   const hasSelection = selectedIds.size > 0;
 
   return (
-    <Card className="overflow-hidden border-gray-100 bg-white flex flex-col">
-      <div
-        className={cn(
-          'border-b px-4 py-3',
-          isWindows ? 'border-sky-100 bg-sky-50/60' : 'border-emerald-100 bg-emerald-50/60'
-        )}
-      >
+    <Card className="flex flex-col overflow-hidden rounded-lg border-border shadow-xs">
+      <div className="border-b border-border bg-muted/40 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-black text-gray-950">{title}</h2>
-            <p className="mt-0.5 text-xs text-gray-500">{description}</p>
+            <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
           </div>
           <Badge
-            variant="secondary"
+            variant="outline"
             className={cn(
-              'border text-xs font-black shrink-0',
+              'shrink-0 tabular-nums',
               isWindows
-                ? 'border-sky-100 bg-white text-sky-700'
-                : 'border-emerald-100 bg-white text-emerald-700'
+                ? 'border-info/20 bg-info/10 text-info'
+                : 'border-success/20 bg-success/10 text-success'
             )}
           >
             {filtered.length}
           </Badge>
         </div>
         <div className="relative mt-2">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input
             placeholder={`Search ${family} nodes...`}
-            className="pl-8 h-8 text-xs rounded-md bg-white/80"
+            className="h-8 pl-8 text-xs"
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </div>
         {isWindows && hasSelection && (
-          <div className="flex gap-2 mt-2">
+          <div className="mt-2 flex gap-2">
             <Button
               size="sm"
               variant="outline"
               onClick={bulkSetupIdle}
               disabled={bulkLoading}
-              className="flex-1 h-8 gap-1 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 font-black text-[10px] uppercase tracking-wider"
+              className="h-8 flex-1 gap-1 border-info/25 bg-info/10 text-[10px] font-semibold uppercase tracking-wider text-info hover:bg-info/20 hover:text-info"
             >
               {bulkLoading ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -490,7 +487,7 @@ function NodeColumn({
               variant="outline"
               onClick={bulkSwitchToCluster}
               disabled={bulkLoading}
-              className="flex-1 h-8 gap-1 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 font-black text-[10px] uppercase tracking-wider"
+              className="h-8 flex-1 gap-1 border-warning/25 bg-warning/10 text-[10px] font-semibold uppercase tracking-wider text-warning hover:bg-warning/20 hover:text-warning"
             >
               {bulkLoading ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -503,7 +500,7 @@ function NodeColumn({
         )}
       </div>
 
-      <div className="flex-1 grid grid-cols-1 gap-3 overflow-y-auto p-4 content-start md:grid-cols-2">
+      <div className="custom-scrollbar grid flex-1 grid-cols-1 content-start gap-3 overflow-y-auto p-4 md:grid-cols-2">
         {filtered.length > 0 ? pageItems.map((node) => (
           <NodeTile
             key={node.id}
@@ -518,9 +515,9 @@ function NodeColumn({
             {nodes.length === 0 ? (
               <EmptyColumn family={family} />
             ) : (
-              <div className="flex flex-col items-center justify-center min-h-[120px] rounded-xl border border-dashed border-gray-200 bg-gray-50/70 px-4 py-8 text-center">
-                <Search className="mb-2 h-6 w-6 text-gray-300" />
-                <p className="text-sm font-bold text-gray-500">No matching nodes</p>
+              <div className="flex min-h-[120px] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card px-4 py-8 text-center">
+                <Search className="mb-2 h-6 w-6 text-muted-foreground/50" aria-hidden />
+                <p className="text-sm font-medium text-muted-foreground">No matching nodes</p>
               </div>
             )}
           </div>
@@ -528,8 +525,8 @@ function NodeColumn({
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-gray-100 px-4 py-2">
-          <span className="text-xs font-semibold text-gray-500">
+        <div className="flex items-center justify-between border-t border-border px-4 py-2">
+          <span className="text-xs font-medium tabular-nums text-muted-foreground">
             Page {page} of {totalPages}
           </span>
           <div className="flex items-center gap-1">
@@ -539,6 +536,7 @@ function NodeColumn({
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               className="h-7 w-7 p-0"
+              aria-label="Previous page"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -548,6 +546,7 @@ function NodeColumn({
               disabled={page >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               className="h-7 w-7 p-0"
+              aria-label="Next page"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
@@ -743,10 +742,10 @@ export default function NodeManagementPage() {
   if (error) {
     return (
       <div className="mx-auto w-full max-w-[1500px] space-y-5">
-        <div className="flex flex-col items-center justify-center min-h-[400px] rounded-xl border border-dashed border-red-200 bg-red-50/70 px-6 py-12 text-center">
-          <Server className="mb-3 h-10 w-10 text-red-300" />
-          <p className="text-base font-bold text-red-900">Failed to load nodes</p>
-          <p className="mt-1 text-sm text-red-500">{error}</p>
+        <div className="flex min-h-[400px] flex-col items-center justify-center rounded-lg border border-dashed border-destructive/30 bg-destructive/5 px-6 py-12 text-center">
+          <Server className="mb-3 h-10 w-10 text-destructive/50" aria-hidden />
+          <p className="text-base font-semibold text-destructive">Failed to load nodes</p>
+          <p className="mt-1 text-sm text-destructive/80">{error}</p>
           <Button onClick={() => { setLoading(true); setError(''); loadNodes(); }} className="mt-4" variant="outline">
             Retry
           </Button>
@@ -759,31 +758,32 @@ export default function NodeManagementPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1500px] space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-black tracking-tight text-gray-950">Node Management</h1>
-          <p className="mt-1 text-sm text-gray-500 flex items-center gap-2">
-            {refreshing ? (
-              <span className="inline-flex items-center gap-1.5">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Refreshing...
-              </span>
-            ) : (
-              `${nodes.length} registered nodes`
-            )}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => loadNodes(true)}
-          disabled={refreshing || actionLoading || bulkLoading}
-          className="h-10 gap-2 border-gray-200 bg-white font-bold"
-        >
-          <RefreshCcw className={cn('h-4 w-4', (refreshing || actionLoading) && 'animate-spin')} />
-          Refresh
-        </Button>
-      </div>
+      <PageHeader
+        title="Node Management"
+        description={
+          refreshing ? (
+            <span className="inline-flex items-center gap-1.5">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Refreshing...
+            </span>
+          ) : (
+            `${nodes.length} registered nodes`
+          )
+        }
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => loadNodes(true)}
+            disabled={refreshing || actionLoading || bulkLoading}
+            className="gap-2"
+          >
+            <RefreshCcw className={cn('h-3.5 w-3.5', (refreshing || actionLoading) && 'animate-spin')} />
+            Refresh
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <NodeColumn
@@ -820,36 +820,36 @@ export default function NodeManagementPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Setup Idle Configuration</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm text-gray-500">
+              <div className="space-y-2 text-sm text-muted-foreground">
                 <span>This will configure the node to boot into Ubuntu on the next restart and set up an idle scheduler with a 1-hour grace period.</span>
-                <span className="block font-medium text-gray-700">The node will not be restarted at this stage.</span>
+                <span className="block font-medium text-foreground">The node will not be restarted at this stage.</span>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-3 px-6 pb-4">
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">WinRM Username</label>
+              <label className={FIELD_LABEL_CLASS}>WinRM Username</label>
               <Input
                 value={credUser}
                 onChange={(e) => setCredUser(e.target.value)}
                 placeholder="Administrator"
-                className="h-9 text-xs rounded-md"
+                className="h-9 text-xs"
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">WinRM Password</label>
+              <label className={FIELD_LABEL_CLASS}>WinRM Password</label>
               <Input
                 type="password"
                 value={credPassword}
                 onChange={(e) => setCredPassword(e.target.value)}
                 placeholder="Enter password"
-                className="h-9 text-xs rounded-md"
+                className="h-9 text-xs"
               />
             </div>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmSetupIdle} className="bg-sky-600 hover:bg-sky-700">
+            <AlertDialogAction onClick={confirmSetupIdle}>
               Confirm Setup
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -866,28 +866,28 @@ export default function NodeManagementPage() {
           </AlertDialogHeader>
           <div className="space-y-3 px-6 pb-4">
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">WinRM Username</label>
+              <label className={FIELD_LABEL_CLASS}>WinRM Username</label>
               <Input
                 value={credUser}
                 onChange={(e) => setCredUser(e.target.value)}
                 placeholder="Administrator"
-                className="h-9 text-xs rounded-md"
+                className="h-9 text-xs"
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">WinRM Password</label>
+              <label className={FIELD_LABEL_CLASS}>WinRM Password</label>
               <Input
                 type="password"
                 value={credPassword}
                 onChange={(e) => setCredPassword(e.target.value)}
                 placeholder="Enter password"
-                className="h-9 text-xs rounded-md"
+                className="h-9 text-xs"
               />
             </div>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmSwitchToCluster} className="bg-amber-600 hover:bg-amber-700">
+            <AlertDialogAction onClick={confirmSwitchToCluster} className="bg-warning text-warning-foreground shadow-xs hover:bg-warning/90">
               Switch to Cluster
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -904,28 +904,31 @@ export default function NodeManagementPage() {
           </AlertDialogHeader>
           <div className="space-y-3 px-6 pb-4">
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">WinRM Username</label>
+              <label className={FIELD_LABEL_CLASS}>WinRM Username</label>
               <Input
                 value={credUser}
                 onChange={(e) => setCredUser(e.target.value)}
                 placeholder="Administrator"
-                className="h-9 text-xs rounded-md"
+                className="h-9 text-xs"
               />
             </div>
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 block">WinRM Password</label>
+              <label className={FIELD_LABEL_CLASS}>WinRM Password</label>
               <Input
                 type="password"
                 value={credPassword}
                 onChange={(e) => setCredPassword(e.target.value)}
                 placeholder="Enter password"
-                className="h-9 text-xs rounded-md"
+                className="h-9 text-xs"
               />
             </div>
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmBulkAction} className={bulkDialogType === 'setup-idle' ? 'bg-sky-600 hover:bg-sky-700' : 'bg-amber-600 hover:bg-amber-700'}>
+            <AlertDialogAction
+              onClick={confirmBulkAction}
+              className={bulkDialogType === 'setup-idle' ? undefined : 'bg-warning text-warning-foreground shadow-xs hover:bg-warning/90'}
+            >
               {bulkDialogType === 'setup-idle' ? 'Confirm Setup' : 'Switch to Cluster'}
             </AlertDialogAction>
           </AlertDialogFooter>

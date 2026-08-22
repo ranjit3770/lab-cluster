@@ -1,19 +1,18 @@
 import { useEffect, useState } from "react";
-import { 
-    Briefcase, Loader2, Activity, Settings as SettingsIcon,
-    Layers, Monitor, Zap, Cpu, Scan, Signal, Database, Orbit,
-    Power, History, LayoutGrid, Command, ArrowRight, ArrowUpRight,
-    Shield, CheckCircle2, XCircle, Lock, Info, RefreshCcw
+import {
+    Briefcase, Activity,
+    Layers, Zap, RefreshCcw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { settingsApi } from "@/api/settings";
 import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/shared/PageHeader";
 
 export default function JobSettingPage() {
     const { token } = useAuth();
@@ -53,44 +52,49 @@ export default function JobSettingPage() {
     };
 
     return (
-        <div className="flex flex-col gap-4 pb-4 max-w-[1200px] mx-auto w-full animate-in fade-in duration-300">
-            <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                    <h1 className="text-xl lg:text-2xl font-bold text-gray-900">Job Settings</h1>
-                    <p className="text-xs text-gray-500 flex items-center gap-2 mt-1">
-                        <Briefcase className="h-3 w-3" />
+        <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-4 pb-4">
+            <PageHeader
+                title="Job Settings"
+                description={
+                    <span className="inline-flex items-center gap-1.5">
+                        <Briefcase className="h-3 w-3" aria-hidden />
                         Configure job execution limits and policies
-                    </p>
-                </div>
-                <Button variant="outline" size="sm" onClick={fetchSettings} className="h-9">
-                    <RefreshCcw className={cn("h-4 w-4", loading && "animate-spin")} />
-                </Button>
-            </header>
+                    </span>
+                }
+                actions={
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={fetchSettings}
+                        aria-label="Refresh job settings"
+                    >
+                        <RefreshCcw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+                    </Button>
+                }
+            />
 
-            <Card className="bg-white border-gray-200">
-                <CardHeader className="p-4 pb-2">
-                    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                        <Layers className="h-4 w-4" />
+            <Card className="rounded-lg border-border shadow-xs">
+                <CardHeader className="border-b border-border px-4 py-3 [.border-b]:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Layers className="h-3.5 w-3.5 text-primary" aria-hidden />
                         Job Limits
-                    </h3>
+                    </CardTitle>
                 </CardHeader>
-                <CardContent className="p-4 pt-0 space-y-3">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <CardContent className="space-y-3 p-4">
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Max Batch Jobs Per User</Label>
-                            <Input 
-                                defaultValue={getSystemValue('max_batch_jobs_per_user')} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Max Batch Jobs Per User</Label>
+                            <Input
+                                defaultValue={getSystemValue('max_batch_jobs_per_user')}
                                 onBlur={(e) => handleUpdateSystemSetting('max_batch_jobs_per_user', e.target.value)}
-                                className="h-10 mt-1"
                                 placeholder="10"
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-medium text-gray-500 uppercase">Max Jupyter Jobs Per User</Label>
-                            <Input 
-                                defaultValue={getSystemValue('max_jupyter_jobs_per_user')} 
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Max Jupyter Jobs Per User</Label>
+                            <Input
+                                defaultValue={getSystemValue('max_jupyter_jobs_per_user')}
                                 onBlur={(e) => handleUpdateSystemSetting('max_jupyter_jobs_per_user', e.target.value)}
-                                className="h-10 mt-1"
                                 placeholder="2"
                             />
                         </div>
@@ -98,52 +102,56 @@ export default function JobSettingPage() {
                 </CardContent>
             </Card>
 
-            <Card className="bg-white border-gray-200 shadow-sm overflow-hidden">
-                <CardHeader className="p-4 pb-3 flex flex-row items-center justify-between border-b border-gray-50 bg-gray-50/50">
-                    <div className="flex items-center gap-2">
-                        <Activity className="h-4 w-4 text-primary" />
-                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-tight">Core Service Mesh Awareness</h3>
-                    </div>
-                    <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">System Live</Badge>
+            <Card className="overflow-hidden rounded-lg border-border shadow-xs">
+                <CardHeader className="flex-row items-center justify-between border-b border-border px-4 py-3 [.border-b]:pb-3">
+                    <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        <Activity className="h-3.5 w-3.5 text-primary" aria-hidden />
+                        Core Service Mesh Awareness
+                    </CardTitle>
+                    <Badge variant="outline" className="border-success/20 bg-success/10 text-[10px] font-medium text-success">
+                        System Live
+                    </Badge>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 border-b border-gray-100">
+                    <div className="grid grid-cols-1 gap-px bg-border md:grid-cols-2 lg:grid-cols-4">
                         {[
                             { name: 'slurmctld', desc: 'Central Control Daemon' },
                             { name: 'slurmd', desc: 'Compute Node Daemon' },
                             { name: 'slurmdbd', desc: 'Database Interface' },
                             { name: 'slurmrestd', desc: 'REST Proxy Interface' }
                         ].map((srv) => (
-                            <div key={srv.name} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors border-r border-b border-gray-100 last:border-r-0 lg:[&:nth-child(4)]:border-r-0 md:[&:nth-child(2n)]:border-r-0">
-                                <div>
-                                    <h4 className="text-xs font-black text-gray-900 font-mono tracking-tighter uppercase">{srv.name}</h4>
-                                    <p className="text-[9px] text-gray-400 font-medium uppercase">{srv.desc}</p>
+                            <div key={srv.name} className="flex items-center justify-between gap-2 bg-card p-4">
+                                <div className="min-w-0">
+                                    <h4 className="font-mono text-xs font-semibold uppercase tracking-tight text-foreground">{srv.name}</h4>
+                                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{srv.desc}</p>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)] animate-pulse" />
-                                    <span className="text-[10px] font-bold text-emerald-600 uppercase">Online</span>
+                                <div className="flex shrink-0 items-center gap-2">
+                                    <span className="h-2 w-2 animate-pulse rounded-full bg-success" aria-hidden />
+                                    <span className="text-[11px] font-semibold uppercase text-success">Online</span>
                                 </div>
                             </div>
                         ))}
                     </div>
 
-                    <div className="p-4 bg-gray-50 border-t border-gray-100">
-                        <h4 className="text-[10px] font-bold text-gray-400 uppercase mb-3 tracking-widest">Extended System Hooks</h4>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="border-t border-border bg-muted/40 p-4">
+                        <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Extended System Hooks</h4>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             {systemSettings.filter(s => !['max_batch_jobs_per_user', 'max_jupyter_jobs_per_user'].includes(s.key)).map(setting => (
-                                <div key={setting.key} className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl shadow-sm">
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-6 w-6 rounded-lg bg-gray-50 flex items-center justify-center">
-                                            <Zap className="h-3 w-3 text-gray-400" />
+                                <div key={setting.key} className="flex items-center justify-between gap-2 rounded-md border border-border bg-card p-3 shadow-xs">
+                                    <div className="flex min-w-0 items-center gap-2">
+                                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-muted">
+                                            <Zap className="h-3 w-3 text-muted-foreground" aria-hidden />
                                         </div>
-                                        <div>
-                                            <p className="text-[10px] font-bold text-gray-900 uppercase font-mono tracking-tighter">{setting.key.replace(/_/g, ' ')}</p>
-                                            <p className="text-[9px] text-gray-400 truncate max-w-[100px]">{setting.value}</p>
+                                        <div className="min-w-0">
+                                            <p className="truncate font-mono text-[11px] font-semibold uppercase tracking-tight text-foreground">{setting.key.replace(/_/g, ' ')}</p>
+                                            <p className="truncate text-[10px] text-muted-foreground">{setting.value}</p>
                                         </div>
                                     </div>
                                     <Badge variant="outline" className={cn(
-                                        "text-[9px] font-bold",
-                                        setting.value === 'true' ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-gray-50 text-gray-400 border-gray-100"
+                                        "shrink-0 text-[10px] font-semibold",
+                                        setting.value === 'true'
+                                            ? "border-success/20 bg-success/10 text-success"
+                                            : "border-border bg-muted text-muted-foreground"
                                     )}>
                                         {setting.value === 'true' ? 'ENABLED' : 'PASSIVE'}
                                     </Badge>

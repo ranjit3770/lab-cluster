@@ -3,7 +3,8 @@ import { Terminal } from 'xterm';
 import 'xterm/css/xterm.css';
 import { RefreshCw, Terminal as TerminalIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { cn } from '@/lib/utils';
 
 interface DevTerminalProps {
     nodeId: number | null;
@@ -124,45 +125,48 @@ export function DevTerminal({ nodeId, token }: DevTerminalProps) {
 
     if (!nodeId) {
         return (
-            <Card className="h-full flex items-center justify-center bg-gray-50 border-gray-200">
-                <div className="text-center p-8">
-                    <TerminalIcon className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-700 mb-2">No Node Selected</h3>
-                    <p className="text-sm text-gray-500">Select a node from Admin Tools to start a terminal session</p>
-                </div>
-            </Card>
+            <div className="flex h-full w-full items-center justify-center p-6">
+                <EmptyState
+                    icon={TerminalIcon}
+                    title="No Node Selected"
+                    description="Select a node from Admin Tools to start a terminal session"
+                />
+            </div>
         );
     }
 
     return (
-        <div className="h-full w-full flex flex-col bg-gray-900 rounded-lg overflow-hidden">
+        <div className="flex h-full w-full flex-col overflow-hidden rounded-lg border border-border bg-card shadow-xs">
             {/* Status Bar */}
-            <div className="flex items-center justify-between px-4 py-2 bg-gray-800 border-b border-gray-700">
+            <div className="flex items-center justify-between border-b border-border bg-card px-3 py-2">
                 <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full ${
-                        status === 'connected' ? 'bg-green-500' : 
-                        status === 'connecting' ? 'bg-yellow-500 animate-pulse' : 
-                        'bg-red-500'
-                    }`} />
-                    <span className="text-sm text-gray-300 capitalize">{status}</span>
+                    <span
+                        className={cn(
+                            'h-2 w-2 rounded-full',
+                            status === 'connected' ? 'bg-success' :
+                            status === 'connecting' ? 'animate-pulse bg-warning' :
+                            'bg-destructive'
+                        )}
+                        aria-hidden
+                    />
+                    <span className="text-xs font-medium capitalize text-foreground">{status}</span>
                 </div>
                 {(status === 'error' || status === 'disconnected') && (
-                    <Button 
-                        variant="ghost" 
-                        size="sm" 
+                    <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={handleReconnect}
-                        className="text-gray-300 hover:text-white hover:bg-gray-700"
                     >
-                        <RefreshCw className="h-4 w-4 mr-1" />
+                        <RefreshCw className="h-3.5 w-3.5" />
                         Reconnect
                     </Button>
                 )}
             </div>
-            
+
             {/* Terminal */}
-            <div 
-                ref={terminalRef} 
-                className="flex-1 p-2"
+            <div
+                ref={terminalRef}
+                className="flex-1 bg-[#1e1e1e] p-2"
             />
         </div>
     );

@@ -9,44 +9,43 @@ interface ControllerFailureAlertProps {
 
 export function ControllerFailureAlert({ error, onRetry }: ControllerFailureAlertProps) {
     return (
-        <div className="flex items-center justify-center h-screen lg:h-full max-w-2xl mx-auto p-6 animate-in fade-in zoom-in duration-300">
-            <Alert variant="destructive" className="border border-rose-500/30 shadow-xl shadow-rose-500/10 bg-card rounded-2xl p-8 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r from-rose-500 to-rose-600" />
-                
-                <div className="flex gap-6">
-                    <div className="flex-shrink-0">
-                        <div className="h-12 w-12 bg-rose-500/10 rounded-xl flex items-center justify-center border border-rose-500/20">
-                            <AlertCircle className="h-6 w-6 text-rose-400" />
+        <div className="flex h-screen items-center justify-center p-6 lg:h-full">
+            <Alert variant="destructive" className="max-w-2xl gap-4 rounded-lg border-destructive/30 bg-destructive/10 p-6 shadow-xs">
+                <div className="flex flex-col gap-5 sm:flex-row">
+                    <div className="shrink-0">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-md border border-destructive/20 bg-destructive/10">
+                            <AlertCircle className="h-5 w-5 text-destructive" aria-hidden />
                         </div>
                     </div>
-                    
+
                     <div className="flex-1 space-y-4">
                         <div className="space-y-1">
-                            <AlertTitle className="text-xl font-black uppercase tracking-tight text-foreground leading-none">
+                            <AlertTitle className="text-base font-semibold leading-tight text-foreground">
                                 Controller Failure
                             </AlertTitle>
-                            <p className="text-muted-foreground font-mono text-[9px] uppercase tracking-widest italic">
+                            <p className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
                                 Connection to Cluster Management Layer Interrupted
                             </p>
                         </div>
-                        
+
                         <AlertDescription className="space-y-4">
-                            <p className="font-mono text-sm text-muted-foreground leading-relaxed">
-                                The gateway could not reach the Slurm REST endpoint or the primary management database. 
+                            <p className="text-sm leading-relaxed text-muted-foreground">
+                                The gateway could not reach the Slurm REST endpoint or the primary management database.
                                 This may be due to a transient network issue or a service restart.
                             </p>
-                            
-                            <div className="bg-secondary/50 p-4 rounded-xl text-[11px] font-mono border border-border/50 text-muted-foreground break-all leading-relaxed">
-                                <span className="text-rose-400 font-bold mr-2 uppercase text-[9px]">Trace:</span>
+
+                            <div className="break-all rounded-md border border-border bg-muted/50 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                                <span className="mr-2 font-semibold uppercase text-destructive">Trace:</span>
                                 {error}
                             </div>
-                            
-                            <Button 
-                                variant="default" 
-                                onClick={onRetry} 
-                                className="group w-full lg:w-auto gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase text-[10px] tracking-widest h-11 px-6 rounded-xl shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+
+                            <Button
+                                variant="default"
+                                size="sm"
+                                onClick={onRetry}
+                                className="gap-2"
                             >
-                                <RefreshCcw className="h-4 w-4 group-hover:rotate-180 transition-transform duration-500" /> 
+                                <RefreshCcw className="h-3.5 w-3.5" />
                                 Re-Establish Link
                             </Button>
                         </AlertDescription>

@@ -1,21 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { userApi } from '@/api/user';
-import { 
-    Users, 
-    UserPlus, 
-    Search, 
+import {
+    Users,
+    UserPlus,
+    Search,
     RefreshCcw,
     Pencil,
     Trash2,
-    Shield
 } from "lucide-react";
-import { 
-    Sheet, 
-    SheetContent, 
-    SheetDescription, 
-    SheetHeader, 
-    SheetTitle 
+import {
+    Sheet,
+    SheetContent,
+    SheetDescription,
+    SheetHeader,
+    SheetTitle
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,10 +29,11 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import PageLoader from "@/components/PageLoader";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -186,201 +186,206 @@ export default function UsersPage() {
     if (loading) return <PageLoader message="Loading users..." />;
 
     return (
-        <div className="flex flex-col gap-3 pb-4 selection:bg-primary/30">
-            <header className="page-header flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                    <h1 className="page-title text-xl lg:text-2xl font-bold text-gray-900">Users</h1>
-                    <p className="page-subtitle text-xs text-muted-foreground mt-1">User management</p>
-                </div>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <div className="relative flex-1 sm:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                        <Input 
-                            placeholder="Search users..." 
-                            className="pl-9 h-8 bg-white/5 border-white/5 text-xs rounded-md"
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                        />
-                    </div>
-                    <Button 
-                        onClick={() => fetchUsers(true)}
-                        size="sm"
-                        variant="outline"
-                        className={cn("h-8 px-2", refreshing && "animate-spin")}
-                    >
-                        <RefreshCcw className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button 
-                        onClick={handleOpenCreate}
-                        size="sm"
-                        className="h-8"
-                    >
-                        <UserPlus className="h-3.5 w-3.5 mr-1" />
-                        Add User
-                    </Button>
-                </div>
-            </header>
+        <div className="flex flex-col pb-4">
+            <PageHeader
+                title="Users"
+                description="User management"
+                actions={
+                    <>
+                        <div className="relative w-full sm:w-64">
+                            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                            <Input
+                                placeholder="Search users..."
+                                className="h-8 pl-9 text-xs"
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                aria-label="Search users"
+                            />
+                        </div>
+                        <Button
+                            onClick={() => fetchUsers(true)}
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2"
+                            aria-label="Refresh users"
+                        >
+                            <RefreshCcw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+                        </Button>
+                        <Button onClick={handleOpenCreate} size="sm" className="h-8">
+                            <UserPlus className="h-3.5 w-3.5" />
+                            Add User
+                        </Button>
+                    </>
+                }
+            />
 
-            <Card className="overflow-hidden border-white/5 bg-white/[0.02]">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead>
-                            <tr className="border-b border-white/5">
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">User</th>
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Role</th>
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">CPU Limit</th>
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">Memory Limit</th>
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-center">Status</th>
-                                <th className="px-3 py-2.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wider text-right">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {filteredUsers.length === 0 ? (
-                                <tr>
-                                    <td colSpan={6} className="px-3 py-12 text-center">
-                                        <div className="flex flex-col items-center gap-2 opacity-40">
-                                            <Users className="h-8 w-8 text-muted-foreground" />
-                                            <p className="text-xs text-muted-foreground">No users found</p>
-                                        </div>
-                                    </td>
+            {filteredUsers.length === 0 ? (
+                <EmptyState
+                    icon={Users}
+                    title="No users found"
+                    description="No user accounts match your search."
+                />
+            ) : (
+                <div className="overflow-hidden rounded-lg border border-border bg-card shadow-xs">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="border-b border-border bg-muted/50">
+                                    <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">User</th>
+                                    <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Role</th>
+                                    <th className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">CPU Limit</th>
+                                    <th className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Memory Limit</th>
+                                    <th className="px-3 py-2.5 text-center text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</th>
+                                    <th className="px-3 py-2.5 text-right text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Actions</th>
                                 </tr>
-                            ) : (
-                                filteredUsers.map((u: User) => (
-                                    <tr key={u.id} className="hover:bg-white/[0.02] transition-colors">
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {filteredUsers.map((u: User) => (
+                                    <tr key={u.id} className="transition-colors hover:bg-accent/40">
                                         <td className="px-3 py-2.5">
                                             <div className="flex items-center gap-2.5">
-                                                <Avatar className="h-8 w-8 rounded-md">
-                                                    <AvatarFallback className="bg-white/5 text-xs font-medium">
+                                                <Avatar className="h-7 w-7 rounded-md">
+                                                    <AvatarFallback className="rounded-md bg-primary/10 text-xs font-medium text-primary">
                                                         {(u.full_name || u.username).substring(0,2).toUpperCase()}
                                                     </AvatarFallback>
                                                 </Avatar>
-                                                <div>
-                                                    <div className="text-sm font-medium text-gray-900">{u.full_name || u.username}</div>
-                                                    <div className="text-[10px] text-muted-foreground">{u.email}</div>
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-sm font-medium text-foreground">{u.full_name || u.username}</div>
+                                                    <div className="truncate text-[11px] text-muted-foreground">{u.email}</div>
                                                 </div>
                                             </div>
                                         </td>
                                         <td className="px-3 py-2.5">
-                                            <Badge className={cn(
-                                                "text-[10px] font-medium",
-                                                u.role === 'admin' ? "bg-amber-500/20 text-amber-500" :
-                                                u.role === 'developer' ? "bg-purple-500/20 text-purple-400" :
-                                                "bg-primary/20 text-primary"
-                                            )}>
+                                            <Badge
+                                                variant="outline"
+                                                size="sm"
+                                                className={cn(
+                                                    "font-medium capitalize",
+                                                    u.role === 'admin' && "border-warning/25 bg-warning/10 text-warning",
+                                                    u.role === 'developer' && "border-info/20 bg-info/10 text-info",
+                                                    u.role === 'user' && "border-primary/20 bg-primary/10 text-primary"
+                                                )}
+                                            >
                                                 {u.role}
                                             </Badge>
                                         </td>
                                         <td className="px-3 py-2.5 text-center">
-                                            <span className="text-sm font-semibold text-gray-900">{u.cpu_limit || '∞'}</span>
+                                            <span className="text-sm font-semibold tabular-nums text-foreground">{u.cpu_limit || '∞'}</span>
                                         </td>
                                         <td className="px-3 py-2.5 text-center">
-                                            <span className="text-sm font-semibold text-gray-900">{u.memory_limit_gb ? `${u.memory_limit_gb}G` : '∞'}</span>
+                                            <span className="text-sm font-semibold tabular-nums text-foreground">{u.memory_limit_gb ? `${u.memory_limit_gb}G` : '∞'}</span>
                                         </td>
                                         <td className="px-3 py-2.5 text-center">
                                             <div className={cn(
-                                                "inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[10px] font-medium",
-                                                u.is_active ? "bg-emerald-500/20 text-emerald-500" : "bg-white/5 text-muted-foreground"
+                                                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                                                u.is_active
+                                                    ? "border-success/20 bg-success/10 text-success"
+                                                    : "border-border bg-muted text-muted-foreground"
                                             )}>
-                                                <div className={cn("h-1.5 w-1.5 rounded-full", u.is_active ? "bg-emerald-500" : "bg-muted-foreground")} />
+                                                <div className={cn(
+                                                    "h-1.5 w-1.5 rounded-full",
+                                                    u.is_active ? "bg-success" : "bg-muted-foreground/60"
+                                                )} />
                                                 {u.is_active ? 'Active' : 'Inactive'}
                                             </div>
                                         </td>
                                         <td className="px-3 py-2.5 text-right">
                                             <div className="flex items-center justify-end gap-1">
-                                                <Button 
+                                                <Button
                                                     onClick={() => handleOpenEdit(u)}
                                                     size="sm"
                                                     variant="ghost"
-                                                    className="h-7"
+                                                    className="h-7 px-1.5"
+                                                    aria-label={`Edit ${u.username}`}
                                                 >
                                                     <Pencil className="h-3.5 w-3.5" />
                                                 </Button>
-                                                <Button 
+                                                <Button
                                                     onClick={() => handleOpenDelete(u)}
                                                     size="sm"
                                                     variant="ghost"
-                                                    className="h-7 text-rose-500"
+                                                    className="h-7 px-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                    aria-label={`Delete ${u.username}`}
                                                 >
                                                     <Trash2 className="h-3.5 w-3.5" />
                                                 </Button>
                                             </div>
                                         </td>
                                     </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </Card>
+            )}
 
             <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-                <SheetContent side="right" className="sm:max-w-md !bg-white !text-black border-l border-gray-100 p-0 overflow-hidden flex flex-col shadow-2xl">
-                    <div className="h-2 bg-primary w-full" />
-                    <div className="p-8 flex-1 overflow-y-auto space-y-8 pb-32">
-                        <SheetHeader>
-                            <SheetTitle className="text-3xl font-black tracking-tight text-black flex items-center gap-3">
-                                <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                                    <Users className="h-6 w-6 text-primary" />
-                                </div>
+                <SheetContent side="right" className="flex flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+                    <div className="flex-1 space-y-6 overflow-y-auto p-6 pb-4 custom-scrollbar">
+                        <SheetHeader className="space-y-1 p-0">
+                            <SheetTitle className="flex items-center gap-2.5 text-lg font-semibold text-foreground">
+                                <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/10">
+                                    <Users className="h-4 w-4 text-primary" aria-hidden />
+                                </span>
                                 {editingUser ? "Edit User" : "Add User"}
                             </SheetTitle>
-                            <SheetDescription className="text-gray-500 font-medium text-xs mt-1">
+                            <SheetDescription className="text-xs text-muted-foreground">
                                 {editingUser ? `Change settings for ${editingUser?.username}` : "Create a new user account."}
                             </SheetDescription>
                         </SheetHeader>
 
-                        <form onSubmit={handleSubmit} className="space-y-6">
-                            <div className="grid grid-cols-1 gap-5">
-                                <div className="group">
-                                    <Label htmlFor="full_name" className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Full Name</Label>
-                                    <Input 
+                        <form onSubmit={handleSubmit} className="space-y-5">
+                            <div className="grid grid-cols-1 gap-4">
+                                <div>
+                                    <Label htmlFor="full_name" className="text-xs font-medium text-foreground">Full Name</Label>
+                                    <Input
                                         id="full_name"
                                         name="full_name"
                                         placeholder="Full Name"
-                                        className="h-12 bg-gray-50 border-gray-100 rounded-xl focus:bg-white transition-all text-sm font-semibold"
+                                        className="mt-1.5 h-9 text-sm"
                                         value={formData.full_name}
                                         onChange={handleInputChange}
                                     />
                                 </div>
-                                <div className="group">
-                                    <Label htmlFor="username" className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Username</Label>
-                                    <Input 
+                                <div>
+                                    <Label htmlFor="username" className="text-xs font-medium text-foreground">Username</Label>
+                                    <Input
                                         id="username"
                                         name="username"
                                         placeholder="username"
                                         disabled={!!editingUser}
-                                        className="h-12 bg-gray-50 border-gray-100 rounded-xl focus:bg-white transition-all text-sm font-mono"
+                                        className="mt-1.5 h-9 font-mono text-sm"
                                         value={formData.username}
                                         onChange={handleInputChange}
                                         required
                                     />
                                 </div>
                             </div>
-                            
-                            <div className="group">
-                                <Label htmlFor="email" className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">Email Address</Label>
-                                <Input 
+
+                            <div>
+                                <Label htmlFor="email" className="text-xs font-medium text-foreground">Email Address</Label>
+                                <Input
                                     id="email"
                                     name="email"
                                     type="email"
                                     placeholder="email@example.com"
-                                    className="h-12 bg-gray-50 border-gray-100 rounded-xl focus:bg-white transition-all text-sm font-semibold"
+                                    className="mt-1.5 h-9 text-sm"
                                     value={formData.email}
                                     onChange={handleInputChange}
                                     required
                                 />
                             </div>
-                            
-                            <div className="group">
-                                <Label htmlFor="password" className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 block">
+
+                            <div>
+                                <Label htmlFor="password" className="text-xs font-medium text-foreground">
                                     {editingUser ? "Password (leave blank to keep current)" : "Password"}
                                 </Label>
-                                <Input 
+                                <Input
                                     id="password"
                                     name="password"
                                     type="password"
                                     placeholder="••••••••"
-                                    className="h-12 bg-gray-50 border-gray-100 rounded-xl focus:bg-white transition-all text-sm font-mono"
+                                    className="mt-1.5 h-9 font-mono text-sm"
                                     value={formData.password}
                                     onChange={handleInputChange}
                                     required={!editingUser}
@@ -388,34 +393,34 @@ export default function UsersPage() {
                             </div>
 
                             <div>
-                                <Label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 block">Resource Limits</Label>
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 text-center">
-                                        <Label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Cores</Label>
-                                        <Input 
+                                <Label className="text-xs font-medium text-foreground">Resource Limits</Label>
+                                <div className="mt-1.5 grid grid-cols-3 gap-2">
+                                    <div className="rounded-md border border-border bg-muted/50 p-2 text-center">
+                                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Cores</Label>
+                                        <Input
                                             name="cpu_limit"
                                             type="number"
-                                            className="h-8 bg-transparent border-none text-center text-lg font-black p-0 focus-visible:ring-0"
+                                            className="mt-1 h-8 border-none bg-transparent p-0 text-center text-sm font-semibold shadow-none focus-visible:ring-0"
                                             value={formData.cpu_limit}
                                             onChange={handleInputChange}
                                         />
                                     </div>
-                                    <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 text-center">
-                                        <Label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">RAM (GB)</Label>
-                                        <Input 
+                                    <div className="rounded-md border border-border bg-muted/50 p-2 text-center">
+                                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">RAM (GB)</Label>
+                                        <Input
                                             name="memory_limit_gb"
                                             type="number"
-                                            className="h-8 bg-transparent border-none text-center text-lg font-black p-0 focus-visible:ring-0"
+                                            className="mt-1 h-8 border-none bg-transparent p-0 text-center text-sm font-semibold shadow-none focus-visible:ring-0"
                                             value={formData.memory_limit_gb}
                                             onChange={handleInputChange}
                                         />
                                     </div>
-                                    <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 text-center">
-                                        <Label className="text-[10px] font-bold text-gray-400 uppercase mb-1 block">DISK (GB)</Label>
-                                        <Input 
+                                    <div className="rounded-md border border-border bg-muted/50 p-2 text-center">
+                                        <Label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">DISK (GB)</Label>
+                                        <Input
                                             name="storage_limit_gb"
                                             type="number"
-                                            className="h-8 bg-transparent border-none text-center text-lg font-black p-0 focus-visible:ring-0"
+                                            className="mt-1 h-8 border-none bg-transparent p-0 text-center text-sm font-semibold shadow-none focus-visible:ring-0"
                                             value={formData.storage_limit_gb}
                                             onChange={handleInputChange}
                                         />
@@ -424,18 +429,18 @@ export default function UsersPage() {
                             </div>
 
                             <div>
-                                <Label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 block">User Role</Label>
-                                <div className="flex gap-2">
+                                <Label className="text-xs font-medium text-foreground">User Role</Label>
+                                <div className="mt-1.5 flex gap-2">
                                     {(['user', 'admin', 'developer'] as const).map(role => (
-                                        <button 
+                                        <button
                                             key={role}
                                             type="button"
                                             onClick={() => setFormData({...formData, role})}
                                             className={cn(
-                                                "flex-1 py-3 px-2 rounded-xl text-[10px] font-black uppercase transition-all tracking-wider border",
-                                                formData.role === role 
-                                                    ? "bg-black text-white border-black shadow-lg" 
-                                                    : "bg-white text-gray-400 border-gray-100 hover:border-gray-300"
+                                                "flex-1 rounded-md border px-2 py-2 text-[11px] font-medium uppercase tracking-wide transition-colors",
+                                                formData.role === role
+                                                    ? "border-primary bg-primary text-primary-foreground shadow-xs"
+                                                    : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
                                             )}
                                         >
                                             {role}
@@ -444,31 +449,34 @@ export default function UsersPage() {
                                 </div>
                             </div>
 
-                            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                            <div className="flex items-center justify-between rounded-md border border-border bg-muted/50 p-3">
                                 <div>
-                                    <span className="text-[11px] font-bold text-gray-900 uppercase tracking-tight">Account Status</span>
-                                    <p className="text-[9px] text-gray-400">Toggle account on or off</p>
+                                    <span className="text-xs font-medium text-foreground">Account Status</span>
+                                    <p className="text-[11px] text-muted-foreground">Toggle account on or off</p>
                                 </div>
-                                <button 
+                                <button
                                     type="button"
+                                    role="switch"
+                                    aria-checked={formData.is_active}
+                                    aria-label="Account status"
                                     onClick={() => setFormData({...formData, is_active: !formData.is_active})}
                                     className={cn(
-                                        "w-12 h-6 rounded-full transition-all relative shadow-inner",
-                                        formData.is_active ? "bg-emerald-500" : "bg-gray-200"
+                                        "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+                                        formData.is_active ? "bg-success" : "bg-input"
                                     )}
                                 >
                                     <div className={cn(
-                                        "absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-md",
-                                        formData.is_active ? "translate-x-7" : "translate-x-1"
+                                        "absolute top-0.5 h-4 w-4 rounded-full bg-background shadow-sm transition-all",
+                                        formData.is_active ? "translate-x-[18px]" : "translate-x-0.5"
                                     )} />
                                 </button>
                             </div>
                         </form>
                     </div>
-                    <div className="p-6 bg-white border-t border-gray-100">
-                        <Button 
+                    <div className="border-t border-border bg-card p-4">
+                        <Button
                             onClick={(e) => handleSubmit(e as any)}
-                            className="w-full h-14 rounded-2xl bg-black hover:bg-gray-800 text-white text-lg font-black shadow-xl transition-all active:scale-95"
+                            className="w-full h-9"
                         >
                             {editingUser ? "Save Changes" : "Create User"}
                         </Button>
@@ -477,21 +485,21 @@ export default function UsersPage() {
             </Sheet>
 
             <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
-                <AlertDialogContent className="!bg-white !text-black border-none shadow-2xl rounded-[2.5rem] p-8 max-w-sm">
+                <AlertDialogContent className="max-w-sm">
                     <AlertDialogHeader className="items-center text-center">
-                        <div className="h-16 w-16 bg-rose-50 rounded-2xl flex items-center justify-center mb-4">
-                            <Trash2 className="h-8 w-8 text-rose-500" />
+                        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-destructive/10">
+                            <Trash2 className="h-6 w-6 text-destructive" aria-hidden />
                         </div>
-                        <AlertDialogTitle className="text-xl font-black text-gray-900">Purge User Identity?</AlertDialogTitle>
-                        <AlertDialogDescription className="text-gray-500 text-xs mt-2 px-2">
-                            This will permanently revoke all cluster access for <span className="text-rose-600 font-black">@{userToDelete?.username}</span> and prune their associated job registry.
+                        <AlertDialogTitle className="text-base font-semibold text-foreground">Purge User Identity?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs leading-5 text-muted-foreground">
+                            This will permanently revoke all cluster access for <span className="font-medium text-destructive">@{userToDelete?.username}</span> and prune their associated job registry.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="flex flex-col sm:flex-col gap-2 mt-6">
-                        <AlertDialogCancel className="rounded-xl font-bold h-10 border-gray-100">Abort Deletion</AlertDialogCancel>
-                        <AlertDialogAction 
+                    <AlertDialogFooter className="flex-col gap-2 sm:flex-col">
+                        <AlertDialogCancel>Abort Deletion</AlertDialogCancel>
+                        <AlertDialogAction
                             onClick={confirmDelete}
-                            className="rounded-xl h-12 shadow-lg shadow-rose-200 font-bold bg-rose-500 hover:bg-rose-600 border-none"
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >
                             Confirm Purge
                         </AlertDialogAction>
