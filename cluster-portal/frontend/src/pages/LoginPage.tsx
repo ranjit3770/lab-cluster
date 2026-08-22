@@ -35,12 +35,12 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error('Login error detail:', err.response?.data);
       if (err.response?.status === 400) {
-          setError(err.response?.data?.detail || 'Invalid username or password');
+        setError(err.response?.data?.detail || 'Invalid username or password');
       } else {
-          setError('Server error. Please try again later.');
+        setError('Server error. Please try again later.');
       }
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -53,7 +53,7 @@ export default function LoginPage() {
             alt="Logo"
             className="h-16 mx-auto mb-4"
           />
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">HPC Portal</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Research Compute Platform</h1>
           <p className="text-sm text-muted-foreground mt-1">Sign in to your account</p>
         </div>
 
