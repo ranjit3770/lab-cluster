@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     EXTERNAL_JOB_API_URL: str = os.getenv("EXTERNAL_JOB_API_URL", "http://0.0.0.0:9000")
     
     # Branding & Presence
-    CLUSTER_NAME: str = os.getenv("CLUSTER_NAME", "Lab Slurm Cluster")
+    CLUSTER_NAME: str = os.getenv("CLUSTER_NAME", "Research Compute Platform")
     CLUSTER_DESCRIPTION: str = os.getenv("CLUSTER_DESCRIPTION", "High performance computing environment based on SLURM.")
     
     # Storage

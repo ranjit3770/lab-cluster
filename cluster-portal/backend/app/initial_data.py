@@ -105,7 +105,7 @@ def init_db(db: Session) -> None:
     settings_seed = [
         ("max_batch_jobs_per_user", "20", "Maximum concurrent batch jobs allowed per person"),
         ("max_jupyter_jobs_per_user", "4", "Maximum concurrent Jupyter sessions allowed per person"),
-        ("cluster_name", "Lab Slurm Cluster", "Display name of the HPC environment"),
+        ("cluster_name", "Research Compute Platform", "Display name of the HPC environment"),
         ("maintenance_mode", "false", "Whether the system is in maintenance mode"),
         ("slurm_rest_url", settings.SLURM_REST_URL, "Endpoint for the Slurm REST API"),
         ("slurm_node_api", settings.SLURM_NODE_API, "Endpoint for the Slurm Node API"),
