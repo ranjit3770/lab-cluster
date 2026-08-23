@@ -3,8 +3,24 @@ import subprocess
 import re
 import time
 import socket
+import ctypes
 from getpass import getpass
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def _enable_md4():
+    """Activate the OpenSSL 3.x legacy provider so MD4 (needed by NTLM auth)
+    is available on systems where it is disabled by default."""
+    try:
+        libcrypto = ctypes.CDLL("libcrypto.so.3")
+        libcrypto.OSSL_PROVIDER_load.restype = ctypes.c_void_p
+        libcrypto.OSSL_PROVIDER_load.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        for name in (b"legacy", b"default"):
+            if not libcrypto.OSSL_PROVIDER_load(None, name):
+                print(f"[openssl] Warning: could not activate '{name.decode()}' provider", file=sys.stderr)
+    except OSError:
+        pass  # OpenSSL < 3.x has MD4 built in; nothing to enable.
+
+_enable_md4()
 
 def install_dependencies():
     required = ["paramiko", "pywinrm"]
