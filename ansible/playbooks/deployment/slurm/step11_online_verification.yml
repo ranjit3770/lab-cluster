@@ -1,0 +1,66 @@
+---
+- name: Bring All Slurm Nodes Online (Auto-Resume)
+  hosts: head_nodes
+  become: yes
+  vars:
+    slurm_bin: "/usr/local/slurm/bin"
+
+  tasks:
+    - name: 1. Wait for slurmd heartbeats (allow nodes to check in)
+      ansible.builtin.pause:
+        seconds: 10
+
+    - name: 2. Resume DOWN/DRAIN/FAIL/UNKNOWN nodes
+      ansible.builtin.shell:
+        cmd: |
+          export PATH={{ slurm_bin }}:$PATH
+          nodes_to_resume=$({{ slurm_bin }}/scontrol show node -o | awk '
+            {
+              node = ""
+              state = ""
+              for (i = 1; i <= NF; i++) {
+                if ($i ~ /^NodeName=/) {
+                  node = $i
+                  sub(/^NodeName=/, "", node)
+                }
+                if ($i ~ /^State=/) {
+                  state = tolower($i)
+                  sub(/^state=/, "", state)
+                  gsub(/[+*~#$@%]/, " ", state)
+                }
+              }
+              if (node != "" && state ~ /(^| )(down|drain|drained|draining|fail|failing|unk|unknown)( |$)/) {
+                print node
+              }
+            }
+          ')
+          if [ -z "$nodes_to_resume" ]; then
+            echo "No DOWN/DRAIN/FAIL/UNKNOWN nodes need resuming."
+            exit 0
+          fi
+
+          failed=0
+          for node in $nodes_to_resume; do
+            output=$({{ slurm_bin }}/scontrol update nodename="$node" state=resume 2>&1)
+            rc=$?
+            if [ "$rc" -eq 0 ]; then
+              echo "Resume accepted: $node"
+            elif echo "$output" | grep -qi "Invalid node state transition"; then
+              echo "Skipping $node: $output"
+            else
+              echo "Failed to resume $node: $output"
+              failed=1
+            fi
+          done
+          exit "$failed"
+      register: resume_cmd
+      changed_when: "'Resume accepted:' in resume_cmd.stdout"
+
+    - name: 3. Verify final cluster state
+      ansible.builtin.shell: "{{ slurm_bin }}/sinfo"
+      register: sinfo_final
+      changed_when: false
+
+    - name: Display Cluster Health
+      ansible.builtin.debug:
+        msg: "{{ sinfo_final.stdout_lines }}"

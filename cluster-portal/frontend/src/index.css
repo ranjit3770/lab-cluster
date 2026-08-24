@@ -1,0 +1,256 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ==========================================================================
+   Design System — Enterprise UI
+   --------------------------------------------------------------------------
+   Tokens are defined as complete color values and consumed through Tailwind's
+   @theme mapping (bg-background, text-foreground, border-border, etc.).
+   Status semantics: success / warning / info alongside destructive.
+   ========================================================================== */
+
+@theme {
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --shadow-xs: 0 1px 2px 0 hsl(0 0% 0% / 0.05);
+  --shadow-sm: 0 1px 3px 0 hsl(0 0% 0% / 0.08), 0 1px 2px -1px hsl(0 0% 0% / 0.06);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+}
+
+/* --------------------------------------------------------------------------
+   Light theme
+   -------------------------------------------------------------------------- */
+:root {
+  --background: hsl(210 25% 97%);
+  --foreground: hsl(222 18% 12%);
+
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(222 18% 12%);
+
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(222 18% 12%);
+
+  --primary: hsl(173 70% 26%);
+  --primary-foreground: hsl(180 40% 98%);
+
+  --secondary: hsl(210 20% 94%);
+  --secondary-foreground: hsl(222 16% 16%);
+
+  --muted: hsl(210 18% 93%);
+  --muted-foreground: hsl(215 12% 44%);
+
+  --accent: hsl(210 19% 91%);
+  --accent-foreground: hsl(222 16% 14%);
+
+  --destructive: hsl(0 68% 46%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  --success: hsl(152 58% 30%);
+  --success-foreground: hsl(0 0% 100%);
+  --warning: hsl(32 88% 38%);
+  --warning-foreground: hsl(0 0% 100%);
+  --info: hsl(210 88% 40%);
+  --info-foreground: hsl(0 0% 100%);
+
+  --border: hsl(214 16% 87%);
+  --input: hsl(214 14% 82%);
+  --ring: hsl(173 70% 30%);
+
+  --sidebar: hsl(220 16% 13%);
+  --sidebar-foreground: hsl(214 15% 78%);
+  --sidebar-accent: hsl(215 14% 19%);
+  --sidebar-border: hsl(218 13% 21%);
+
+  --radius: 0.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   Dark theme — tuned surfaces & contrast, not an inversion
+   -------------------------------------------------------------------------- */
+.dark {
+  --background: hsl(220 14% 9%);
+  --foreground: hsl(210 22% 92%);
+
+  --card: hsl(220 13% 12%);
+  --card-foreground: hsl(210 22% 92%);
+
+  --popover: hsl(220 13% 13%);
+  --popover-foreground: hsl(210 22% 92%);
+
+  --primary: hsl(172 62% 44%);
+  --primary-foreground: hsl(178 40% 8%);
+
+  --secondary: hsl(220 11% 17%);
+  --secondary-foreground: hsl(210 18% 88%);
+
+  --muted: hsl(220 11% 16%);
+  --muted-foreground: hsl(215 12% 63%);
+
+  --accent: hsl(220 11% 19%);
+  --accent-foreground: hsl(210 20% 90%);
+
+  --destructive: hsl(0 66% 54%);
+  --destructive-foreground: hsl(0 0% 100%);
+
+  --success: hsl(152 52% 46%);
+  --success-foreground: hsl(160 45% 8%);
+  --warning: hsl(35 85% 55%);
+  --warning-foreground: hsl(33 60% 10%);
+  --info: hsl(206 88% 60%);
+  --info-foreground: hsl(210 60% 10%);
+
+  --border: hsl(219 12% 21%);
+  --input: hsl(219 12% 26%);
+  --ring: hsl(172 62% 44%);
+
+  --sidebar: hsl(220 14% 7%);
+  --sidebar-foreground: hsl(214 13% 72%);
+  --sidebar-accent: hsl(216 12% 14%);
+  --sidebar-border: hsl(218 12% 15%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    background: hsl(172 65% 40% / 0.28);
+  }
+
+  /* Visible keyboard focus everywhere by default */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply tracking-tight font-semibold;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Shared page primitives
+   -------------------------------------------------------------------------- */
+@utility page-header {
+  @apply mb-4 flex flex-col gap-1;
+}
+
+@utility page-title {
+  @apply text-xl font-semibold tracking-tight text-foreground;
+}
+
+@utility page-subtitle {
+  @apply text-xs text-muted-foreground;
+}
+
+@utility custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--input) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--input);
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: var(--muted-foreground);
+}
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@utility hidden-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hidden-scrollbar::-webkit-scrollbar {
+  display: none;
+}

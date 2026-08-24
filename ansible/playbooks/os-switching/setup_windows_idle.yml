@@ -1,0 +1,51 @@
+---
+- name: Production Ready Windows Idle Restart
+  hosts: windows_nodes
+  gather_facts: yes
+  tasks:
+    - name: 1. Create Scripts Directory
+      ansible.windows.win_file:
+        path: C:\Scripts
+        state: directory
+
+    - name: 2. Create the Restart Batch File with Grace Period
+      ansible.windows.win_copy:
+        dest: C:\Scripts\IdleRestart.bat
+        content: |
+          @echo off
+          echo Idle Restart triggered at %date% %time% >> C:\Scripts\restart_log.txt
+          :: /r = restart, /f = force, /t 30 = 30 second countdown
+          shutdown /r /f /t 30 /c "System idle for 1 hour. Rebooting to Ubuntu in 30 seconds. Move mouse to cancel."
+
+    - name: 3. Configure Windows Task Scheduler (Native Idle Trigger)
+      community.windows.win_scheduled_task:
+        name: Idle_Restart_Final
+        description: "Reboots to Ubuntu only after 5 minutes of true inactivity"
+        username: SYSTEM
+        run_level: highest
+        state: present
+        
+        actions:
+          - path: C:\Scripts\IdleRestart.bat
+        
+        # FIXED: Changed 'on_idle' to 'idle'
+        triggers:
+          - type: idle
+        
+        conditions:
+          # System must be idle for 1 hour
+          idle_duration: PT1H
+          # Stop the task if the user returns (moves mouse/keys)
+          stop_on_idle_end: yes
+          # Restart the task if the computer becomes idle again
+          restart_on_idle_resume: yes
+          # Ensure it runs even on laptops/battery
+          disallow_start_if_on_batteries: no
+          
+        settings:
+          allow_demand_start: yes
+          enabled: yes
+          # Start the task only if the computer is idle
+          run_only_if_idle: yes
+          # How long to wait for an idle state (PT0S means no limit)
+          execution_time_limit: PT0S

@@ -1,0 +1,23 @@
+# Enables the OpenSSL legacy provider so MD4 (required by NTLM auth)
+# is available on OpenSSL 3.x systems.
+#
+# Usage:
+#   export OPENSSL_CONF=/opt/amritacluster/lab-cluster/scripts/os-swapper/openssl-legacy.cnf
+#
+# Verify with:
+#   python3 -c "import hashlib; hashlib.new('md4'); print('md4 OK')"
+
+openssl_conf = openssl_init
+
+[openssl_init]
+providers = provider_sect
+
+[provider_sect]
+default = default_sect
+legacy = legacy_sect
+
+[default_sect]
+activate = 1
+
+[legacy_sect]
+activate = 1

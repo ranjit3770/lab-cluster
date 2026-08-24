@@ -1,0 +1,217 @@
+---
+- name: Setup and Fix Slurm REST API with JWT
+  hosts: head_nodes
+  become: yes
+
+  vars:
+    slurm_prefix: "/usr/local/slurm"
+    slurm_src_dir: "/usr/src/slurm-25.11.4"
+    slurm_plugin_dir: "{{ slurm_prefix }}/lib/slurm"
+    # Match the JWT key path from slurm.conf AuthAltParameters
+    jwt_key_path: "/var/spool/slurm/statesave/jwt_hs256.key"
+
+  tasks:
+
+    # ===================================================
+    # SECTION 1: Fix missing shared libraries (.so)
+    # ===================================================
+    # Slurm 25.x `make install` only installs .a and .la
+    # files for plugins — NOT the .so shared objects.
+    # slurmrestd (and slurmctld) load plugins via dlopen()
+    # and require .so files. We copy them from the build tree.
+
+    - name: 1. Check if plugin .so files are already installed
+      shell: "find {{ slurm_plugin_dir }} -name '*.so' | head -1"
+      register: plugin_so_check
+      changed_when: false
+
+    - name: 2. Copy ALL plugin .so files from build tree
+      shell: |
+        find {{ slurm_src_dir }} -path '*/.libs/*.so' | while read src; do
+          filename=$(basename "$src")
+          cp -v "$src" {{ slurm_plugin_dir }}/"$filename"
+        done
+      args:
+        executable: /bin/bash
+      when: plugin_so_check.stdout == ""
+      register: copy_plugins
+
+    - name: 3. Show copied plugins count
+      debug:
+        msg: "Copied plugin .so files to {{ slurm_plugin_dir }}"
+      when: copy_plugins is changed
+
+    # --- Fix libslurmfull.so in main lib dir ---
+
+    - name: 4. Check if libslurmfull.so is in main lib dir
+      stat:
+        path: "{{ slurm_prefix }}/lib/libslurmfull.so"
+      register: lib_installed
+
+    - name: 5. Copy libslurmfull.so to main lib dir
+      copy:
+        src: "{{ slurm_src_dir }}/src/api/.libs/libslurmfull.so"
+        dest: "{{ slurm_prefix }}/lib/libslurmfull.so"
+        remote_src: yes
+        mode: '0755'
+      when: not lib_installed.stat.exists
+
+    # ===================================================
+    # SECTION 2: Configure dynamic linker
+    # ===================================================
+
+    - name: 6. Configure ldconfig for Slurm libs
+      copy:
+        dest: /etc/ld.so.conf.d/slurm.conf
+        content: |
+          {{ slurm_prefix }}/lib
+          {{ slurm_prefix }}/lib/slurm
+
+    - name: 7. Refresh shared library cache
+      command: ldconfig
+
+    - name: 8. Verify linker sees libslurmfull
+      shell: ldconfig -p | grep libslurmfull
+      register: linker_check
+      changed_when: false
+
+    - name: 9. Fail if linker cannot find libslurmfull
+      fail:
+        msg: "Dynamic linker cannot find libslurmfull.so even after fix attempt."
+      when: linker_check.stdout == ""
+
+    # ===================================================
+    # SECTION 3: JWT Key Setup
+    # ===================================================
+
+    - name: 10. Ensure JWT key directory exists
+      file:
+        path: "{{ jwt_key_path | dirname }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+
+    - name: 11. Check if JWT key exists
+      stat:
+        path: "{{ jwt_key_path }}"
+      register: jwt_key
+
+    - name: 12. Generate HS256 JWT Key if missing
+      shell: openssl rand -hex 32 > {{ jwt_key_path }}
+      args:
+        executable: /bin/bash
+      when: not jwt_key.stat.exists
+
+    - name: 13. Set JWT Key permissions
+      file:
+        path: "{{ jwt_key_path }}"
+        owner: slurm
+        group: slurmrestd
+        mode: '0640'
+
+    # ===================================================
+    # SECTION 4: Ensure munge and slurm config
+    # ===================================================
+
+    - name: 14. Ensure munge service is running
+      systemd:
+        name: munge
+        state: started
+        enabled: yes
+
+    - name: 15. Verify munge works
+      command: munge -n
+      register: munge_test
+      changed_when: false
+
+    - name: 15.1. Explicitly set SlurmUser to slurm in slurm.conf
+      lineinfile:
+        path: /etc/slurm/slurm.conf
+        regexp: '^SlurmUser='
+        line: 'SlurmUser=slurm'
+        insertafter: '^SlurmdUser='
+      register: slurm_conf
+
+    - name: 15.2. Chown slurm dirs to slurm
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        recurse: yes
+      loop:
+        - /var/spool/slurmctld
+        - /var/log/slurm
+        - /var/spool/slurm
+      ignore_errors: yes
+
+    - name: 15.3. Restart slurmctld if SlurmUser changed
+      systemd:
+        name: slurmctld
+        state: restarted
+      when: slurm_conf is changed
+
+    # ===================================================
+    # SECTION 5: Systemd Service
+    # ===================================================
+
+    - name: 16. Stop slurmrestd for maintenance
+      systemd:
+        name: slurmrestd
+        state: stopped
+      failed_when: false
+
+    - name: 17. Create slurmrestd systemd unit file
+      copy:
+        dest: /etc/systemd/system/slurmrestd.service
+        content: |
+          [Unit]
+          Description=Slurm REST daemon
+          After=network.target munge.service slurmctld.service
+          Requires=munge.service
+          ConditionPathExists=/etc/slurm/slurm.conf
+
+          [Service]
+          Type=simple
+          User=slurmrestd
+          Group=slurmrestd
+          Environment="LD_LIBRARY_PATH={{ slurm_prefix }}/lib:{{ slurm_prefix }}/lib/slurm"
+          Environment="SLURM_JWT_KEY={{ jwt_key_path }}"
+          Environment="SLURM_JWT=daemon"
+          ExecStart={{ slurm_prefix }}/sbin/slurmrestd -a rest_auth/jwt 0.0.0.0:6820
+          Restart=on-failure
+          RestartSec=5
+          StartLimitIntervalSec=0
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: 18. Reload systemd and restart slurmrestd
+      systemd:
+        daemon_reload: yes
+        name: slurmrestd
+        state: restarted
+        enabled: yes
+
+    # ===================================================
+    # SECTION 6: Verification
+    # ===================================================
+
+    - name: 19. Wait for SlurmRESTd to listen on 6820
+      wait_for:
+        host: 127.0.0.1
+        port: 6820
+        timeout: 60
+
+    - name: 20. Quick smoke test
+      uri:
+        url: "http://127.0.0.1:6820/slurm/v0.0.41/ping"
+        method: GET
+        status_code: [200, 401]
+      register: rest_ping
+      failed_when: false
+
+    - name: 21. Show result
+      debug:
+        msg: "SlurmRESTd is UP on port 6820. Smoke test status: {{ rest_ping.status | default('N/A') }}"

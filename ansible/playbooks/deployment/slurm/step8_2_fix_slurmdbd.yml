@@ -1,0 +1,117 @@
+---
+- name: Auto-Heal Slurm Database and Accounting
+  hosts: head_nodes
+  become: yes
+  vars:
+    db_name: "slurm_acct_db"
+    db_user: "slurm"
+    db_password: "slurm123"
+    cluster_hn: "localhost"
+    slurm_prefix: "/usr/local/slurm"
+    slurm_sysconfdir: "/etc/slurm"
+    slurm_state_dir: "/var/spool/slurmctld"
+
+  tasks:
+    - name: 1. Ensure MySQL and Munge are running
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop: [mariadb, munge]
+
+    - name: 2. Heal Shared Libraries (ldconfig)
+      ansible.builtin.copy:
+        dest: /etc/ld.so.conf.d/slurm.conf
+        content: "{{ slurm_prefix }}/lib"
+      register: ld_fix
+
+    - name: Apply ldconfig
+      ansible.builtin.command: ldconfig
+      when: ld_fix.changed
+
+    - name: 3. Deep-Reset Database Permissions
+      community.mysql.mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.*:ALL"
+        state: present
+        host: "{{ item }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+      loop: ['localhost', '127.0.0.1', '::1']
+
+    - name: 4. Fix Directory Permissions and Volatile Paths
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: slurm
+        group: slurm
+        mode: '0755'
+      loop: [/var/run/slurm, /var/log/slurm, "{{ slurm_sysconfdir }}", "{{ slurm_state_dir }}"]
+
+    - name: 5. Generate slurmdbd.conf
+      ansible.builtin.copy:
+        dest: "{{ slurm_sysconfdir }}/slurmdbd.conf"
+        content: |
+          AuthType=auth/munge
+          DbdAddr=127.0.0.1
+          DbdHost={{ cluster_hn }}
+          SlurmUser=slurm
+          LogFile=/var/log/slurm/slurmdbd.log
+          PidFile=/var/run/slurm/slurmdbd.pid
+          StorageType=accounting_storage/mysql
+          StorageHost=127.0.0.1
+          StoragePass={{ db_password }}
+          StorageUser={{ db_user }}
+          StorageLoc={{ db_name }}
+        owner: slurm
+        group: slurm
+        mode: '0600'
+
+    - name: 6. Restart SlurmDBD (Clean Start)
+      ansible.builtin.systemd:
+        name: slurmdbd
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+    - name: 7. Wait for SlurmDBD Port (6819)
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 6819
+        state: started
+        delay: 5
+        timeout: 30
+      register: slurmdbd_port_check
+
+    - name: 8. Restart Slurmctld (Dependency Fix)
+      ansible.builtin.systemd:
+        name: slurmctld
+        state: restarted
+        enabled: yes
+      when: slurmdbd_port_check is succeeded
+
+    - name: 9. Verify Cluster Connectivity (With Retries)
+      ansible.builtin.shell: |
+        export PATH={{ slurm_prefix }}/bin:{{ slurm_prefix }}/sbin:$PATH
+        scontrol ping
+      register: scontrol_ping
+      until: scontrol_ping.rc == 0
+      retries: 10
+      delay: 5
+      changed_when: false
+      failed_when: false
+
+    - name: 10. Debug Info if Ping Fails
+      when: scontrol_ping.rc != 0
+      block:
+        - name: Get Slurmctld Log Tail
+          ansible.builtin.command: tail -n 20 /var/log/slurm/slurmctld.log
+          register: slurm_logs
+          changed_when: false
+
+        - name: Show why slurmctld is down
+          ansible.builtin.fail:
+            msg: |
+              Slurmctld is still DOWN. 
+              Last log lines:
+              {{ slurm_logs.stdout }}

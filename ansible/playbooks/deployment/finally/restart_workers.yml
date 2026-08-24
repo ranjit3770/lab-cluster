@@ -1,0 +1,25 @@
+---
+- name: Restart Slurm Daemon on Worker Nodes
+  hosts: cluster_nodes
+  become: yes
+  tasks:
+    - name: 1. Clear any failed service states
+      ansible.builtin.command: systemctl reset-failed slurmd
+      changed_when: false
+
+    - name: 2. Restart slurmd service
+      ansible.builtin.systemd:
+        name: slurmd
+        state: restarted
+        enabled: yes
+        daemon_reload: yes
+
+    - name: 3. Verify slurmd is active
+      ansible.builtin.command: systemctl is-active slurmd
+      register: slurmd_status
+      changed_when: false
+      failed_when: slurmd_status.stdout != "active"
+
+    - name: 4. Show status for confirmation
+      ansible.builtin.debug:
+        msg: "slurmd on {{ inventory_hostname }} is {{ slurmd_status.stdout }}"
