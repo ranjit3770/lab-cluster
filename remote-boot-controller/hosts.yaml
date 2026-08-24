@@ -1,9 +1,0 @@
-hosts:
-  - name: worker-node-1
-    address: 172.17.181.168
-
-  - name: worker-node-2
-    address: 172.17.181.169
-
-  - name: worker-node-3
-    address: 172.17.181.170
