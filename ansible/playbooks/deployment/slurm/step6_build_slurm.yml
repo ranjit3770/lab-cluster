@@ -6,7 +6,7 @@
     src_dir: "/usr/src"
     slurm_prefix: "/usr/local/slurm"
     slurm_sysconfdir: "/etc/slurm"
-    target_version: "25.11.4" 
+    target_version: "26.05.3" 
     force_rebuild: false      
 
   tasks:

@@ -18,3 +18,4 @@
 - import_playbook: slurm/step10-1_fixes.yml
 - import_playbook: slurm/step11_online_verification.yml
 - import_playbook: finally/repair_unknown_slurm_nodes.yml
+- import_playbook: finally/fix_headnode_slurm_resources.yml

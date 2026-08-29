@@ -65,6 +65,8 @@ Detailed procedures:
 | `playbooks/deployment/step4_main.yml` | Full Slurm deployment sequence. |
 | `playbooks/deployment/finally/append_slurm_node.yml` | Appends one new worker node. |
 | `playbooks/deployment/finally/repair_unknown_slurm_nodes.yml` | Repairs nodes that are `UNKNOWN`, `INVALID`, `DOWN`, or `DRAIN`. |
+| `playbooks/deployment/finally/fix_slurmrestd_jwt_auth.yml` | Fixes `slurmrestd` JWT auth returning 401 (key perms + `SLURM_JWT_KEY` pin + accounting user); runs automatically as the last step of `cluster_manage.yml`. |
+| `playbooks/deployment/finally/fix_headnode_slurm_resources.yml` | Corrects the head node's advertised CPU/RAM in `slurm.conf` (from `slurmd -C`) and clears stale `DOWN` state so the portal shows real resources. |
 | `playbooks/os-switching/ensure_ubuntu_boot_target_auto.yml` | One-command dual-boot workflow; detects current OS per node and switches accordingly. |
 | `playbooks/os-switching/set_grub_default_targeted.yml` | Sets persistent Ubuntu GRUB default on selected Linux hosts via `target_hosts`. |
 | `playbooks/os-switching/boot_to_ubuntu.yml` | Sets Windows nodes to boot Ubuntu once; also invoked by the portal API. |

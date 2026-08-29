@@ -35,7 +35,7 @@
   gather_facts: no
   vars:
     src_dir: "/usr/src"
-    target_version: "25.11.4"
+    target_version: "26.05.3"
 
   tasks:
     - name: Ensure Munge is installed on the head node
@@ -82,7 +82,7 @@
     src_dir: "/usr/src"
     slurm_prefix: "/usr/local/slurm"
     slurm_sysconfdir: "/etc/slurm"
-    target_version: "25.11.4"
+    target_version: "26.05.3"
     slurm_enable_cgroups: "{{ enable_slurm_cgroups | default(false) }}"
 
   tasks:

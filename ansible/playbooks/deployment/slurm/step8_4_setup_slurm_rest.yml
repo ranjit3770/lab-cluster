@@ -5,7 +5,7 @@
 
   vars:
     slurm_prefix: "/usr/local/slurm"
-    slurm_src_dir: "/usr/src/slurm-25.11.4"
+    slurm_src_dir: "/usr/src/slurm-26.05.3"
     slurm_plugin_dir: "{{ slurm_prefix }}/lib/slurm"
     # Match the JWT key path from slurm.conf AuthAltParameters
     jwt_key_path: "/var/spool/slurm/statesave/jwt_hs256.key"

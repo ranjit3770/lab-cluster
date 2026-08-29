@@ -15,6 +15,7 @@ from app.db import base # Ensures all models (User, Job, Node, etc.) are registe
 from app.db.session import engine, SessionLocal
 from app.models.user import User, UserRole
 from app.models.system_setting import SystemSetting, MaintenanceIP
+from app.models.dev_node import DevNode as DevNodeModel
 from app.core.security import get_password_hash
 
 logging.basicConfig(level=logging.INFO)
@@ -68,6 +69,39 @@ def _seed_password(env_key: str, label: str) -> str:
     return generated
 
 
+def _node_addr_from_slurm_conf(node_name: str) -> str:
+    """Read the Slurm node address from the mounted slurm.conf (e.g. NodeAddr)."""
+    try:
+        with open("/etc/slurm/slurm.conf", "r") as fh:
+            for line in fh:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "NodeName" not in stripped:
+                    continue
+                fields = dict(
+                    item.split("=", 1)
+                    for item in stripped.split()
+                    if "=" in item
+                )
+                names = {n.strip().lower() for n in fields.get("NodeName", "").split(",")}
+                if node_name.lower() in names and "NodeAddr" in fields:
+                    return fields["NodeAddr"].strip()
+    except Exception as exc:
+        logger.warning(f"Could not read slurm.conf for node address: {exc}")
+    return ""
+
+
+def _detect_host_ip() -> str:
+    """Best-effort primary host IP (backend runs with network_mode: host)."""
+    try:
+        import subprocess
+        out = subprocess.check_output(["hostname", "-I"]).decode().split()
+        if out:
+            return out[0]
+    except Exception as exc:
+        logger.warning(f"Could not detect host IP: {exc}")
+    return "127.0.0.1"
+
+
 def init_db(db: Session) -> None:
     # Create tables
     logger.info("Creating tables...")
@@ -76,19 +110,23 @@ def init_db(db: Session) -> None:
     
     # 1. Create Default Admin User
     admin = db.query(User).filter(User.username == "admin").first()
+    admin_password = _seed_password("ADMIN_INITIAL_PASSWORD", "the default admin account")
     if not admin:
         logger.info("Seeding Admin User...")
         admin = User(
             full_name="Cluster Administrator",
             username="admin",
             email="admin@cluster.amrita.edu",
-            hashed_password=get_password_hash(_seed_password("ADMIN_INITIAL_PASSWORD", "the default admin account")),
+            hashed_password=get_password_hash(admin_password),
             role=UserRole.ADMIN,
             is_active=True,
             cpu_limit=0,
             memory_limit_gb=0,
             storage_limit_gb=0
         )
+        db.add(admin)
+    else:
+        admin.hashed_password = get_password_hash(admin_password)
         db.add(admin)
     
     # 2. Create/Update Ranjithks (Admin & Developer Privileges)
@@ -156,6 +194,32 @@ def init_db(db: Session) -> None:
             m = MaintenanceIP(ip_address=ip, label=label)
             db.add(m)
             logger.info(f"Seeded maintenance IP: {ip}")
+    db.commit()
+
+    # 5. Seed a default DevNode for the primary head/management node so it is
+    #    visible on the portal "Nodes & Resources" view even before any node is
+    #    registered through the developer API. Resources are cross-referenced
+    #    from Slurm via the REST API; SSH credentials remain optional/local-only.
+    head_node_name = os.getenv("PORTAL_SLURM_NODELIST", "head-node").split(",")[0].strip()
+    head_existing = db.query(DevNodeModel).filter(
+        DevNodeModel.name == head_node_name
+    ).first()
+    if head_existing:
+        logger.info(f"Head node DevNode already registered: {head_node_name}")
+    else:
+        head_ip = os.getenv("HEAD_NODE_IP", "")
+        if not head_ip:
+            head_ip = _node_addr_from_slurm_conf(head_node_name) or _detect_host_ip()
+        head_node = DevNodeModel(
+            name=head_node_name,
+            ip_address=head_ip,
+            ssh_port=int(os.getenv("HEAD_NODE_SSH_PORT", "22")),
+            ssh_username=os.getenv("HEAD_NODE_SSH_USER", "slurm"),
+            ssh_password=os.getenv("HEAD_NODE_SSH_PASSWORD", ""),
+            os_family="auto",
+        )
+        db.add(head_node)
+        logger.info(f"Seeded default head node DevNode: {head_node_name} @ {head_ip}")
     db.commit()
 
 def main() -> None:

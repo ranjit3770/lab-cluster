@@ -32,3 +32,11 @@
     new_node_name: "{{ hostvars['localhost']['requested_append_node_name'] }}"
     append_confirmation: "append"
   when: hostvars['localhost']['cluster_operation_choice'] == 'append'
+
+# Always run the Slurm REST JWT reconciliation last, so the portal can query
+# the scheduler regardless of whether this was a full setup or an append.
+- import_playbook: finally/fix_slurmrestd_jwt_auth.yml
+
+# Correct the head node's advertised CPU/RAM and clear any stale DOWN state so
+# the portal reports real resources. Idempotent; safe on every run.
+- import_playbook: finally/fix_headnode_slurm_resources.yml

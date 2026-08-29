@@ -11,14 +11,14 @@ _init_db() {
 
     echo "Waiting for MySQL at ${host}:${port}..."
     for i in $(seq 1 60); do
-        if mysqladmin ping -h "${host}" -P "${port}" -u root -p"${root_pass}" --silent 2>/dev/null; then
+        if mysqladmin ping -h "${host}" -P "${port}" -u root -p"${root_pass}" --protocol=TCP --silent 2>/dev/null; then
             break
         fi
         sleep 1
     done
 
     echo "Ensuring database user '${db_user}' exists for database '${db_name}'..."
-    mysql -h "${host}" -P "${port}" -u root -p"${root_pass}" <<-EOSQL 2>/dev/null || true
+    mysql --protocol=TCP -h "${host}" -P "${port}" -u root -p"${root_pass}" <<-EOSQL 2>/dev/null || true
         CREATE USER IF NOT EXISTS '${db_user}'@'%' IDENTIFIED BY '${db_pass}';
         GRANT ALL PRIVILEGES ON ${db_name}.* TO '${db_user}'@'%';
         FLUSH PRIVILEGES;

@@ -56,6 +56,9 @@ services:
       - JOB_API_DB_USER=${JOB_API_DB_USER:?Set JOB_API_DB_USER in cluster-portal/.env}
       - JOB_API_DB_PASSWORD=${JOB_API_DB_PASSWORD:?Set JOB_API_DB_PASSWORD in cluster-portal/.env}
       - MYSQL_DB=strach_portal
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in cluster-portal/.env}
+      - ADMIN_INITIAL_PASSWORD=${ADMIN_INITIAL_PASSWORD:?Set ADMIN_INITIAL_PASSWORD in cluster-portal/.env}
+      - DEVELOPER_INITIAL_PASSWORD=${DEVELOPER_INITIAL_PASSWORD:?Set DEVELOPER_INITIAL_PASSWORD in cluster-portal/.env}
       - DATA_STORAGE=/data_storage
       - EXTERNAL_JOB_API_URL=http://localhost:9000
       - SLURM_REST_URL=http://127.0.0.1:6820/slurm/v0.0.41
@@ -77,7 +80,8 @@ services:
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro
       - /usr/local/slurm:/usr/local/slurm:ro
-      - ${CLUSTER_SETUP_DIR:-/opt/amritacluster/SLURM-COMPLETE-SETUP}/ansible/playbooks/os-switching:/playbooks/os-switching:ro
+      - /var/spool/slurm/statesave/jwt_hs256.key:/var/spool/slurm/statesave/jwt_hs256.key:ro
+      - ${CLUSTER_SETUP_DIR:-../ansible/playbooks/os-switching}:/playbooks/os-switching:ro
       - ./backend/entrypoint.sh:/app/entrypoint.sh:ro
     entrypoint: ["/app/entrypoint.sh", "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-"]
     healthcheck:
@@ -122,6 +126,7 @@ services:
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro
       - /usr/local/slurm:/usr/local/slurm:ro
+      - /var/spool/slurm/statesave/jwt_hs256.key:/var/spool/slurm/statesave/jwt_hs256.key:ro
       - ./backend/entrypoint.sh:/app/entrypoint.sh:ro
     entrypoint: ["/app/entrypoint.sh", "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:9000", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-"]
     healthcheck:

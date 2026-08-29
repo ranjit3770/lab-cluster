@@ -1,0 +1,174 @@
+# Fix Slurm REST (slurmrestd) JWT authentication returning 401.
+#
+# Root causes (all must be addressed):
+#   1. slurmctld signs `scontrol token` JWTs with the key referenced by
+#      slurm.conf AuthAltParameters (jwt_key=...). The slurmrestd service user
+#      must be able to READ that exact key file.
+#   2. slurmrestd's `rest_auth/jwt` plugin resolves its *verification* key from
+#      the SLURM_JWT_KEY environment variable (defaulting to a path such as
+#      /var/spool/slurm/jwt_hs256.key). If SLURM_JWT_KEY is not pinned to the
+#      same key slurmctld signs with, every request is rejected.
+#   3. slurmrestd only *activates* JWT auth when SLURM_JWT is set (convention:
+#      `SLURM_JWT=daemon`). Without it, requests are rejected with:
+#
+#      rest_auth/jwt: ... authentication failed: Authentication failure
+#      error: Rejecting thread config token for user slurmapi
+#
+# This playbook (a) makes ONE canonical key readable by both daemons,
+# (b) injects Environment="SLURM_JWT_KEY=<that key>" AND
+#     Environment="SLURM_JWT=daemon" (activates JWT auth) into the slurmrestd
+#     unit so verifier and signer use the same key, and (c) provisions the JWT
+#     subject (e.g. slurmapi) as a Slurm accounting user with AdminLevel so
+#     slurmctld will issue the internal "thread config token" that slurmrestd
+#     requires. It then restarts the daemons in the correct order and verifies
+#     the JWT flow returns HTTP 200.
+#
+# Run (on the head node itself, as any sudo-capable user; -K prompts for the
+# sudo password):
+#   ansible-playbook -i inventory/hosts.ini \
+#     playbooks/deployment/finally/fix_slurmrestd_jwt_auth.yml -K
+---
+- name: Fix Slurm REST JWT authentication (401)
+  hosts: head_nodes
+  connection: local
+  gather_facts: no
+  become: yes
+  become_method: sudo
+  become_user: root
+
+  vars:
+    slurm_conf_path: "/etc/slurm/slurm.conf"
+    slurmrestd_unit: "/etc/systemd/system/slurmrestd.service"
+    jwt_key_file: "/var/spool/slurm/statesave/jwt_hs256.key"
+    slurmbine_path: "/usr/local/slurm/bin"
+    slurmrest_url: "http://127.0.0.1:6820/slurm/v0.0.41/jobs"
+    jwt_user: "slurmapi"
+
+  tasks:
+    - name: 1. Report the key file slurm.conf points to
+      ansible.builtin.command: "grep '^AuthAltParameters=' {{ slurm_conf_path }}"
+      register: auth_alt
+      changed_when: false
+
+    - name: Show configured JWT key path
+      ansible.builtin.debug:
+        msg: "slurm.conf AuthAltParameters -> {{ auth_alt.stdout }}"
+
+    - name: 2. Ensure JWT key file exists
+      ansible.builtin.stat:
+        path: "{{ jwt_key_file }}"
+      register: jwt_key_stat
+
+    - name: Generate JWT HS256 key if missing
+      ansible.builtin.shell: "openssl rand -hex 32 > {{ jwt_key_file }}"
+      args:
+        executable: /bin/bash
+      when: not jwt_key_stat.stat.exists
+
+    - name: 3. Detect the user slurmrestd runs as
+      ansible.builtin.command: "grep '^User=' {{ slurmrestd_unit }}"
+      register: rest_user_line
+      changed_when: false
+      failed_when: rest_user_line.rc != 0
+
+    - name: Show slurmrestd service user
+      ansible.builtin.set_fact:
+        slurmrestd_user: "{{ rest_user_line.stdout | regex_replace('^User=', '') | trim }}"
+
+    - name: Ensure slurmrestd user is in the slurm group (so it can read the key)
+      ansible.builtin.user:
+        name: "{{ slurmrestd_user }}"
+        groups: slurm
+        append: yes
+
+    - name: 4. Make the JWT key readable by both slurmctld (owner) and slurmrestd
+      ansible.builtin.file:
+        path: "{{ jwt_key_file }}"
+        owner: slurm
+        group: slurm
+        mode: '0640'
+
+    - name: 4.1 Pin SLURM_JWT_KEY in the slurmrestd unit to the signing key
+      ansible.builtin.lineinfile:
+        path: "{{ slurmrestd_unit }}"
+        regexp: '^\s*Environment="SLURM_JWT_KEY='
+        line: 'Environment="SLURM_JWT_KEY={{ jwt_key_file }}"'
+        insertafter: '^\s*Environment="LD_LIBRARY_PATH'
+        create: no
+
+    - name: 4.1a Activate JWT auth in slurmrestd (SLURM_JWT=daemon)
+      ansible.builtin.lineinfile:
+        path: "{{ slurmrestd_unit }}"
+        regexp: '^\s*Environment="SLURM_JWT='
+        line: 'Environment="SLURM_JWT=daemon"'
+        insertafter: '^\s*Environment="SLURM_JWT_KEY='
+        create: no
+
+    - name: 4.2 Reload systemd to pick up the updated slurmrestd unit
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: 5. Restart Slurm daemons in dependency order
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+        daemon_reload: yes
+      loop:
+        - slurmdbd
+        - slurmctld
+        - slurmd
+        - slurmrestd
+
+    - name: 5.1 Wait for slurmdbd to accept accounting connections
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 6819
+        timeout: 30
+
+    - name: 5.2 Ensure {{ jwt_user }} exists as a Slurm accounting user/account
+      ansible.builtin.shell: |
+        set -e
+        export PATH={{ slurmbine_path }}:$PATH
+        # Create the account if it does not exist yet.
+        sacctmgr -i add account {{ jwt_user }} >/dev/null 2>&1 || true
+        # Add the user to the account (granting admin so the portal can act as a
+        # management gateway for cluster-wide queries). Update if it exists.
+        sacctmgr -i add user {{ jwt_user }} account={{ jwt_user }} AdminLevel=Admin || \
+          sacctmgr -i modify user where name={{ jwt_user }} set account={{ jwt_user }} AdminLevel=Admin || true
+        sacctmgr -i modify user where name={{ jwt_user }} set AdminLevel=Admin || true
+
+    - name: 5.3 Restart slurmctld to cache the new association
+      ansible.builtin.systemd:
+        name: slurmctld
+        state: restarted
+
+    - name: 6. Wait for slurmrestd to listen on port 6820
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: 6820
+        timeout: 30
+
+    - name: 7. Generate a fresh JWT token as {{ jwt_user }}
+      ansible.builtin.command: "{{ slurmbine_path }}/scontrol token username={{ jwt_user }} lifespan=60"
+      register: scontrol_token
+      changed_when: false
+
+    - name: Extract the token
+      ansible.builtin.set_fact:
+        jwt_token: "{{ scontrol_token.stdout | regex_replace('^SLURM_JWT=', '') | trim }}"
+
+    - name: 8. Verify JWT against slurmrestd (expect HTTP 200)
+      ansible.builtin.uri:
+        url: "{{ slurmrest_url }}"
+        method: GET
+        headers:
+          X-SLURM-USER-TOKEN: "{{ jwt_token }}"
+          Content-Type: "application/json"
+        status_code: 200
+      register: rest_check
+
+    - name: Show verification result
+      ansible.builtin.debug:
+        msg:
+          - "Slurm REST JWT authentication is WORKING (HTTP {{ rest_check.status }})."
+          - "The portal will now show the controller and nodes correctly."

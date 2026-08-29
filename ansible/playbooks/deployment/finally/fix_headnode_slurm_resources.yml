@@ -1,0 +1,224 @@
+# Repair the head node Slurm node definition so it advertises the resources
+# the cluster was ASSIGNED during setup, correcting stale/wrong values in
+# slurm.conf (e.g. RealMemory=12 MB, CPUs=12 with State=UNKNOWN / DOWN).
+#
+# Like step8_configure_slurm_dynamic.yml, this playbook ASKS the operator for
+# how much CPU and RAM to assign to the head node. Leave the prompt blank to
+# advertise the node's full detected hardware; enter a number to cap it:
+#   vcpus = min(detected_CPUs, cpu_cap)
+#   mem   = min(detected_RealMemory, mem_cap)
+# Detection comes from `slurmd -C` so values always match the real hardware.
+# A stale State=UNKNOWN/DOWN reason is cleared and the node is resumed to idle.
+#
+# Non-interactive override (skips the prompts):
+#   -e headnode_cpu_cap=12 -e headnode_memory_cap_mb=31758
+# (omit a value to use the full detected hardware)
+#
+# Run (on the head node, as any sudo-capable user; -K prompts for the sudo password):
+#   ansible-playbook -i inventory/hosts.ini \
+#     playbooks/deployment/finally/fix_headnode_slurm_resources.yml -K
+---
+- name: Fix head node Slurm advertised resources and state
+  hosts: head_nodes
+  connection: local
+  gather_facts: yes
+  become: yes
+  become_method: sudo
+  become_user: root
+
+  vars:
+    slurm_conf_path: "/etc/slurm/slurm.conf"
+    slurm_bin: "/usr/local/slurm/bin"
+    slurmd_sbin: "/usr/local/slurm/sbin"
+    head_node_name: "head-node"
+    # Operator-assigned caps. Empty => advertise full detected hardware.
+    # Set via -e to run non-interactively.
+    slurm_cpu_cap_per_node: "{{ headnode_cpu_cap | default('') }}"
+    slurm_memory_cap_mb_per_node: "{{ headnode_memory_cap_mb | default('') }}"
+
+  tasks:
+    - name: 1. Detect authoritative hardware topology from slurmd (tuned)
+      ansible.builtin.shell: |
+        /usr/local/slurm/sbin/slurmd -C 2>/dev/null | awk '
+          NR == 1 {
+            for (i = 1; i <= NF; i++) {
+              split($i, field, "=")
+              values[field[1]] = field[2]
+            }
+            print values["CPUs"], values["CoresPerSocket"], values["ThreadsPerCore"], values["RealMemory"]
+          }
+        '
+      register: slurmd_topology
+      changed_when: false
+
+    - name: Parse detected hardware values
+      ansible.builtin.set_fact:
+        topology_parts: "{{ (slurmd_topology.stdout | default('')).split() }}"
+        detected_cpus: "{{ (slurmd_topology.stdout | default('')).split()[0] | int }}"
+        detected_cores: "{{ (slurmd_topology.stdout | default('')).split()[1] | int }}"
+        detected_threads: "{{ (slurmd_topology.stdout | default('')).split()[2] | int }}"
+        detected_mem: "{{ (slurmd_topology.stdout | default('')).split()[3] | int }}"
+
+    - name: Show detected head node hardware
+      ansible.builtin.debug:
+        msg: "Detected: CPUs={{ detected_cpus }} CoresPerSocket={{ detected_cores }} ThreadsPerCore={{ detected_threads }} RealMemory={{ detected_mem }} MB"
+
+    # ----------------------------------------------------------------------
+    # Ask the operator how much CPU/RAM to ASSIGN (matching step8 setup).
+    # Only prompt when not already supplied via -e variables.
+    # ----------------------------------------------------------------------
+    - name: 2a. Ask operator for CPU cores to assign to the head node
+      ansible.builtin.pause:
+        prompt: |
+          ================================================================================
+          [HEAD NODE RESOURCE ASSIGNMENT]
+          Detected hardware: {{ detected_cpus }} CPUs / {{ detected_mem }} MB RAM.
+
+          CPU cores to assign to the cluster for this node:
+          - Press Enter to use the full detected {{ detected_cpus }} CPUs.
+          - Enter a smaller number (e.g. 8) to cap the node at that CPU count.
+          - Type 'abort' to stop without changing slurm.conf.
+          ================================================================================
+          CPU cores to assign:
+      register: cpu_prompt
+      when:
+        - slurm_cpu_cap_per_node | trim == ''
+
+    - name: 2b. Ask operator for RAM to assign to the head node
+      ansible.builtin.pause:
+        prompt: |
+          ================================================================================
+          RAM (MB) to assign to the cluster for this node:
+          - Press Enter to use the full detected {{ detected_mem }} MB.
+          - Enter a smaller number (e.g. 16384) to cap the node at that much RAM.
+          Type 'abort' to stop without changing slurm.conf.
+          ================================================================================
+          RAM MB to assign:
+      register: mem_prompt
+      when:
+        - slurm_memory_cap_mb_per_node | trim == ''
+
+    - name: 2c. Compute whether the operator asked to abort
+      ansible.builtin.set_fact:
+        operator_abort: >-
+          {{
+            (slurm_cpu_cap_per_node | trim == ''
+             and (cpu_prompt.user_input | default('') | lower) in ['abort', 'stop', 'no', 'n'])
+            or
+            (slurm_memory_cap_mb_per_node | trim == ''
+             and (mem_prompt.user_input | default('') | lower) in ['abort', 'stop', 'no', 'n'])
+          }}
+
+    - name: 2c. Detect operator abort request
+      ansible.builtin.meta: end_play
+      when: operator_abort | bool
+
+    - name: 2d. Show raw cap inputs (for transparency)
+      ansible.builtin.debug:
+        msg: |
+          Raw operator cap inputs:
+          - slurm_cpu_cap_per_node (from -e/var) = '{{ slurm_cpu_cap_per_node | default('') }}'
+          - cpu_prompt.user_input (interactive)     = '{{ cpu_prompt.user_input | default('') }}'
+          - slurm_memory_cap_mb_per_node (from -e) = '{{ slurm_memory_cap_mb_per_node | default('') }}'
+          - mem_prompt.user_input (interactive)     = '{{ mem_prompt.user_input | default('') }}'
+
+    - name: 2e. Resolve effective cap (from -e override, else interactive prompt, else blank)
+      ansible.builtin.set_fact:
+        eff_cpu_cap: "{{ (slurm_cpu_cap_per_node if (slurm_cpu_cap_per_node | default('') | trim | length > 0) else (cpu_prompt.user_input | default('') | string | trim)) }}"
+        eff_mem_cap: "{{ (slurm_memory_cap_mb_per_node if (slurm_memory_cap_mb_per_node | default('') | trim | length > 0) else (mem_prompt.user_input | default('') | string | trim)) }}"
+
+    - name: 2f. Show resolved effective caps
+      ansible.builtin.debug:
+        msg: "Effective caps: CPU='{{ eff_cpu_cap }}'  MemoryMB='{{ eff_mem_cap }}' (blank = use full detected hardware)"
+
+    - name: 3. Compute final advertised CPU and RAM (cap or detected, shell arithmetic)
+      ansible.builtin.shell: |
+        set -e
+        detected_cpus="{{ detected_cpus }}"
+        detected_mem="{{ detected_mem }}"
+        detected_threads="{{ detected_threads }}"
+        detected_cores="{{ detected_cores }}"
+        eff_cpu="{{ eff_cpu_cap | default('') | string | trim }}"
+        eff_mem="{{ eff_mem_cap | default('') | string | trim }}"
+
+        if echo "$eff_cpu" | grep -qE '^[1-9][0-9]*$'; then
+          adv_cpus=$(( eff_cpu < detected_cpus ? eff_cpu : detected_cpus ))
+        else
+          adv_cpus="$detected_cpus"
+        fi
+
+        if echo "$eff_mem" | grep -qE '^[1-9][0-9]*$'; then
+          adv_mem=$(( eff_mem < detected_mem ? eff_mem : detected_mem ))
+        else
+          adv_mem="$detected_mem"
+        fi
+
+        echo "$adv_cpus $adv_mem $detected_threads $detected_cores"
+      register: adv_computed
+      changed_when: false
+
+    - name: Parse computed allocation values
+      ansible.builtin.set_fact:
+        adv_cpus: "{{ adv_computed.stdout.split()[0] | int }}"
+        adv_mem: "{{ adv_computed.stdout.split()[1] | int }}"
+        adv_threads: "{{ adv_computed.stdout.split()[2] | int }}"
+        adv_cores: "{{ adv_computed.stdout.split()[3] | int }}"
+
+    - name: Show resolved allocation that will be written to slurm.conf
+      ansible.builtin.debug:
+        msg: "Head node allocation -> CPUs={{ adv_cpus }} CoresPerSocket={{ adv_cores }} ThreadsPerCore={{ adv_threads }} RealMemory={{ adv_mem }} MB"
+
+    - name: 4. Read the current head node NodeName line to preserve its NodeAddr
+      ansible.builtin.command: "grep '^NodeName={{ head_node_name }}' {{ slurm_conf_path }}"
+      register: existing_head_line
+      changed_when: false
+      failed_when: false
+
+    - name: Extract existing NodeAddr using regex_search (Jinja-safe)
+      ansible.builtin.set_fact:
+        head_node_addr_raw: "{{ existing_head_line.stdout | default('') }}"
+
+    - name: Pull NodeAddr from the existing line using shell
+      ansible.builtin.shell: |
+        echo "{{ head_node_addr_raw }}" | sed -n 's/.*NodeAddr=\([^ ]*\).*/\1/p'
+      register: head_node_addr_shell
+      changed_when: false
+      failed_when: false
+
+    - name: Set head_node_addr (use extracted value, fallback to ansible IP)
+      ansible.builtin.set_fact:
+        head_node_addr: "{{ (head_node_addr_shell.stdout | trim) if (head_node_addr_shell.stdout | trim | length > 0) else ansible_default_ipv4.address }}"
+
+    - name: 5. Rewrite the head node NodeName line in slurm.conf
+      ansible.builtin.lineinfile:
+        path: "{{ slurm_conf_path }}"
+        regexp: '^NodeName={{ head_node_name }}\s'
+        line: "NodeName={{ head_node_name }} NodeAddr={{ head_node_addr }} Sockets=1 CoresPerSocket={{ adv_cores }} ThreadsPerCore={{ adv_threads }} CPUs={{ adv_cpus }} RealMemory={{ adv_mem }}"
+      register: conf_update
+
+    - name: Show slurm.conf update status
+      ansible.builtin.debug:
+        msg: "slurm.conf head node line was {{ 'updated' if conf_update.changed else 'already correct' }}."
+
+    - name: 6. Restart slurmd so it re-registers with the corrected allocation
+      ansible.builtin.systemd:
+        name: slurmd
+        state: restarted
+
+    - name: 6b. Reconfigure slurmctld so it reloads the corrected node config
+      ansible.builtin.command: "{{ slurm_bin }}/scontrol reconfigure"
+      changed_when: false
+
+    - name: 7. Clear any stale DOWN/DRAIN/UNKNOWN reason and bring the node idle
+      ansible.builtin.command: "{{ slurm_bin }}/scontrol update nodename={{ head_node_name }} state=idle"
+      register: resume
+      failed_when: resume.rc != 0
+
+    - name: 8. Verify the head node is idle with the corrected resources
+      ansible.builtin.command: "{{ slurm_bin }}/sinfo"
+      register: sinfo_out
+      changed_when: false
+
+    - name: Show final Slurm node state
+      ansible.builtin.debug:
+        msg: "{{ sinfo_out.stdout_lines }}"

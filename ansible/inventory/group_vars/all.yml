@@ -1,4 +1,7 @@
 ---
-# Single point of change when this repository is relocated to another
-# host or path. Playbooks reference it as "{{ cluster_root }}/...".
-cluster_root: "/opt/amritacluster/SLURM-COMPLETE-SETUP"
+# Root of this repository, containing both `ansible/` and `cluster-portal/`.
+# Derived from the inventory location (this repo lives at <repo>/ansible), so
+# it tracks wherever the git repository is cloned to and never needs to be
+# edited when the project is relocated. Playbooks reference it as
+# "{{ cluster_root }}/...".
+cluster_root: "{{ inventory_dir | dirname | dirname }}"
