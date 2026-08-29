@@ -56,7 +56,7 @@ def setup_database():
                     print(f"CLI DB setup command skipped: {res.stderr.strip()}")
 
             run_mysql(f"CREATE DATABASE IF NOT EXISTS {db_name};")
-            run_mysql(f"CREATE USER IF NOT EXISTS '{db_user}'@'%' IDENTIFIED BY '{db_pass}';")
+            run_mysql(f"CREATE OR REPLACE USER '{db_user}'@'%' IDENTIFIED BY '{db_pass}';")
             run_mysql(f"GRANT ALL PRIVILEGES ON {db_name}.* TO '{db_user}'@'%';")
             # CRITICAL: Grant access to strach_portal for maintenance and config checks
             run_mysql(f"GRANT ALL PRIVILEGES ON strach_portal.* TO '{db_user}'@'%';")

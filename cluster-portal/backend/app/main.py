@@ -42,25 +42,27 @@ def ensure_db_initialized():
     import subprocess
     import os
 
-    # Extract connection details from environment/settings for raw CLI calls
     db_name = settings.MYSQL_DB
     db_user = settings.MYSQL_USER
     db_pass = settings.MYSQL_PASSWORD
+    root_password = os.getenv("MYSQL_ROOT_PASSWORD", "")
+    known_root_passwords = [root_password, "Amma@123"] if root_password else ["Amma@123"]
     
     print(f"ENSURING DATABASE '{db_name}' EXISTS...")
 
-    # CLI ATTMPT (Highest chance for root users on Linux)
-    try:
-        # Check if mysql command exists
-        devnull = open(os.devnull, 'w')
-        if subprocess.call(["which", "mysql"], stdout=devnull, stderr=devnull) == 0:
-            # Try with -p since root likely has a password, targeting MYSQL_SERVER
+    def run_mysql_as_root(cmd, password):
+        return subprocess.run(
+            ["mysql", "-h", settings.MYSQL_SERVER, "-P", str(settings.MYSQL_PORT), "--protocol=TCP", "--ssl=0", "-u", "root", f"-p{password}", "-e", cmd],
+            capture_output=True, text=True, check=False
+        )
+
+    for root_pwd in known_root_passwords:
+        if not root_pwd:
+            continue
+        res = run_mysql_as_root(f"CREATE DATABASE IF NOT EXISTS {db_name};", root_pwd)
+        if res.returncode == 0:
             print(f"Provisioning database '{db_name}' using CLI (Host: {settings.MYSQL_SERVER})...")
-            subprocess.run(["mysql", "-h", settings.MYSQL_SERVER, "-P", str(settings.MYSQL_PORT), "--protocol=TCP", "--ssl=0", "-u", "root", f"-p{db_pass}", "-e", f"CREATE DATABASE IF NOT EXISTS {db_name};"], check=False)
-            # Try sudo as fallback
-            subprocess.run(["sudo", "mysql", "-h", settings.MYSQL_SERVER, "-P", str(settings.MYSQL_PORT), "--protocol=TCP", "--ssl=0", "-e", f"CREATE DATABASE IF NOT EXISTS {db_name};"], check=False)
             
-            # Ensure Slurm Job API database and user exist
             slurm_db = "slurm_jobs"
             slurm_user = settings.JOB_API_DB_USER
             slurm_pass = settings.JOB_API_DB_PASSWORD
@@ -72,15 +74,28 @@ def ensure_db_initialized():
                 )
             
             print(f"Provisioning Job API Database ({slurm_db}) and User ({slurm_user})...")
-            # Elevated Permissions: allow slurm_user to update portal's jobs table for ID promotion
-            setup_slurm_api_cmd = f"CREATE DATABASE IF NOT EXISTS {slurm_db}; CREATE USER IF NOT EXISTS '{slurm_user}'@'%' IDENTIFIED BY '{slurm_pass}'; GRANT ALL PRIVILEGES ON {slurm_db}.* TO '{slurm_user}'@'%'; GRANT ALL PRIVILEGES ON {db_name}.* TO '{slurm_user}'@'%'; FLUSH PRIVILEGES;"
+            setup_slurm_api_cmd = (
+                f"CREATE OR REPLACE USER '{slurm_user}'@'%' IDENTIFIED BY '{slurm_pass}'; "
+                f"GRANT ALL PRIVILEGES ON {slurm_db}.* TO '{slurm_user}'@'%'; "
+                f"GRANT ALL PRIVILEGES ON {db_name}.* TO '{slurm_user}'@'%'; "
+                "FLUSH PRIVILEGES;"
+            )
+            run_mysql_as_root(setup_slurm_api_cmd, root_pwd)
             
-            subprocess.run(["mysql", "-h", settings.MYSQL_SERVER, "-P", str(settings.MYSQL_PORT), "--protocol=TCP", "--ssl=0", "-u", "root", f"-p{db_pass}", "-e", setup_slurm_api_cmd], check=False)
-            subprocess.run(["sudo", "mysql", "-h", settings.MYSQL_SERVER, "-P", str(settings.MYSQL_PORT), "--protocol=TCP", "--ssl=0", "-e", setup_slurm_api_cmd], check=False)
+            print(f"Provisioning Backend User ({db_user})...")
+            setup_backend_cmd = (
+                f"CREATE OR REPLACE USER '{db_user}'@'%' IDENTIFIED BY '{db_pass}'; "
+                f"GRANT ALL PRIVILEGES ON {db_name}.* TO '{db_user}'@'%'; "
+                "FLUSH PRIVILEGES;"
+            )
+            run_mysql_as_root(setup_backend_cmd, root_pwd)
             
-            print("CLI setup attempt complete (Core + Slurm API).")
-    except Exception as cli_e:
-        print(f"CLI REPAIR ATTEMPT FAILED (Expected if not on Linux or mysql CLI missing): {cli_e}")
+            print("CLI setup attempt complete (Core + Backend + Slurm API).")
+            break
+        else:
+            print(f"Root password '{root_pwd}' failed: {res.stderr.strip()}")
+    else:
+        print("CLI REPAIR ATTEMPT FAILED: No valid root password found.")
 
     # SQLAlchemy ATTEMPT to sync models
     try:
@@ -90,11 +105,10 @@ def ensure_db_initialized():
         print("Model sync successful.")
     except Exception as sync_e:
         print(f"MODEL SYNC FAILED: {sync_e}")
-        # Final attempt: try to connect without DB name to create it if it didn't exist
         try:
             from sqlalchemy import create_engine
             from urllib.parse import quote_plus
-            root_url = f"mysql+mysqlconnector://{db_user}:{quote_plus(db_pass)}@{settings.MYSQL_SERVER}:{settings.MYSQL_PORT}"
+            root_url = f"mysql+mysqlconnector://root:{quote_plus(root_password or '')}@{settings.MYSQL_SERVER}:{settings.MYSQL_PORT}"
             temp_engine = create_engine(root_url)
             with temp_engine.connect() as conn:
                 conn.execute(sa.text(f"CREATE DATABASE IF NOT EXISTS {db_name}"))

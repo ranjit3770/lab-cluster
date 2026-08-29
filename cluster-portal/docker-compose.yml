@@ -28,7 +28,7 @@ services:
       - portal_db_data:/var/lib/mysql
       - ./database/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in cluster-portal/.env}"]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,6 +52,9 @@ services:
       - MYSQL_PORT=3307
       - MYSQL_USER=${BACKEND_DB_USER:?Set BACKEND_DB_USER in cluster-portal/.env}
       - MYSQL_PASSWORD=${BACKEND_DB_PASSWORD:?Set BACKEND_DB_PASSWORD in cluster-portal/.env}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in cluster-portal/.env}
+      - JOB_API_DB_USER=${JOB_API_DB_USER:?Set JOB_API_DB_USER in cluster-portal/.env}
+      - JOB_API_DB_PASSWORD=${JOB_API_DB_PASSWORD:?Set JOB_API_DB_PASSWORD in cluster-portal/.env}
       - MYSQL_DB=strach_portal
       - DATA_STORAGE=/data_storage
       - EXTERNAL_JOB_API_URL=http://localhost:9000
@@ -173,6 +176,7 @@ services:
       - MYSQL_PORT=3307
       - MYSQL_USER=${BACKEND_DB_USER:?Set BACKEND_DB_USER in cluster-portal/.env}
       - MYSQL_PASSWORD=${BACKEND_DB_PASSWORD:?Set BACKEND_DB_PASSWORD in cluster-portal/.env}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in cluster-portal/.env}
       - MYSQL_DB=strach_portal
       - MCP_REQUIRE_AUTH=${MCP_REQUIRE_AUTH:-true}
       - MCP_AUDIT_ENABLED=${MCP_AUDIT_ENABLED:-true}
