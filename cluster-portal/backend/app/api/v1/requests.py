@@ -90,8 +90,37 @@ def update_request(
         request.status = request_in.status
         if request_in.status in ["approved", "rejected"]:
             request.resolved_at = datetime.utcnow()
-            
+
     db.add(request)
     db.commit()
     db.refresh(request)
     return request
+
+@router.delete("/{request_id}", response_model=dict)
+def delete_request(
+    request_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Delete a request. Users can delete their own pending requests; admins can delete any.
+    """
+    db_request = db.query(Request).filter(Request.id == request_id).first()
+    if not db_request:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    is_owner = db_request.user_id == current_user.id
+    is_admin = str(getattr(current_user.role, "value", current_user.role)) == "admin"
+
+    if not is_owner and not is_admin:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+
+    if is_owner and db_request.status != "pending":
+        raise HTTPException(
+            status_code=400,
+            detail="Only pending requests can be deleted by the owner.",
+        )
+
+    db.delete(db_request)
+    db.commit()
+    return {"detail": f"Request {request_id} deleted."}

@@ -30,7 +30,7 @@ export function ControllerFailureAlert({ error, onRetry }: ControllerFailureAler
 
                         <AlertDescription className="space-y-4">
                             <p className="text-sm leading-relaxed text-muted-foreground">
-                                The gateway could not reach the Slurm REST endpoint or the primary management database.
+                                The gateway could not reach the cluster REST endpoint or the primary management database.
                                 This may be due to a transient network issue or a service restart.
                             </p>
 

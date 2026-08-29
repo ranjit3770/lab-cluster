@@ -12,7 +12,9 @@ function decodeUser(token: string | null): User | null {
   if (!token) return null;
   try {
     const decoded = jwtDecode<DecodedToken>(token);
+    const id = parseInt(decoded.sub ?? '0', 10);
     return {
+      id: Number.isNaN(id) ? 0 : id,
       email: decoded.sub ?? '',
       role: decoded.role ?? 'user',
       is_active: true,

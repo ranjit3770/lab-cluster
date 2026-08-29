@@ -16,12 +16,23 @@ import {
     CheckCircle2,
     XCircle,
     Loader2,
+    Trash2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
+import {
+    AlertDialog,
+    AlertDialogContent,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogCancel,
+    AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
@@ -63,6 +74,7 @@ export default function RequestsPage() {
     const [error, setError] = useState('');
     const [userStats, setUserStats] = useState<UserDashboardStats | null>(null);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -88,6 +100,18 @@ export default function RequestsPage() {
             fetchRequests();
         } catch (err) {
             toast.error(apiErrorMessage(err, "Failed to update request status."));
+        }
+    };
+
+    const handleDelete = async (id: number) => {
+        try {
+            await requestsApi.deleteRequest(token!, id);
+            toast.success("Request deleted.");
+            fetchRequests();
+        } catch (err) {
+            toast.error(apiErrorMessage(err, "Failed to delete request."));
+        } finally {
+            setDeleteTargetId(null);
         }
     };
 
@@ -341,7 +365,7 @@ export default function RequestsPage() {
                                     <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Details</th>
                                     <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Status</th>
                                     <th className="px-3 py-2.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Date</th>
-                                    {isAdmin && <th className="px-3 py-2.5 text-right text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Actions</th>}
+                                    <th className="px-3 py-2.5 text-right text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border">
@@ -370,33 +394,43 @@ export default function RequestsPage() {
                                                 {new Date(r.created_at).toLocaleDateString()}
                                             </span>
                                         </td>
-                                        {isAdmin && r.status === 'pending' && (
-                                            <td className="px-3 py-2.5">
-                                                <div className="flex items-center justify-end gap-2">
+                                        <td className="px-3 py-2.5">
+                                            <div className="flex items-center justify-end gap-1.5">
+                                                {isAdmin && r.status === 'pending' && (
+                                                    <>
+                                                        <Button
+                                                            onClick={() => handleStatusUpdate(r.id, 'approved')}
+                                                            size="sm"
+                                                            variant="success"
+                                                            className="h-7 px-2 text-[11px]"
+                                                        >
+                                                            <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                                                        </Button>
+                                                        <Button
+                                                            onClick={() => handleStatusUpdate(r.id, 'rejected')}
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="h-7 px-2 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                                        >
+                                                            <XCircle className="h-3 w-3 mr-1" /> Reject
+                                                        </Button>
+                                                    </>
+                                                )}
+                                                {!isAdmin && r.user_id === user?.id && r.status === 'pending' ? (
                                                     <Button
-                                                        onClick={() => handleStatusUpdate(r.id, 'approved')}
+                                                        onClick={() => setDeleteTargetId(r.id)}
                                                         size="sm"
-                                                        variant="success"
-                                                        className="h-7 px-2 text-[11px]"
+                                                        variant="ghost"
+                                                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                                        title="Delete request"
                                                     >
-                                                        <CheckCircle2 className="h-3 w-3 mr-1" /> Approve
+                                                        <Trash2 className="h-3.5 w-3.5" />
                                                     </Button>
-                                                    <Button
-                                                        onClick={() => handleStatusUpdate(r.id, 'rejected')}
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="h-7 px-2 text-[11px] text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                                    >
-                                                        <XCircle className="h-3 w-3 mr-1" /> Reject
-                                                    </Button>
-                                                </div>
-                                            </td>
-                                        )}
-                                        {isAdmin && r.status !== 'pending' && (
-                                            <td className="px-3 py-2.5 text-right">
-                                                <span className="text-xs text-muted-foreground">-</span>
-                                            </td>
-                                        )}
+                                                ) : (
+                                                    <span className="w-7" />
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -404,6 +438,29 @@ export default function RequestsPage() {
                     </div>
                 </div>
             )}
+
+            <AlertDialog open={deleteTargetId !== null} onOpenChange={(open) => !open && setDeleteTargetId(null)}>
+                <AlertDialogContent className="max-w-sm">
+                    <AlertDialogHeader className="items-center text-center">
+                        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-destructive/10">
+                            <Trash2 className="h-6 w-6 text-destructive" aria-hidden />
+                        </div>
+                        <AlertDialogTitle className="text-base font-semibold text-foreground">Delete Request?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-xs leading-5 text-muted-foreground">
+                            This will permanently remove this request from the system. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="mt-2">
+                        <AlertDialogCancel onClick={() => setDeleteTargetId(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={() => deleteTargetId !== null && handleDelete(deleteTargetId)}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                            Delete Request
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

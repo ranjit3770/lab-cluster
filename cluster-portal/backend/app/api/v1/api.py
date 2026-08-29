@@ -15,3 +15,5 @@ from app.api.v1 import settings
 api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
 from app.api.v1 import windows_nodes
 api_router.include_router(windows_nodes.router, prefix="/developer", tags=["developer"])
+from app.api.v1 import cluster_manage
+api_router.include_router(cluster_manage.router, prefix="/cluster-manage", tags=["cluster-manage"])

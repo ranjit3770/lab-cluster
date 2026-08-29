@@ -229,7 +229,7 @@ export default function SettingsPage() {
                         <nav className="flex flex-col gap-1">
                             {[
                                 { id: 'general', label: 'General', icon: SettingsIcon, description: 'Core system' },
-                                { id: 'jobs', label: 'Arbitration', icon: Briefcase, description: 'Slurm limits' },
+                                { id: 'jobs', label: 'Arbitration', icon: Briefcase, description: 'Job scheduler limits' },
                                 { id: 'developer', label: 'Terminal', icon: Terminal, description: 'Direct access' }
                             ].map((tab) => (activeTab !== 'developer' || tab.id === 'developer' ? (
                                 <button
@@ -329,13 +329,13 @@ export default function SettingsPage() {
 
                                   <div className="space-y-5 rounded-lg border border-border bg-muted/30 p-4">
                                     <div className="space-y-1.5">
-                                        <Label className="text-xs font-medium text-foreground">Slurm REST Protocol Endpoint</Label>
+                                        <Label className="text-xs font-medium text-foreground">Scheduler REST API Endpoint</Label>
                                         <div className="relative">
                                             <Input
                                                 value={config.slurm_rest_url}
                                                 onChange={e => setConfig({...config, slurm_rest_url: e.target.value})}
                                                 className="h-9 pr-20 font-mono text-xs"
-                                                placeholder="http://slurm-api:8080"
+                                                placeholder="http://cluster-api:6820"
                                             />
                                             <Badge className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 border-primary/20 bg-primary/10 text-[10px] font-medium text-primary">REST</Badge>
                                         </div>
@@ -481,9 +481,9 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <div className="mt-auto rounded-lg border border-border bg-muted/40 p-4">
-                                         <Badge variant="outline" className="border-transparent bg-secondary text-[10px] font-medium text-secondary-foreground">Slurm_Sched_v2</Badge>
+                                         <Badge variant="outline" className="border-transparent bg-secondary text-[10px] font-medium text-secondary-foreground">Scheduler_v2</Badge>
                                          <p className="mt-3 text-sm font-semibold text-foreground">Dynamic Arbitration</p>
-                                         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Resources are dynamically scaled and arbitrated by the SLURM backfill strategy based on active partition load metadata.</p>
+                                         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Resources are dynamically scaled and arbitrated by the scheduler backfill strategy based on active partition load metadata.</p>
                                     </div>
                                 </Card>
                              </div>

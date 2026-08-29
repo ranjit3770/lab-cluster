@@ -18,9 +18,10 @@ import type { BreadcrumbItem } from '@/components/shared/Breadcrumbs';
 
 const MANAGEMENT_PATHS: Array<[string, string]> = [
   ['/node-management', 'Node Management'],
-  ['/admin-tools', 'Slurm Nodes'],
+  ['/admin-tools', 'Compute Nodes'],
   ['/platform-config', 'Portal Settings'],
   ['/job-setting', 'System Status'],
+  ['/cluster-management', 'Cluster Management'],
 ];
 
 function resolveBreadcrumbs(clusterName: string) {
@@ -114,7 +115,8 @@ export default function Layout() {
   const managementItems: Array<{ to: string; icon: LucideIcon; label: string }> = [
     { to: '/management/platform-config', icon: Settings, label: 'Portal Settings' },
     { to: '/management/job-setting', icon: Briefcase, label: 'System Status' },
-    { to: '/management/admin-tools', icon: Terminal, label: 'Slurm Nodes' },
+    { to: '/management/admin-tools', icon: Terminal, label: 'Compute Nodes' },
+    { to: '/management/cluster-management', icon: Server, label: 'Cluster Management' },
     ...(user?.role === 'admin'
       ? [{ to: '/management/node-management', icon: Network, label: 'Node Management' }]
       : []),

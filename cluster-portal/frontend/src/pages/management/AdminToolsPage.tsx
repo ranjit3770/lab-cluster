@@ -286,7 +286,7 @@ export default function AdminToolsPage() {
                                         <Textarea
                                             value={bulkText}
                                             onChange={e => setBulkText(e.target.value)}
-                                            placeholder={"WORKER_NODE1,172.17.181.143,22,slurm,,ubuntu\nWIN_NODE1,172.17.181.210,3389,Administrator,,windows"}
+                                            placeholder={"WORKER_NODE1,172.17.181.143,22,cluster,,ubuntu\nWIN_NODE1,172.17.181.210,3389,Administrator,,windows"}
                                             className="min-h-[180px] font-mono text-xs"
                                         />
                                     </div>
@@ -297,7 +297,7 @@ export default function AdminToolsPage() {
                                             <Input
                                                 value={bulkUsername}
                                                 onChange={e => setBulkUsername(e.target.value)}
-                                                placeholder="slurm"
+                                                placeholder="cluster"
                                                 className="h-9"
                                             />
                                         </div>

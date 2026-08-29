@@ -82,6 +82,7 @@ services:
       - /usr/local/slurm:/usr/local/slurm:ro
       - /var/spool/slurm/statesave/jwt_hs256.key:/var/spool/slurm/statesave/jwt_hs256.key:ro
       - ${CLUSTER_SETUP_DIR:-../ansible/playbooks/os-switching}:/playbooks/os-switching:ro
+      - ${ANSIBLE_DIR:-../ansible}:/ansible:ro
       - ./backend/entrypoint.sh:/app/entrypoint.sh:ro
     entrypoint: ["/app/entrypoint.sh", "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-"]
     healthcheck:

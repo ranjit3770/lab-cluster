@@ -60,7 +60,7 @@ export default function NodesPage() {
         try {
             const [nodesRes, devNodesRes] = await Promise.all([
                 nodesApi.getNodes(token!).catch((err) => {
-                    console.error("Slurm compute nodes unavailable:", err);
+                    console.error("Cluster compute nodes unavailable:", err);
                     return { data: [] };
                 }),
                 devNodesApi.getNodes(token!)
@@ -150,7 +150,7 @@ export default function NodesPage() {
                 <EmptyState
                     icon={Server}
                     title="No nodes found"
-                    description="No compute or management nodes are available. Check Slurm controller connectivity."
+                    description="No compute or management nodes are available. Check cluster controller connectivity."
                 />
             ) : (
                 <>

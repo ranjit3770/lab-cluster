@@ -305,7 +305,7 @@ export default function PlatformConfigPage() {
                 <CardHeader className="border-b border-border px-4 py-3 [.border-b]:pb-3">
                     <CardTitle className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         <Terminal className="h-3.5 w-3.5 text-primary" aria-hidden />
-                        Slurm Connection
+                        Cluster Connection
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 p-4">
@@ -338,7 +338,7 @@ export default function PlatformConfigPage() {
                             />
                         </div>
                         <div>
-                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Slurm Version</Label>
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Scheduler Version</Label>
                             <Input
                                 value={config.slurm_version}
                                 onChange={e => setConfig({...config, slurm_version: e.target.value})}
@@ -346,16 +346,16 @@ export default function PlatformConfigPage() {
                             />
                         </div>
                         <div>
-                            <Label className="mb-1.5 block text-xs font-medium text-foreground">JWT User (Slurmrestd)</Label>
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">JWT User (REST API)</Label>
                             <Input
                                 value={config.slurm_jwt_user}
                                 onChange={e => setConfig({...config, slurm_jwt_user: e.target.value})}
                                 className="font-mono text-xs"
-                                placeholder="slurmrestd"
+                                placeholder="cluster-api"
                             />
                         </div>
                         <div>
-                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Slurm Path (Bin/Sbin)</Label>
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Scheduler Bin Path</Label>
                             <Input
                                 value={config.slurm_path}
                                 onChange={e => setConfig({...config, slurm_path: e.target.value})}
@@ -364,7 +364,7 @@ export default function PlatformConfigPage() {
                             />
                         </div>
                         <div>
-                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Slurm Lib Path (LD_LIBRARY_PATH)</Label>
+                            <Label className="mb-1.5 block text-xs font-medium text-foreground">Scheduler Lib Path</Label>
                             <Input
                                 value={config.slurm_lib_path}
                                 onChange={e => setConfig({...config, slurm_lib_path: e.target.value})}

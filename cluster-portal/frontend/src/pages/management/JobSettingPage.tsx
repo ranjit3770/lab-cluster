@@ -116,10 +116,10 @@ export default function JobSettingPage() {
                 <CardContent className="p-0">
                     <div className="grid grid-cols-1 gap-px bg-border md:grid-cols-2 lg:grid-cols-4">
                         {[
-                            { name: 'slurmctld', desc: 'Central Control Daemon' },
-                            { name: 'slurmd', desc: 'Compute Node Daemon' },
-                            { name: 'slurmdbd', desc: 'Database Interface' },
-                            { name: 'slurmrestd', desc: 'REST Proxy Interface' }
+                            { name: 'scheduler', desc: 'Central Control Daemon' },
+                            { name: 'node-agent', desc: 'Compute Node Daemon' },
+                            { name: 'acct-db', desc: 'Accounting Database' },
+                            { name: 'rest-api', desc: 'REST API Interface' }
                         ].map((srv) => (
                             <div key={srv.name} className="flex items-center justify-between gap-2 bg-card p-4">
                                 <div className="min-w-0">

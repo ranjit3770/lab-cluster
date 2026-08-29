@@ -206,11 +206,11 @@ export default function DashboardPage() {
                 <CardContent className="space-y-1 p-4">
                     <dl className="divide-y divide-border">
                         <div className="flex items-center justify-between py-2">
-                            <dt className="text-sm text-muted-foreground">Slurm Controller</dt>
+                            <dt className="text-sm text-muted-foreground">Scheduler Controller</dt>
                             <dd><StatusBadge status={stats.cluster_status.slurmctld_status} /></dd>
                         </div>
                         <div className="flex items-center justify-between py-2">
-                            <dt className="text-sm text-muted-foreground">Slurm DBD</dt>
+                            <dt className="text-sm text-muted-foreground">Accounting Service</dt>
                             <dd><StatusBadge status={stats.cluster_status.slurmdbd_status} /></dd>
                         </div>
                         <div className="flex items-center justify-between py-2">

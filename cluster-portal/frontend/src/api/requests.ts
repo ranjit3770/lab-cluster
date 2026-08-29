@@ -18,4 +18,8 @@ export const requestsApi = {
         api.put(`/api/v1/requests/${id}`, data, {
             headers: { Authorization: `Bearer ${token}` }
         }),
+    deleteRequest: (token: string, id: number) =>
+        api.delete(`/api/v1/requests/${id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        }),
 };

@@ -28,6 +28,7 @@ import JobSettingPage from '@/pages/management/JobSettingPage';
 import AdminToolsPage from '@/pages/management/AdminToolsPage';
 import NodeManagementPage from '@/pages/management/NodeManagementPage';
 import DiagnosticConsolePage from '@/pages/management/DiagnosticConsolePage';
+import ClusterManagementPage from '@/pages/management/ClusterManagementPage';
 
 function MaintenanceBanner({ active }: { active: boolean }) {
   if (!active) return null;
@@ -132,10 +133,14 @@ function AppContent() {
                     path="node-management"
                     element={<ProtectedRoute roles={['admin']}><NodeManagementPage /></ProtectedRoute>}
                 />
-                <Route 
-                    path="admin-tools/diagnostic-console" 
-                    element={<ProtectedRoute roles={['admin', 'developer']}><DiagnosticConsolePage /></ProtectedRoute>} 
-                />
+                 <Route 
+                     path="admin-tools/diagnostic-console" 
+                     element={<ProtectedRoute roles={['admin', 'developer']}><DiagnosticConsolePage /></ProtectedRoute>} 
+                 />
+                 <Route 
+                     path="cluster-management" 
+                     element={<ProtectedRoute roles={['admin', 'developer']}><ClusterManagementPage /></ProtectedRoute>} 
+                 />
            </Route>
 
            {/* Reverting settings route redirect to platform config */}

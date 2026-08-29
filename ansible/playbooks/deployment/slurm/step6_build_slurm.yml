@@ -27,6 +27,22 @@
         state: present
         comment: "Slurm Workload Manager"
 
+    - name: 0c. Detect installed Slurm version and force rebuild if mismatch
+      ansible.builtin.command: "{{ slurm_prefix }}/sbin/slurmctld --version"
+      register: installed_slurm_version
+      changed_when: false
+      failed_when: false
+
+    - name: Show version mismatch warning
+      ansible.builtin.set_fact:
+        force_rebuild: "{{ force_rebuild | bool or (installed_slurm_version.stdout_lines[0] | regex_replace('slurm-', '') | trim != target_version) }}"
+      when: installed_slurm_version.rc == 0
+
+    - name: Show version mismatch warning
+      ansible.builtin.debug:
+        msg: "WARNING: Installed Slurm {{ installed_slurm_version.stdout_lines[0] | regex_replace('slurm-', '') | trim }} does not match target {{ target_version }}. Forcing rebuild."
+      when: force_rebuild | bool
+
     # --- SECTION 1: DEPENDENCIES ---
     - name: 1. Install build dependencies
       ansible.builtin.apt:

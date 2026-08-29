@@ -506,7 +506,7 @@ export default function JobsPage() {
                 }
             } catch (err) {
                 if (!(err instanceof DOMException && err.name === 'AbortError')) {
-                    console.error("Slurm Poll Error:", err);
+                    console.error("Job Poll Error:", err);
                     setLiveLogs(prev => prev || monitoringJob?.output_log || monitoringJob?.error_log || '');
 
                     if (!controller.signal.aborted) {
@@ -1364,7 +1364,7 @@ export default function JobsPage() {
                             <div className="max-h-[34dvh] max-w-full overflow-auto overscroll-contain whitespace-pre-wrap break-words rounded-md border border-border bg-muted/50 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground [overflow-wrap:anywhere] [word-break:break-word] sm:max-h-56">
                                 {infoTrace ||
                                  (infoStatus === 'WAITING' ? 'Queued due to quota. Waiting for resources to become available.' :
-                                  infoStatus === 'PENDING' ? 'Job accepted by Slurm. It is queued or starting.' :
+                                   infoStatus === 'PENDING' ? 'Job accepted by scheduler. It is queued or starting.' :
                                   "No trace data recorded.")}
                             </div>
                         </div>

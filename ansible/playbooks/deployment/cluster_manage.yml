@@ -1,7 +1,11 @@
 ---
-- name: Choose Slurm cluster operation
+- name: Choose cluster operation
   hosts: localhost
   gather_facts: no
+  tags:
+    - setup
+    - append
+    - always
   vars_prompt:
     - name: cluster_operation
       prompt: "Type setup for full cluster setup, or append to add one new worker"
@@ -22,12 +26,18 @@
     - name: Save selected operation for imported playbooks
       ansible.builtin.set_fact:
         cluster_operation_choice: "{{ cluster_operation | lower }}"
-        requested_append_node_name: "{{ requested_new_node_name }}"
+        requested_append_node_name: "{{ requested_new_node_name | default('') }}"
 
-- import_playbook: step4_main.yml
+- name: Run full cluster setup
+  import_playbook: step4_main.yml
+  tags:
+    - setup
   when: hostvars['localhost']['cluster_operation_choice'] == 'setup'
 
-- import_playbook: finally/append_slurm_node.yml
+- name: Append new compute node
+  import_playbook: finally/append_slurm_node.yml
+  tags:
+    - append
   vars:
     new_node_name: "{{ hostvars['localhost']['requested_append_node_name'] }}"
     append_confirmation: "append"
@@ -35,8 +45,14 @@
 
 # Always run the Slurm REST JWT reconciliation last, so the portal can query
 # the scheduler regardless of whether this was a full setup or an append.
-- import_playbook: finally/fix_slurmrestd_jwt_auth.yml
+- name: Fix Slurm REST JWT auth
+  import_playbook: finally/fix_slurmrestd_jwt_auth.yml
+  tags:
+    - always
 
 # Correct the head node's advertised CPU/RAM and clear any stale DOWN state so
 # the portal reports real resources. Idempotent; safe on every run.
-- import_playbook: finally/fix_headnode_slurm_resources.yml
+- name: Fix head node slurm resources
+  import_playbook: finally/fix_headnode_slurm_resources.yml
+  tags:
+    - always

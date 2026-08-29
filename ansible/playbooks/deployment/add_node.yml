@@ -1,0 +1,28 @@
+---
+# add_node.yml — Add a new compute node to an existing cluster.
+# Called by the portal API with a pre-built temp inventory via -i.
+# Extra vars needed: new_node_name, append_confirmation=append
+
+- name: Validate append request
+  hosts: localhost
+  gather_facts: no
+  tags: always
+
+  tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - new_node_name | length > 0
+          - append_confirmation | lower == 'append'
+        fail_msg: "new_node_name and append_confirmation=append are required."
+
+    - name: Register new node in the dynamic new_slurm_nodes group
+      ansible.builtin.add_host:
+        name: "{{ new_node_name }}"
+        groups: new_slurm_nodes
+
+- name: Append the new node to the Slurm cluster
+  import_playbook: finally/append_slurm_node.yml
+  vars:
+    new_node_name: "{{ new_node_name }}"
+    append_confirmation: "{{ append_confirmation }}"

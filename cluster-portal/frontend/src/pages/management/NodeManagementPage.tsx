@@ -59,7 +59,7 @@ function classifyNode(node: DevNode): ManagedNode {
     return {
       ...node,
       family: autoFamily,
-      detectionReason: 'auto-discovered from Slurm',
+      detectionReason: 'auto-discovered from cluster',
     };
   }
 
@@ -131,7 +131,7 @@ function EmptyColumn({ family }: { family: NodeFamily }) {
     <EmptyState
       icon={Network}
       title={`No ${label.toLowerCase()} registered`}
-      description="Add nodes in Slurm configuration to see them here."
+      description="Add nodes in the cluster configuration to see them here."
       className="min-h-[220px] justify-center"
     />
   );
@@ -263,7 +263,7 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
               variant="outline"
               className="border-primary/20 bg-primary/10 text-[10px] font-semibold uppercase tracking-wide text-primary"
             >
-              Slurm
+              Cluster
             </Badge>
           )}
           <Badge
@@ -334,7 +334,7 @@ function NodeTile({ node, selected, onSelect, onSetupIdle, onSwitchToCluster }: 
             <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
               <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 <Activity className="h-3 w-3" />
-                Slurmd Service
+                Node Service
               </div>
               <div className="mt-1">
                 <SlurmdBadge status={node.slurmd_status} />
@@ -796,7 +796,7 @@ export default function NodeManagementPage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <NodeColumn
           title="Ubuntu Nodes"
-          description="Linux compute nodes with slurmd service status."
+          description="Linux compute nodes with node service status."
           family="ubuntu"
           nodes={grouped.ubuntu}
           search={searchUbuntu}
@@ -808,7 +808,7 @@ export default function NodeManagementPage() {
         />
         <NodeColumn
           title="Windows Nodes"
-          description="Windows compute nodes with slurmd service status."
+          description="Windows compute nodes with node service status."
           family="windows"
           nodes={grouped.windows}
           search={searchWindows}
