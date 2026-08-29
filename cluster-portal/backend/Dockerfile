@@ -21,6 +21,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend application
 COPY . .
 
+# Ensure startup hook is executable
+RUN chmod +x /app/entrypoint.sh
+
 # Environment Defaults
 ENV MYSQL_SERVER=localhost
 ENV MYSQL_PORT=3306

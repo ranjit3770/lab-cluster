@@ -21,8 +21,8 @@
           - target_hosts != 'NO_TARGET_PROVIDED'
         fail_msg: >-
           No target hosts were provided. Run with
-          -e target_hosts=windows_worker_node28 or
-          -e target_hosts='windows_worker_node27:windows_worker_node28'.
+          -e target_hosts=windows_worker_node1 or
+          -e target_hosts='windows_worker_node1:windows_worker_node2'.
       run_once: true
 
     - name: Ensure this playbook is targeting Windows WinRM inventory entries
@@ -32,7 +32,7 @@
           - ansible_connection | default('') == 'winrm'
         fail_msg: >-
           {{ inventory_hostname }} is not a Windows WinRM inventory entry.
-          Use windows_worker_nodeXX when the machine is currently booted into Windows.
+          Use windows_worker_node1 when the machine is currently booted into Windows.
 
     - name: Preflight check for Windows WinRM reachability
       wait_for:
@@ -346,7 +346,7 @@
           Next required action:
           - Open this node's BIOS/UEFI boot menu once.
           - Move Ubuntu above Windows Boot Manager, or disable the firmware policy that forces Windows Boot Manager first.
-          - After Ubuntu boots once, run set_grub_default_targeted.yml using worker_node28.
+           - After Ubuntu boots once, run set_grub_default_targeted.yml using worker_node1.
 
           BCD diagnostics captured before reboot:
           {{ boot_diagnostics.stdout | default('No BCD diagnostics captured') }}

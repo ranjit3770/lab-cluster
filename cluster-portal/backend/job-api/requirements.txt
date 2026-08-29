@@ -6,3 +6,5 @@ requests-unixsocket
 mysql-connector-python
 gunicorn
 notebook
+sqlalchemy
+

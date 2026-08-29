@@ -90,6 +90,14 @@
         enabled: yes
       when: slurmdbd_port_check is succeeded
 
+    - name: 8.1 Fix JWT key permissions before verification
+      ansible.builtin.file:
+        path: /var/spool/slurm/statesave/jwt_hs256.key
+        owner: slurm
+        group: slurm
+        mode: '0600'
+      when: slurmdbd_port_check is succeeded
+
     - name: 9. Verify Cluster Connectivity (With Retries)
       ansible.builtin.shell: |
         export PATH={{ slurm_prefix }}/bin:{{ slurm_prefix }}/sbin:$PATH

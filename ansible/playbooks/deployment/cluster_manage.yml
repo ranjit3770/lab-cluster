@@ -7,7 +7,7 @@
       prompt: "Type setup for full cluster setup, or append to add one new worker"
       private: no
     - name: requested_new_node_name
-      prompt: "For append only, enter the new inventory host name, example worker_node29"
+      prompt: "For append only, enter the new inventory host name, e.g. worker_node1"
       private: no
       default: ""
 

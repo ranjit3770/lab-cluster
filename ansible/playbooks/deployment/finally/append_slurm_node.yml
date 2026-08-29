@@ -4,7 +4,7 @@
   gather_facts: no
   vars_prompt:
     - name: new_node_name
-      prompt: "Inventory host name to append from hosts.ini, example worker_node29"
+      prompt: "Inventory host name to append from hosts.ini, e.g. worker_node1"
       private: no
     - name: append_confirmation
       prompt: "Type append to prepare only this new node and update Slurm config"

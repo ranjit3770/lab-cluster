@@ -108,7 +108,17 @@
         path: "{{ jwt_key_path }}"
         owner: slurm
         group: slurmrestd
-        mode: '0640'
+        mode: '0600'
+
+    - name: 13.1 Verify JWT key permissions
+      command: stat -c '%a' {{ jwt_key_path }}
+      register: jwt_key_perms
+      changed_when: false
+
+    - name: 13.2 Fail if JWT key permissions are not 0600
+      fail:
+        msg: "JWT key permissions are {{ jwt_key_perms.stdout }}, expected 0600"
+      when: jwt_key_perms.stdout != '600'
 
     # ===================================================
     # SECTION 4: Ensure munge and slurm config

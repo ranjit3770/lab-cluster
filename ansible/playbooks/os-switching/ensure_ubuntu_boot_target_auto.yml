@@ -16,7 +16,7 @@
           - target_hosts != 'NO_TARGET_PROVIDED'
         fail_msg: >-
           No target hosts were provided. Run with
-          -e target_hosts=worker_node28 or -e target_hosts='worker_node27:worker_node28'.
+          -e target_hosts=worker_node1 or -e target_hosts='worker_node1:worker_node2'.
       run_once: true
 
     - name: Ensure Linux inventory names were provided
@@ -25,8 +25,8 @@
           - "'windows_' not in inventory_hostname"
           - inventory_hostname in groups['cluster_nodes'] or inventory_hostname in groups['head_nodes']
         fail_msg: >-
-          Use Linux inventory names such as worker_node28. This auto playbook maps to
-          windows_worker_nodeXX internally when the node is currently booted into Windows.
+          Use Linux inventory names such as worker_node1. This auto playbook maps to
+          windows_worker_node1 internally when the node is currently booted into Windows.
 
   tasks:
     - name: Check Ubuntu SSH reachability

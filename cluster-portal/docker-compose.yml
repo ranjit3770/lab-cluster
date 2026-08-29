@@ -18,10 +18,15 @@ services:
     environment:
       MARIADB_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in cluster-portal/.env}
       MARIADB_DATABASE: strach_portal
+      BACKEND_DB_USER: ${BACKEND_DB_USER:?Set BACKEND_DB_USER in cluster-portal/.env}
+      BACKEND_DB_PASSWORD: ${BACKEND_DB_PASSWORD:?Set BACKEND_DB_PASSWORD in cluster-portal/.env}
+      JOB_API_DB_USER: ${JOB_API_DB_USER:?Set JOB_API_DB_USER in cluster-portal/.env}
+      JOB_API_DB_PASSWORD: ${JOB_API_DB_PASSWORD:?Set JOB_API_DB_PASSWORD in cluster-portal/.env}
     ports:
       - "3307:3306"
     volumes:
       - portal_db_data:/var/lib/mysql
+      - ./database/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in cluster-portal/.env}"]
       interval: 10s
@@ -45,8 +50,8 @@ services:
     environment:
       - MYSQL_SERVER=localhost
       - MYSQL_PORT=3307
-      - MYSQL_USER=root
-      - MYSQL_PASSWORD=${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in cluster-portal/.env}
+      - MYSQL_USER=${BACKEND_DB_USER:?Set BACKEND_DB_USER in cluster-portal/.env}
+      - MYSQL_PASSWORD=${BACKEND_DB_PASSWORD:?Set BACKEND_DB_PASSWORD in cluster-portal/.env}
       - MYSQL_DB=strach_portal
       - DATA_STORAGE=/data_storage
       - EXTERNAL_JOB_API_URL=http://localhost:9000
@@ -70,6 +75,8 @@ services:
       - /etc/group:/etc/group:ro
       - /usr/local/slurm:/usr/local/slurm:ro
       - ${CLUSTER_SETUP_DIR:-/opt/amritacluster/SLURM-COMPLETE-SETUP}/ansible/playbooks/os-switching:/playbooks/os-switching:ro
+      - ./backend/entrypoint.sh:/app/entrypoint.sh:ro
+    entrypoint: ["/app/entrypoint.sh", "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -90,7 +97,6 @@ services:
     restart: always
     network_mode: host
     # Scaling: Use Gunicorn with 4 workers for workload dispatch stability
-    entrypoint: ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:9000", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-"]
     environment:
       - MYSQL_SERVER=localhost
       - MYSQL_PORT=3307
@@ -113,6 +119,8 @@ services:
       - /etc/passwd:/etc/passwd:ro
       - /etc/group:/etc/group:ro
       - /usr/local/slurm:/usr/local/slurm:ro
+      - ./backend/entrypoint.sh:/app/entrypoint.sh:ro
+    entrypoint: ["/app/entrypoint.sh", "gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:9000", "--timeout", "300", "--access-logfile", "-", "--error-logfile", "-"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
@@ -144,6 +152,44 @@ services:
       retries: 3
     networks:
       - portal_network
+
+  # --------------------------------------------------------------------------
+  # 5. MCP Server: HPC Operations MCP (AI tool interface)
+  # --------------------------------------------------------------------------
+  mcp-server:
+    build:
+      context: ./mcp-server
+      dockerfile: Dockerfile
+    container_name: portal_mcp_server
+    restart: always
+    network_mode: host
+    entrypoint: ["gunicorn", "-w", "2", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:9100", "--timeout", "120", "--access-logfile", "-", "--error-logfile", "-"]
+    environment:
+      - PORTAL_API_URL=http://localhost:8000
+      - JOB_API_URL=http://localhost:9000
+      - SECRET_KEY=${SECRET_KEY:?Set SECRET_KEY in cluster-portal/.env}
+      - ALGORITHM=HS256
+      - MYSQL_SERVER=localhost
+      - MYSQL_PORT=3307
+      - MYSQL_USER=${BACKEND_DB_USER:?Set BACKEND_DB_USER in cluster-portal/.env}
+      - MYSQL_PASSWORD=${BACKEND_DB_PASSWORD:?Set BACKEND_DB_PASSWORD in cluster-portal/.env}
+      - MYSQL_DB=strach_portal
+      - MCP_REQUIRE_AUTH=${MCP_REQUIRE_AUTH:-true}
+      - MCP_AUDIT_ENABLED=${MCP_AUDIT_ENABLED:-true}
+      - SLURM_PATH=/usr/local/slurm/bin:/usr/local/slurm/sbin
+      - SLURM_LIB_PATH=/usr/local/slurm/lib
+    volumes:
+      - /etc/slurm:/etc/slurm:ro
+      - /var/run/munge/munge.socket.2:/var/run/munge/munge.socket.2:ro
+      - /usr/local/slurm:/usr/local/slurm:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      database:
+        condition: service_healthy
 
 networks:
   portal_network:

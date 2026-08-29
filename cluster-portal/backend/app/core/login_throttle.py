@@ -9,6 +9,7 @@ DB write must never lock every user out of a degraded cluster) and logs loudly.
 import logging
 from datetime import datetime, timedelta, timezone
 
+from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -37,8 +38,6 @@ def check_lockout(db: Session, username: str, ip: str) -> None:
         if entry and entry.locked_until:
             remaining = (entry.locked_until - _now()).total_seconds()
             if remaining > 0:
-                from fastapi import HTTPException, status
-
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail=f"Too many failed logins. Try again in {int(remaining)} seconds.",
