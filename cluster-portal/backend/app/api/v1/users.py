@@ -207,6 +207,7 @@ def read_users(
 @router.put("/{user_id}", response_model=UserSchema)
 def update_user(
     *,
+    request: Request,
     db: Session = Depends(deps.get_db),
     user_id: int,
     user_in: UserUpdate,
